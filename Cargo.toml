@@ -1,0 +1,27 @@
+[package]
+name = "kf"
+version = "0.1.0"
+authors = ["jgroene <jgroene@student.ethz.ch>"]
+edition = "2018"
+
+[lib]
+name = "kf_internals"
+bench = true
+
+[build]
+rustcflags=["-C", "target-cpu=native"]
+
+[profile.test]
+opt-level = 3
+
+[dependencies]
+bitintr = { version = "0.3.0" }
+
+[dev-dependencies]
+criterion = "0.3"
+criterion-cycles-per-byte = "0.1.2"
+itertools = "*"
+
+[[bench]]
+name = "move_gen_bench"
+harness = false
