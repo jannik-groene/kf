@@ -1,5 +1,6 @@
-use super::*;
-use itertools::Itertools;
+use std::time::Duration;
+use rand::{thread_rng, seq::SliceRandom};
+use super::engine;
 
 #[test]
 fn read_start_fen() {
@@ -34,10 +35,11 @@ fn simple_en_passant() {
         from: 1 << 35,
         to: 1 << 42,
         piece: engine::chess::Piece::PAWN,
-        promote: None,
+        typ: engine::chess::MoveType::ENPASSANT,
     };
     assert!(pos.get_moves().contains(&m));
-    let npos1 = pos.do_move(m);
+    let npos1 = pos.from_move(m);
+    println!("{}", npos1.board);
     let npos2 = engine::chess::Position::from_fen(String::from("rnbqkbnr/pp3ppp/2P5/4p3/5P2/8/PPPP2PP/RNBQKBNR b KQkq - 0 4")).unwrap();
     assert!(*npos1.get_board() == *npos2.get_board());
 }
@@ -49,10 +51,10 @@ fn simple_castle() {
         from: 1 << 60,
         to: 1 << 62,
         piece: engine::chess::Piece::KING,
-        promote: None,
+        typ: engine::chess::MoveType::CASTLE,
     };
     assert!(pos.get_moves().contains(&m));
-    let npos1 = pos.do_move(m);
+    let npos1 = pos.from_move(m);
     let npos2 = engine::chess::Position::from_fen(String::from("rn1q1rk1/1p2bppp/p2pbn2/4p3/4P3/1NN1BP2/PPPQ2PP/R3KB1R w KQ - 3 10")).unwrap();
     println!("{}", npos1.get_board());
     assert!(*npos1.get_board() == *npos2.get_board());
@@ -117,11 +119,11 @@ fn move_count_test_2() {
 #[test]
 fn simple_pinned_pawn_attack() {
     let mut pos = engine::chess::Position::from_fen(String::from("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 2")).unwrap();
-    pos = pos.do_move(engine::chess::Move {
+    pos.do_move(engine::chess::Move {
         from: 1 << 12,
         to: 1 << 28,
         piece: engine::chess::Piece::PAWN,
-        promote: None,
+        typ: engine::chess::MoveType::MOVE,
     });
     println!("Found {} moves, expected 16.",pos.get_moves().len());
     for m in pos.get_moves() {
@@ -141,26 +143,182 @@ fn simple_avoid_check() {
 }
 
 #[test]
-fn move_count_test() {
-    let mut positions =
-        //vec![engine::chess::Position::from_fen(String::from("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 0")).unwrap()];
-        vec![engine::chess::Position::from_fen(String::from("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 0")).unwrap()];
-        //vec![engine::chess::Position::new()];
-    let mut new_positions = Vec::new();
-    const COUNT: usize = 5;
-    let mut pos_counts = [0; COUNT];
-    for i in 0..COUNT {
-        for p in positions.iter_mut() {
-            let moves = p.get_moves();
-            for m in moves {
-                let np = p.do_move(m);
-                new_positions.push(np);
-            }
-        }
-        positions = new_positions;
-        new_positions = Vec::new();
-        pos_counts[i] = positions.len();
+fn simple_en_passant_check_avoidance(){
+    let mut pos = engine::chess::Position::from_fen(String::from("5b1k/8/8/2pP4/8/K7/8/8 w - c6 0 1")).unwrap();
+    println!("Found {} moves, expected 5.",pos.get_moves().len());
+    for m in pos.get_moves() {
+        println!("Move {} from {} to {}", m.piece as u8, m.from, m.to);
     }
-    println!("{:?}", pos_counts);
-    panic!("POLLY WANT OUTPUT");
+    assert!(pos.get_moves().len() == 5);
+    pos = engine::chess::Position::from_fen(String::from("7k/8/8/K1pP3r/8/8/8/8 w - c6 0 1")).unwrap();
+    println!("Found {} moves, expected 5.",pos.get_moves().len());
+    for m in pos.get_moves() {
+        println!("Move {} from {} to {}", m.piece as u8, m.from, m.to);
+    }
+    assert!(pos.get_moves().len() == 5);
+}
+
+#[test]
+fn simple_en_passant_remove_attacker() {
+    let mut pos = engine::chess::Position::from_fen(String::from("4k3/8/8/3pP3/4K3/8/8/8 w - d6 0 1")).unwrap();
+    println!("Found {} moves, expected 8.",pos.get_moves().len());
+    for m in pos.get_moves() {
+        println!("Move {} from {} to {}", m.piece as u8, m.from, m.to);
+    }
+    assert!(pos.get_moves().len() == 8);
+}
+
+#[test]
+fn simple_rook_capture() {
+    let mut pos = engine::chess::Position::from_fen(String::from("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N1Q3/PPPBBPpP/R3K2R b KQkq - 1 2")).unwrap();
+    pos = pos.from_move(engine::chess::Move{
+        from: 1 << 14,
+        to: 1 << 7,
+        piece: engine::chess::Piece::PAWN,
+        typ: engine::chess::MoveType::PROMOTIONCAPTURE((engine::chess::Piece::KNIGHT, engine::chess::Piece::ROOK)),
+    });
+    assert!(pos.get_moves().len() == 47);
+}
+
+#[test]
+fn simple_pawn_advance() {
+    let mut pos = engine::chess::Position::from_fen(String::from("3rkr2/8/8/8/8/4r3/4P3/4K3 w - - 0 1")).unwrap();
+    assert!(pos.get_moves().len() == 0);
+    pos = engine::chess::Position::from_fen(String::from("3rkr2/8/8/8/4r3/8/4P3/4K3 w - - 0 1")).unwrap();
+    assert!(pos.get_moves().len() == 1);
+    pos = engine::chess::Position::from_fen(String::from("3rkr2/8/8/4r3/8/8/4P3/4K3 w - - 0 1")).unwrap();
+    assert!(pos.get_moves().len() == 2);
+}
+
+fn do_perft(pos: &mut engine::chess::Position, depth: usize) -> usize {
+    if depth == 0 {
+        1
+    } else  {
+        pos.get_moves().iter().fold(0, |sum, m| sum + do_perft(&mut pos.from_move(*m), depth-1))
+    }
+}
+
+#[test]
+fn move_count_test() {
+    let mut positions = vec![
+        //Position 1
+        //WORKS TO DEPTH 6!
+        engine::chess::Position::new(),
+        //Position 2
+        //WORKS TO DEPTH 5!
+        engine::chess::Position::from_fen(String::from("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 0")).unwrap(),
+        //Position 3
+        //WORKS TO DEPTH 8!
+        engine::chess::Position::from_fen(String::from("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 0")).unwrap(),
+        //Position 4
+        //WORK TO DEPTH 6!
+        engine::chess::Position::from_fen(String::from("r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1")).unwrap(),
+        //Position 5
+        //WORK TO DEPTH 5!
+        engine::chess::Position::from_fen(String::from("rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8")).unwrap(),
+        //Poistion 6
+        //WORKS TO DEPTH 6!
+        engine::chess::Position::from_fen(String::from("r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10")).unwrap()];
+    let results: Vec<[usize; 7]> = vec![
+        [1,20, 400, 8902, 197281,  4865609, 119060324],
+        [1,48,2039,97862,4085603,193690690,8031647685],
+        [1,14, 191, 2812,  43238,   674624,  11030083],
+        [1, 6, 264, 9467, 422333, 15833292, 706045033],
+        [1,44,1486,62379,2103487, 89941194,3048196529],
+        [1,46,2079,89890,3894594,164075551,6923051137]
+    ];
+    let depth: usize = 4;
+    for (pos,res) in positions.iter_mut().zip(results.iter()) {
+        assert!(do_perft(pos, depth) == res[depth]);
+    }
+}
+
+fn do_and_undo_random_moves(pos: &mut engine::chess::Position, count: usize) {
+    let moves = pos.get_moves();
+    if moves.len() > 0 && count > 0 {
+        let m = *pos.get_moves().choose(&mut thread_rng()).unwrap();
+        let castling = pos.get_castling_rights();
+        let lm = pos.get_last_move();
+        let zobrist = pos.zobrist_hash();
+        pos.do_move(m);
+        do_and_undo_random_moves(pos, count-1);
+        pos.undo_move(m, castling, lm);
+        println!("{},{:?}", m, m.typ);
+        println!("0x{:016x},0x{:016x}", zobrist, pos.zobrist_hash());
+        assert!(pos.zobrist_hash() == zobrist);
+    }
+}
+
+#[test]
+fn undo_moves() {
+    //Undo normal move
+    let mut pos = engine::chess::Position::new();
+    let mov1 = engine::chess::Move {
+        from: 1 << 1,
+        to: 1 << 16,
+        piece: engine::chess::Piece::KNIGHT,
+        typ: engine::chess::MoveType::MOVE,
+    };
+    let mut pos2 = pos.from_move(mov1);
+    pos2.undo_move(mov1, [[true,true],[true,true]], None);
+    assert!(*pos.get_board() == *pos2.get_board());
+    //Undo capture move
+    pos = engine::chess::Position::from_fen(String::from("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1")).unwrap();
+    let mov2 = engine::chess::Move {
+        from: 1 << 21,
+        to: 1 << 45,
+        piece: engine::chess::Piece::QUEEN,
+        typ: engine::chess::MoveType::CAPTURE(engine::chess::Piece::KNIGHT),
+    };
+    pos2 = pos.from_move(mov2);
+    pos2.undo_move(mov2, [[true,true],[true,true]], None);
+    assert!(*pos.get_board() == *pos2.get_board());
+    //Undo enpassant
+    pos = engine::chess::Position::from_fen(String::from("rnbqkbnr/pp3ppp/8/2pPp3/5P2/8/PPPP2PP/RNBQKBNR w KQkq c6 0 4")).unwrap();
+    let mov3 = engine::chess::Move{
+        from: 1 << 35,
+        to: 1 << 42,
+        piece: engine::chess::Piece::PAWN,
+        typ: engine::chess::MoveType::ENPASSANT,
+    };
+    pos2 = pos.from_move(mov3);
+    pos2.undo_move(mov3, [[true,true],[true,true]], None);
+    assert!(*pos.get_board() == *pos2.get_board());
+    //Undo castling
+    pos = engine::chess::Position::from_fen(String::from("rn1qk2r/1p2bppp/p2pbn2/4p3/4P3/1NN1BP2/PPPQ2PP/R3KB1R b KQkq - 2 9")).unwrap();
+    let mov4 = engine::chess::Move {
+        from: 1 << 60,
+        to: 1 << 62,
+        piece: engine::chess::Piece::KING,
+        typ: engine::chess::MoveType::CASTLE,
+    };
+    pos2 = pos.from_move(mov4);
+    pos2.undo_move(mov4, [[true,true],[true,true]], None);
+    assert!(*pos.get_board() == *pos2.get_board());
+    //pawn promotion and capture
+    pos = engine::chess::Position::from_fen(String::from("rnbq1bnr/pppkpPpp/8/8/8/3p4/PPPP1PPP/RNBQKBNR w KQ - 1 5")).unwrap();
+    let mov5 = engine::chess::Move::from_str("f7g8q",&pos);
+    pos.do_move(mov5);
+    pos.undo_move(mov5,[[true,true],[true,true]],None);
+    //random checks
+    for _ in 0..1000 {
+        pos = engine::chess::Position::new();
+        do_and_undo_random_moves(&mut pos, 40);
+        assert!(*pos.get_board()==engine::chess::Board::new());
+    }
+}
+
+//#[test]
+fn mate_in_three_test() {
+    //let pos = engine::chess::Position::from_fen(String::from("8/8/8/3k4/7R/Q7/PP5B/KP6 w - - 0 1")).unwrap();
+    //let pos = engine::chess::Position::from_fen(String::from("R7/8/8/2n5/1pN5/1p6/k2K4/4R3 b - - 1 1")).unwrap();
+    //let pos = engine::chess::Position::from_fen(String::from("5R2/8/8/2n5/1pN5/1p6/k2K4/4R3 w - - 0 1")).unwrap();
+    //let pos = engine::chess::Position::from_fen(String::from("r3kbnr/pp3ppp/8/4p3/8/6PK/P3qp1P/6R1 b kq - 1 22")).unwrap();
+    //let pos = engine::chess::Position::from_fen(String::from("3q1r1k/6Rp/5PP1/8/1P2p3/2p1P3/8/2K2R2 w - - 0 5")).unwrap();
+    let pos = engine::chess::Position::from_fen(String::from("4nr1k/p1p1p1pp/bp1pn1r1/8/6QR/6RP/1BBq1PP1/6K1 w - - 0 1")).unwrap();
+    //let pos = engine::chess::Position::new();
+    let mut stree = engine::mcts::MCSTree::new(pos);
+    stree.search_timed(Duration::from_millis(1000));
+    println!("Eval {}\nBest Move {}", stree.root_eval(), stree.best_move());
+    panic!();
 }

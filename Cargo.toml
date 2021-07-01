@@ -16,11 +16,12 @@ opt-level = 3
 
 [dependencies]
 bitintr = { version = "0.3.0" }
+rand = "*"
+rayon = "*"
 
 [dev-dependencies]
 criterion = "0.3"
 criterion-cycles-per-byte = "0.1.2"
-itertools = "*"
 
 [[bench]]
 name = "move_gen_bench"

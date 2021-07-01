@@ -1,4 +1,5 @@
 from functools import reduce
+import random
 
 def calculate_neighbours(n):
     neighbours = 0
@@ -200,7 +201,7 @@ def calculate_connecting_ray(n,m):
     x0,y0 = to_coordinates(n)
     x1,y1 = to_coordinates(m)
     ray = 0
-    if x0 == x1 and y0 == x1:
+    if x0 == x1 and y0 == y1:
         return 0
     if x0 == x1:
         for y in range(min(y0,y1),max(y0,y1)+1):
@@ -224,7 +225,7 @@ def calculate_pinning_ray(n,m):
     x0,y0 = to_coordinates(n)
     x1,y1 = to_coordinates(m)
     ray = 0
-    if x0 == x1 and y0 == x1:
+    if x0 == x1 and y0 == y1:
         return 0
     if x0 == x1:
         for y in range(0,8):
@@ -317,5 +318,19 @@ for i in range(64):
     print("    ],")
 print("];")
 
-print_as_board(1073741824)
-print_as_board(2147483648)
+for p in ["KING","QUEEN","BISHOP","KNIGHT","ROOK","PAWN"]:
+    for c in ["BLACK", "WHITE"]:
+        print("pub static ZOBRIST_{}_{}_NUMBERS: [u64;64] = [".format(c,p))
+        for _ in range(64):
+            print("    0x{:016x},".format(random.randint(0,18446744073709551615)))
+        print("];")
+print("pub static ZOBRIST_CASTLING_NUMBERS: [u64;4] = [")
+for _ in range(4):
+    print("    0x{:016x},".format(random.randint(0,18446744073709551615)))
+print("];")
+print("pub static ZOBRIST_ENPASSANT_NUMBERS: [u64;8] = [")
+for _ in range(8):
+    print("    0x{:016x},".format(random.randint(0,18446744073709551615)))
+print("];")
+print("pub static ZOBRIST_BLACK_NUMBER: u64 = 0x{:016x};".format(random.randint(0,18446744073709551615)))
+
