@@ -1,5 +1,7 @@
+mod nnue;
 use super::chess;
 use super::chess::SquareMethods;
+use rand::{Rng, thread_rng};
 
 #[derive(PartialEq,Copy,Clone,Debug)]
 enum GameState {
@@ -55,8 +57,7 @@ fn evaluate_pawns(pos: &mut chess::Position, game_state: GameState) -> i32 {
             value *= 1. - 0.1*(pawns_on_file as f64 - 1.);
             //We want to take the center
             if game_state == GameState::EARLY {
-                value += (7. - (chess::Board::get_rank(pawn) as i32 as f64 * 2. - 7.).abs())/16.;
-                value += (7. - (chess::Board::get_file(pawn) as i32 as f64 * 2. - 7.).abs())/16.;
+                value += (7. - (chess::Board::get_rank(pawn) as i32 as f64 * 2. - 7.).abs())*(7. - (chess::Board::get_file(pawn) as i32 as f64 * 2. - 7.).abs())/32.;
             }
             tot += value;
         }
@@ -124,7 +125,7 @@ fn evaluate_bishops(pos: &mut chess::Position, game_state: GameState) -> i32 {
                 chess::Color::WHITE => 3,
                 chess::Color::BLACK => 4,
             };
-            res -= (chess::Board::get_rank(bishop) as i32 - best_rank).abs();
+            res -= (chess::Board::get_rank(bishop) as i32 - best_rank).abs()*3;
         }
     }
     res
@@ -134,8 +135,8 @@ fn evaluate_knights(pos: &mut chess::Position, game_state: GameState) -> i32 {
     for knight in pos.board[(pos.color(), chess::Piece::KNIGHT)].iter() {
         //we want to centralize knights
         if game_state != GameState::LATE {
-            res += 7-(chess::Board::get_rank(knight) as i32 * 2-7).abs();
-            res += 7-(chess::Board::get_file(knight) as i32 * 2-7).abs();
+            res += (7-(chess::Board::get_rank(knight) as i32 * 2-7).abs())*2;
+            res += (7-(chess::Board::get_file(knight) as i32 * 2-7).abs())*2;
         }
     }
     res
@@ -193,9 +194,18 @@ pub fn evaluate(pos: &mut chess::Position) -> i32 {
     res + evaluate_mobility(&moves_us, &moves_them, game_state)
 }
 
-//Statically evaluate a full exchange on given square of the board.
-pub fn see(pos: &mut chess::Position, target: chess::Square) -> i32 {
-    0
+pub fn order_moves(movs: &mut Vec<chess::Move>, pos: &chess::Position, pv_move: Option<chess::Move>) {
+    movs.sort_by_key(|m| match m.typ { chess::MoveType::CAPTURE(_) => -pos.see(*m), _ => 0 });
+    if pv_move.is_some() {
+        movs.sort_by_key(|m| if *m == pv_move.unwrap() {0} else {1});
+    }
+}
+
+pub fn order_moves_with_random_bias(movs: &mut Vec<chess::Move>, pos: &chess::Position, pv_move: Option<chess::Move>) {
+    movs.sort_by_key(|m| match m.typ { chess::MoveType::CAPTURE(_) => -pos.see(*m), _ => 0 } + thread_rng().gen_range(-100..=100));
+    if pv_move.is_some() {
+        movs.sort_by_key(|m| if *m == pv_move.unwrap() {0} else {1});
+    }
 }
 
 #[test]

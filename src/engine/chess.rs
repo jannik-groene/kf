@@ -3,6 +3,8 @@ use bitintr::Pext;
 use std::fmt;
 use std::iter::Iterator;
 
+//Bugged? See FEN 5R2/p2k1p1P/1P1P1PPr/bPpKBN1p/1pR3n1/7B/2P2N1P/1b6 w KQkq - 0 1?
+
 mod constants;
 
 // Use the following bit layout (looking from standard orientation, so 0 is A1 and 63 is H()
@@ -567,6 +569,45 @@ impl Move {
             typ: pos.board.determine_move_type(from,to,piece,prom),
         }
     }
+    pub fn compress(&self) -> CompressedMove {
+        let mut piece_and_type = self.piece as u16;
+        piece_and_type |= match self.typ {
+            MoveType::MOVE => 0,
+            MoveType::CAPTURE(p) => ((p as u16) << 3) | (1 << 9),
+            MoveType::PROMOTION(p) => ((p as u16) << 3) | (2 << 9),
+            MoveType::PROMOTIONCAPTURE((p,q)) => ((p as u16) << 3) | ((q as u16) << 6) | (3 << 9),
+            MoveType::CASTLE => 4 << 9,
+            MoveType::ENPASSANT => 5 << 9,
+        };
+        CompressedMove {
+            piece_and_type,
+            from: self.from.trailing_zeros() as u8,
+            to: self.to.trailing_zeros() as u8,
+        }
+    }
+}
+
+#[derive(Copy,Clone,PartialEq,Default)]
+pub struct CompressedMove {
+    pub piece_and_type: u16,
+    pub to: u8,
+    pub from: u8,
+}
+
+impl CompressedMove {
+    pub fn decompress(&self) -> Option<Move> {
+        let piece = u16_to_piece(self.piece_and_type & 0b111);
+        let typ = match self.piece_and_type >> 9 {
+            0 => MoveType::MOVE,
+            1 => MoveType::CAPTURE(u16_to_piece((self.piece_and_type >> 3) & 0b111)),
+            2 => MoveType::PROMOTION(u16_to_piece((self.piece_and_type >> 3) & 0b111)),
+            3 => MoveType::PROMOTIONCAPTURE((u16_to_piece((self.piece_and_type >> 3) & 0b111), u16_to_piece((self.piece_and_type >> 6) & 0b111))),
+            4 => MoveType::CASTLE,
+            5 => MoveType::ENPASSANT,
+            _ => return None,
+        };
+        Some(Move {from: 1 << self.from as u64, to: 1 << self.to as u64, piece, typ,})
+    }
 }
 
 fn display_promotion(m: &Move) -> String {
@@ -589,6 +630,18 @@ impl fmt::Display for Move {
     }
 }
 
+fn u16_to_piece(p: u16) -> Piece {
+     match p {
+        0 => Piece::KING,
+        1 => Piece::QUEEN,
+        2 => Piece::BISHOP,
+        3 => Piece::KNIGHT,
+        4 => Piece::ROOK,
+        5 => Piece::PAWN,
+        _ => panic!("Tried to decompress invalid move."),
+    }
+}
+
 #[derive(PartialEq,Clone,Copy,Debug)]
 pub enum Piece {
     KING,
@@ -601,15 +654,15 @@ pub enum Piece {
 }
 
 impl Piece {
-    pub fn value(self) -> f64 {
+    pub fn value(self) -> i32 {
         match self {
-            Self::PAWN => 1.,
-            Self::BISHOP => 3.,
-            Self::KNIGHT => 3.,
-            Self::ROOK => 5.,
-            Self::QUEEN => 9.,
-            Self::KING => 100.,
-            Self::ANY => 0.,
+            Self::PAWN => 100,
+            Self::BISHOP => 300,
+            Self::KNIGHT => 300,
+            Self::ROOK => 500,
+            Self::QUEEN => 900,
+            Self::KING => 10000,
+            Self::ANY => 0,
         }
     }
 }
@@ -644,6 +697,7 @@ pub struct Position {
     king_attackers: Square,
     pinned_pieces: Square,
     zobrist: u64, //Zobrist-Hash
+    history: Vec<u64>, //zobrist hashes of all positions reached BEFORE the current
 }
 
 impl Position {
@@ -664,6 +718,7 @@ impl Position {
             king_attackers: 0,
             pinned_pieces: 0,
             zobrist,
+            history: Vec::new(),
         }
     }
     pub fn get_board(&self) -> &Board {
@@ -685,6 +740,7 @@ impl Position {
             king_attackers: 0,
             pinned_pieces: 0,
             zobrist: 0,
+            history: Vec::new(),
         };
         pos.zobrist = pos.board.get_zobrist();
         //Enter who is to move
@@ -850,18 +906,26 @@ impl Position {
     // Compute the rook moves from a given square using the lookup table and PEXT/PDEP boards
     // Computes the possible moves from the least significant bit in the Square
     #[inline(always)]
-    fn rook_moves(&self, sq: Square) -> Square {
+    fn rook_moves_for_occupation(&self, sq: Square, occ: Square) -> Square {
         assert!(sq != 0);
         let moves = constants::ROOK_MOVES[sq.trailing_zeros() as usize];
-        constants::ROOK_MMASK[((self.board.occupation).pext(moves) + constants::ROOK_MMASK_OFFSETS[sq.trailing_zeros() as usize]) as usize]
+        constants::ROOK_MMASK[(occ.pext(moves) + constants::ROOK_MMASK_OFFSETS[sq.trailing_zeros() as usize]) as usize]
+    }
+    #[inline(always)]
+    fn rook_moves(&self, sq: Square) -> Square {
+        self.rook_moves_for_occupation(sq, self.board.occupation)
     }
     // Compute the bishop moves from a given square using the lookup table and PEXT/PDEP boards
     // Computes the possible moves from the least significant bit in the Square
     #[inline(always)]
-    fn bishop_moves(&self, sq: Square) -> Square {
+    fn bishop_moves_for_occupation(&self, sq: Square, occ: Square) -> Square {
         assert!(sq != 0);
         let moves = constants::BISHOP_MOVES[sq.trailing_zeros() as usize];
-        constants::BISHOP_MMASK[((self.board.occupation).pext(moves) + constants::BISHOP_MMASK_OFFSETS[sq.trailing_zeros() as usize]) as usize]
+        constants::BISHOP_MMASK[(occ.pext(moves) + constants::BISHOP_MMASK_OFFSETS[sq.trailing_zeros() as usize]) as usize]
+    }
+    #[inline(always)]
+    fn bishop_moves(&self, sq: Square) -> Square {
+        self.bishop_moves_for_occupation(sq, self.board.occupation)
     }
     // Compute the king moves from a given square using the lookup table
     #[inline(always)]
@@ -1321,8 +1385,10 @@ impl Position {
     }
     pub fn do_move(&mut self, m: Move) {
         if m.to & (self.board[(Color::WHITE,Piece::KING)] | self.board[(Color::BLACK,Piece::KING)]) != 0 {
-            panic!("Invalid move {} in position\n{}", m, self.board);
+            panic!("Invalid move {} in position\n{}\n(previos move {})", m, self.board, self.last_move.unwrap_or(Move {from: 1, to: 2, piece:Piece::KING, typ:MoveType::MOVE}));
         }
+        //Commit zobrist hash to history stack
+        self.history.push(self.zobrist);
         //Unset the Zobrist en passant flag, if necessary
         if self.last_move.is_some() {
             let m = self.last_move.unwrap();
@@ -1364,6 +1430,9 @@ impl Position {
     }
     //TODO: find better solution for castling rights?
     pub fn undo_move(&mut self, m: Move, castling: [[bool;2];2], lm: Option<Move>) {
+        //remove move from history stack
+        self.history.pop();
+
         self.last_move = lm;
         self.zobrist ^= self.board.undo_move(m);
         //Reconstruct castling flags
@@ -1393,6 +1462,22 @@ impl Position {
                 self.zobrist ^= constants::ZOBRIST_ENPASSANT_NUMBERS[m.to.trailing_zeros() as usize % 8];
             }
         }
+    }
+    pub fn do_null_move(&mut self) {
+        self.last_move = None;
+        self.zobrist ^= constants::ZOBRIST_BLACK_NUMBER;
+        self.to_move = self.to_move.other();
+        self.attacked_squares = 0;
+        self.pinned_pieces = 0;
+        self.king_attackers = 0;
+    }
+    pub fn undo_null_move(&mut self, lm: Option<Move>) {
+        self.last_move = lm;
+        self.zobrist ^= constants::ZOBRIST_BLACK_NUMBER;
+        self.to_move = self.to_move.other();
+        self.attacked_squares = 0;
+        self.pinned_pieces = 0;
+        self.king_attackers = 0;
     }
     pub fn in_check(&mut self) -> bool {
         if self.attacked_squares == 0 {
@@ -1449,5 +1534,104 @@ impl Position {
     pub fn switch_color(&mut self) {
         self.to_move = self.to_move.other();
         self.attacked_squares = 0;
+    }
+    //TODO: Should this _really_ be here? But where else to put it?
+    //Helper for SEE
+    #[inline(always)]
+    fn least_valuable_attacker(&self, mut attackers: Square, c: Color) -> Option<(Square, Piece)> {
+        attackers = attackers & self.board[(c, Piece::ANY)];
+        attackers.iter().map(|a| match self.board.piece_at(a) {
+                                            Some(p) => Some((a,p)),
+                                            None => None,
+                        })
+                        .filter(|x| x.is_some())
+                        .min_by_key(|x| x.unwrap().1.value()).flatten()
+    }
+    //X-ray attacks.
+    //We ignore en passant here! Attackers are sorted by value!
+    pub fn see(&self, m: Move) -> i32 {
+        let target_piece = match m.typ {
+            MoveType::CAPTURE(p) => p,
+            _ => return 0,
+        };
+        let target = m.to;
+        let mut color = self.to_move;
+        let mut occupation = self.board.occupation;
+        let mut attackers = (self.pawn_attacks(target, Color::WHITE) & self.board[(Color::BLACK, Piece::PAWN)])
+            | (self.pawn_attacks(target, Color::WHITE) & self.board[(Color::BLACK, Piece::PAWN)]);
+        attackers |= self.knight_moves(target) & (self.board[(Color::BLACK, Piece::KNIGHT)] | self.board[(Color::BLACK, Piece::KNIGHT)]);
+        attackers |= m.from;
+        //We guess that most exchanges will feature less than ten pieces, which seems a safe
+        //assumption
+        let mut gain = Vec::with_capacity(10);
+        let mut taker = m.piece;
+        gain.push(target_piece.value());
+        let mut from = m.from;
+        loop {
+            let last_gain = *gain.last().unwrap_or(&0);
+            gain.push(taker.value() - last_gain);
+            if std::cmp::max(-last_gain, taker.value()-last_gain) < 0 {break;}
+            occupation ^= from;
+            attackers ^= from;
+            color = color.other();
+            attackers |= self.bishop_moves_for_occupation(target, occupation)
+                        & (self.board[(Color::BLACK, Piece::BISHOP)] | self.board[(Color::WHITE, Piece::BISHOP)]
+                          | self.board[(Color::BLACK, Piece::QUEEN)] | self.board[(Color::WHITE, Piece::QUEEN)])
+                        & occupation;
+            attackers |= self.rook_moves_for_occupation(target, occupation)
+                        & (self.board[(Color::BLACK, Piece::ROOK)] | self.board[(Color::WHITE, Piece::ROOK)]
+                          | self.board[(Color::BLACK, Piece::QUEEN)] | self.board[(Color::WHITE, Piece::QUEEN)])
+                        & occupation; //Do not accidentally include already used pieces again
+            let next = match self.least_valuable_attacker(attackers, color) {
+                Some(a) => a,
+                None => break,
+            };
+            taker = next.1;
+            from = next.0;
+        }
+        gain.reverse();
+        for d in 1..gain.len()-1 {
+            let g = -std::cmp::max(-gain[d+1],gain[d]);
+            gain[d+1] = g;
+        }
+        return *gain.last().unwrap();
+    }
+    pub fn pos_in_history(&self) -> bool {
+        self.history.contains(&self.zobrist)
+    }
+}
+
+//Tests
+#[test]
+fn simple_sse() {
+    let pos = Position::from_fen(String::from("1k1r4/1pp4p/p7/4p3/8/P5P1/1PP4P/2K1R3 w - - 0 0")).unwrap();
+    let mov = Move {from: 1 << 4, to: 1 << 36, typ: MoveType::CAPTURE(Piece::PAWN), piece: Piece::ROOK};
+    assert!(pos.see(mov) == 100);
+    let pos2 = Position::from_fen(String::from("1k1r3q/1ppn3p/p4b2/4p3/8/P2N2P1/1PP1R1BP/2K1Q3 w - - 0 0")).unwrap();
+    let mov2 = Move {from: 1 << 19, to: 1 << 36, typ: MoveType::CAPTURE(Piece::PAWN), piece: Piece::KNIGHT};
+    assert!(pos2.see(mov2) == -200);
+}
+
+#[test]
+fn compress_and_decompress_move() {
+    let pieces = vec![Piece::PAWN, Piece::KING, Piece::QUEEN, Piece::BISHOP, Piece::KNIGHT, Piece::ROOK];
+    for p in pieces.iter() {
+        let m = Move {from: 1, to: 2, piece: *p, typ: MoveType::MOVE};
+        let m2 = m.compress().decompress();
+        assert!(m == m2.unwrap());
+    }
+    for p in pieces.iter() {
+        for q in pieces.iter() {
+            let m = Move {from:1<<54,to:1<<63,piece: Piece::PAWN, typ: MoveType::PROMOTIONCAPTURE((*p,*q))};
+            let m2 = m.compress().decompress();
+            assert!(m == m2.unwrap());
+        }
+    }
+    for p in pieces.iter() {
+        for q in pieces.iter() {
+            let m = Move {from:1<<54,to:1<<63,piece: *p, typ: MoveType::CAPTURE(*q)};
+            let m2 = m.compress().decompress();
+            assert!(m == m2.unwrap());
+        }
     }
 }

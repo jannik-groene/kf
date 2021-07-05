@@ -309,16 +309,16 @@ fn undo_moves() {
 }
 
 //#[test]
-fn mate_in_three_test() {
-    //let pos = engine::chess::Position::from_fen(String::from("8/8/8/3k4/7R/Q7/PP5B/KP6 w - - 0 1")).unwrap();
-    //let pos = engine::chess::Position::from_fen(String::from("R7/8/8/2n5/1pN5/1p6/k2K4/4R3 b - - 1 1")).unwrap();
-    //let pos = engine::chess::Position::from_fen(String::from("5R2/8/8/2n5/1pN5/1p6/k2K4/4R3 w - - 0 1")).unwrap();
-    //let pos = engine::chess::Position::from_fen(String::from("r3kbnr/pp3ppp/8/4p3/8/6PK/P3qp1P/6R1 b kq - 1 22")).unwrap();
-    //let pos = engine::chess::Position::from_fen(String::from("3q1r1k/6Rp/5PP1/8/1P2p3/2p1P3/8/2K2R2 w - - 0 5")).unwrap();
-    let pos = engine::chess::Position::from_fen(String::from("4nr1k/p1p1p1pp/bp1pn1r1/8/6QR/6RP/1BBq1PP1/6K1 w - - 0 1")).unwrap();
-    //let pos = engine::chess::Position::new();
-    let mut stree = engine::mcts::MCSTree::new(pos);
-    stree.search_timed(Duration::from_millis(1000));
-    println!("Eval {}\nBest Move {}", stree.root_eval(), stree.best_move());
-    panic!();
-}
+//fn mate_in_three_test() {
+//    //let pos = engine::chess::Position::from_fen(String::from("8/8/8/3k4/7R/Q7/PP5B/KP6 w - - 0 1")).unwrap();
+//    //let pos = engine::chess::Position::from_fen(String::from("R7/8/8/2n5/1pN5/1p6/k2K4/4R3 b - - 1 1")).unwrap();
+//    //let pos = engine::chess::Position::from_fen(String::from("5R2/8/8/2n5/1pN5/1p6/k2K4/4R3 w - - 0 1")).unwrap();
+//    //let pos = engine::chess::Position::from_fen(String::from("r3kbnr/pp3ppp/8/4p3/8/6PK/P3qp1P/6R1 b kq - 1 22")).unwrap();
+//    //let pos = engine::chess::Position::from_fen(String::from("3q1r1k/6Rp/5PP1/8/1P2p3/2p1P3/8/2K2R2 w - - 0 5")).unwrap();
+//    let pos = engine::chess::Position::from_fen(String::from("4nr1k/p1p1p1pp/bp1pn1r1/8/6QR/6RP/1BBq1PP1/6K1 w - - 0 1")).unwrap();
+//    //let pos = engine::chess::Position::new();
+//    let mut stree = engine::mcts::MCSTree::new(pos);
+//    stree.search_timed(Duration::from_millis(1000));
+//    println!("Eval {}\nBest Move {}", stree.root_eval(), stree.best_move());
+//    panic!();
+//}

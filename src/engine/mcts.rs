@@ -16,7 +16,7 @@ struct MCSTNode {
 impl MCSTNode {
     fn policy_value(&mut self, pos: &mut chess::Position) -> f64 {
         match pos.board.piece_at(self.move_.to) {
-            Some(t) => (t.value()-self.move_.piece.value())/64. + 0.5,
+            Some(t) => (t.value()-self.move_.piece.value()) as f64/64. + 0.5,
             None => 0.5,
         }
     }
