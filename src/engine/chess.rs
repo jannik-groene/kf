@@ -3,8 +3,6 @@ use bitintr::Pext;
 use std::fmt;
 use std::iter::Iterator;
 
-//Bugged? See FEN 5R2/p2k1p1P/1P1P1PPr/bPpKBN1p/1pR3n1/7B/2P2N1P/1b6 w KQkq - 0 1?
-
 mod constants;
 
 // Use the following bit layout (looking from standard orientation, so 0 is A1 and 63 is H()
@@ -1312,7 +1310,8 @@ impl Position {
         moves
     }
     pub fn get_moves(&mut self) -> Vec<Move> {
-        let mut moves = Vec::new();
+        //We expect about 35 moves in the average position
+        let mut moves = Vec::with_capacity(50);
         if self.rule_50_count == 50 || self.board.occupation.count_ones() == 2 {
             return moves;
         }

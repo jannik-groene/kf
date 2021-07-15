@@ -9,7 +9,11 @@ name = "kf_internals"
 bench = true
 
 [build]
-rustcflags=["-C", "target-cpu=native"]
+rustcflags=["-C", "target_cpu=native", "target_feature=+bmi2"]
+
+[profile.release]
+rustcflags=["-C", "target_cpu=native", "target_feature=+bmi2"]
+debug = 1
 
 [profile.test]
 opt-level = 3

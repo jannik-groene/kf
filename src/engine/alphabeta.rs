@@ -5,7 +5,6 @@ use std::sync::{Arc, RwLock};
 use std::cmp::{PartialOrd, Ord};
 use std::ops::Neg;
 use std::fmt::Display;
-use rand::{seq::SliceRandom, thread_rng};
 
 use std::sync::mpsc::Sender;
 use super::EngineIO;
@@ -378,6 +377,7 @@ impl ABSearchThread for ABSearchMainThread {
         if ppv.len() > 0 {
             self.prev_pv = Some(ppv);
         }
+        self.pv = Vec::new()
     }
     fn previous_pv_move(&self, depth: u8) -> Option<chess::Move> {
         if self.prev_pv.is_none() {
@@ -483,7 +483,7 @@ fn search(thread: &mut ABSearchMainThread, depth: u8, mut alpha: ABResult, mut b
             match eval.typ {
                 ABResultType::EXACT => {
                     println!("info {} depth {} time {}", eval, d, now.elapsed().as_millis());
-                    //thread.print_pv();
+                    thread.print_pv();
                     thread.save_pv();
                     thread.search_info.eval = eval;
                     thread.search_info.bestmove = thread.bestmove();
@@ -552,17 +552,15 @@ fn search_step(thread: &mut impl ABSearchThread, depth: u8, ply: u8, depth_reduc
         return ABResult::STALEMATE;
     }
 
-    //Try a null move to find a beta cutoff; search the first three plys fully. This allows illegal
-    //Positions????? despite checking for checks beforehand. How?
-    //if !thread.pos_mut().in_check() && moves.len() > 0 && ply > 3 && ply < depth {
-    //    println!("{}", thread.pos().get_board());
-    //    println!("{}", thread.pos_mut().in_check());
-    //    thread.pos_mut().do_null_move();
-    //    if -search_step(thread, depth, ply+1, -beta, -alpha, None) >= beta {
-    //        return beta;
-    //    }
-    //    thread.pos_mut().undo_null_move(lm);
-    //}
+    //Try a null move to find a beta cutoff; search the first three plys fully.
+    if !thread.pos_mut().in_check() && moves.len() > 0 && ply > 3 && ply < depth {
+        thread.pos_mut().do_null_move();
+        if -search_step(thread, depth, ply+1, depth_reduction, -beta, -alpha, None) >= beta {
+            thread.pos_mut().undo_null_move(lm);
+            return beta;
+        }
+        thread.pos_mut().undo_null_move(lm);
+    }
 
     if ply + depth_reduction >= depth {
         return quiesce(thread, alpha, beta, 200, 0, lm);
@@ -586,12 +584,11 @@ fn search_step(thread: &mut impl ABSearchThread, depth: u8, ply: u8, depth_reduc
     //Store castling rights for move undoing
     let castling = thread.pos().get_castling_rights();
 
-    if !thread.is_helper() {
-        evaluate::order_moves(&mut moves, thread.pos(), thread.previous_pv_move(ply));
-    } else {
-        evaluate::order_moves_with_random_bias(&mut moves, thread.pos(), thread.previous_pv_move(ply));
-        //moves.shuffle(&mut thread_rng());
-    }
+    //if !thread.is_helper() {
+        evaluate::order_moves(&mut moves, thread.pos(), thread.previous_pv_move(ply), thread.move_hash().get(thread.pos().zobrist_hash()).mov());
+    //} else {
+    //    evaluate::order_moves_with_random_bias(&mut moves, thread.pos(), thread.move_hash().get(thread.pos().zobrist_hash()).mov());
+    //}
 
     //Set up paramaters
     let mut score = ABResult::MIN;
@@ -605,9 +602,9 @@ fn search_step(thread: &mut impl ABSearchThread, depth: u8, ply: u8, depth_reduc
                             //If we repeat twice, it's gonna happen thrice
                                 ABResult::DRAW
                             //Apply LMR
-                            } else if depth > 3 && !thread.pos_mut().in_check() {
+                            } else if ply > 3 && !thread.pos_mut().in_check() {
                                 -search_step(thread, depth, ply+1, (i as u8)/6, -beta, -alpha, Some(moves[i]))
-                            } else if depth > 3 && !thread.pos_mut().in_check() && zws {
+                            } else if ply > 3 && !thread.pos_mut().in_check() && zws {
                                 -search_step(thread, depth, ply+1, (i as u8)/6, -alpha.zero_window(), -alpha, Some(moves[i]))
                             } else if zws {
                                 -search_step(thread, depth, ply+1, 0, -alpha.zero_window(), -alpha, Some(moves[i]))
@@ -615,8 +612,8 @@ fn search_step(thread: &mut impl ABSearchThread, depth: u8, ply: u8, depth_reduc
                                 -search_step(thread, depth, ply+1, 0, -beta, -alpha, Some(moves[i]))
                             };
         if zws && movescore > alpha && movescore < beta {
-            movescore = if depth > 3 && !thread.pos_mut().in_check() {
-                            -search_step(thread, depth, ply+1, (i as u8)/6, -beta, -alpha, Some(moves[i]))
+            movescore = if ply > 3 && !thread.pos_mut().in_check() {
+                                -search_step(thread, depth, ply+1, (i as u8)/6, -beta, -alpha, Some(moves[i]))
                             } else {
                                 -search_step(thread, depth, ply+1, 0, -beta, -alpha, Some(moves[i]))
                             };

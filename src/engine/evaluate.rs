@@ -194,17 +194,20 @@ pub fn evaluate(pos: &mut chess::Position) -> i32 {
     res + evaluate_mobility(&moves_us, &moves_them, game_state)
 }
 
-pub fn order_moves(movs: &mut Vec<chess::Move>, pos: &chess::Position, pv_move: Option<chess::Move>) {
-    movs.sort_by_key(|m| match m.typ { chess::MoveType::CAPTURE(_) => -pos.see(*m), _ => 0 });
+pub fn order_moves(movs: &mut Vec<chess::Move>, pos: &chess::Position, pv_move: Option<chess::Move>, hash_move: Option<chess::Move>) {
+    movs.sort_unstable_by_key(|m| match m.typ { chess::MoveType::CAPTURE(_) => -pos.see(*m), _ => 500 });
+    if hash_move.is_some() {
+        movs.sort_by_key(|m| if *m == hash_move.unwrap() {0} else {1});
+    }
     if pv_move.is_some() {
         movs.sort_by_key(|m| if *m == pv_move.unwrap() {0} else {1});
     }
 }
 
-pub fn order_moves_with_random_bias(movs: &mut Vec<chess::Move>, pos: &chess::Position, pv_move: Option<chess::Move>) {
-    movs.sort_by_key(|m| match m.typ { chess::MoveType::CAPTURE(_) => -pos.see(*m), _ => 0 } + thread_rng().gen_range(-100..=100));
-    if pv_move.is_some() {
-        movs.sort_by_key(|m| if *m == pv_move.unwrap() {0} else {1});
+pub fn order_moves_with_random_bias(movs: &mut Vec<chess::Move>, pos: &chess::Position, hash_move: Option<chess::Move>) {
+    movs.sort_unstable_by_key(|m| match m.typ { chess::MoveType::CAPTURE(_) => -pos.see(*m), _ => 0 } + thread_rng().gen_range(-60..=60));
+    if hash_move.is_some() {
+        movs.sort_by_key(|m| if *m == hash_move.unwrap() {0} else {1});
     }
 }
 
