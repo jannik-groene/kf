@@ -1,5 +1,5 @@
 use super::engine;
-use std::sync::mpsc::{channel, Sender};
+use std::sync::mpsc::Sender;
 
 fn read_input(ch: Sender<engine::EngineIO>) {
     let sin = std::io::stdin();
@@ -130,7 +130,7 @@ impl UCIHandler for engine::Engine {
         }
     }
     fn handle_uci(&self) {
-        println!("id name kf-0.0.1");
+        println!("id name kf-0.0.2");
         println!("id author Jannik Gröne");
         self.print_config();
         println!("uciok");

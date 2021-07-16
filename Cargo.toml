@@ -13,7 +13,7 @@ rustcflags=["-C", "target_cpu=native", "target_feature=+bmi2"]
 
 [profile.release]
 rustcflags=["-C", "target_cpu=native", "target_feature=+bmi2"]
-debug = 1
+debug = 0
 
 [profile.test]
 opt-level = 3

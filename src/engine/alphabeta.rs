@@ -286,11 +286,9 @@ impl ABSearchManager {
             move_hash: self.move_hash.clone(),
             threads: self.threads,
             stop_flag: self.stop_flag.clone(),
-            pv: Vec::with_capacity(depth as usize * (depth as usize + 1) / 2),
-            pv_depth: 0,
-            prev_pv: None,
             search_info: self.search_info.clone(),
             sender: out_channel,
+            bestmove: None,
         };
         std::thread::spawn(move || search(&mut root_search_info, depth, ABResult::MIN, ABResult::MAX))
     }
@@ -321,9 +319,7 @@ trait ABSearchThread {
     fn stop_flag(&self) -> &Arc<RwLock<bool>>;
     //These are optional and not used for helper threads
     fn threads(&self) -> usize {1}
-    fn write_pv(&mut self, _: u8, _: Option<chess::Move>, _: bool) {}
-    fn save_pv(&mut self) {}
-    fn previous_pv_move(&self, _: u8) -> Option<chess::Move> {None}
+    fn set_bestmove(&mut self, _m: Option<chess::Move>) {}
 }
 
 struct ABSearchMainThread {
@@ -332,11 +328,9 @@ struct ABSearchMainThread {
     threads: usize,
     move_hash: ABResultHash,
     stop_flag: Arc<RwLock<bool>>,
-    pv: Vec<Option<chess::Move>>,
-    prev_pv: Option<Vec<chess::Move>>,
-    pv_depth: usize,
     search_info: SearchInfo,
     sender: Sender<EngineIO>,
+    bestmove: Option<chess::Move>
 }
 
 impl ABSearchThread for ABSearchMainThread {
@@ -349,69 +343,31 @@ impl ABSearchThread for ABSearchMainThread {
     fn is_helper(&self) -> bool {false}
     fn stop_flag(&self) -> &Arc<RwLock<bool>> {&self.stop_flag}
     fn threads(&self) -> usize {self.threads}
-    // We index by how many moves are remaining
-    fn write_pv(&mut self, rem_depth: u8, m: Option<chess::Move>, from_hash_hit: bool) {
-        if rem_depth == 0 {return;}
-        let index = (rem_depth as usize)*(rem_depth as usize - 1) / 2;
-        //Extend the pv. Should be cheap since we already have the capacity
-        if self.pv.len() < index + rem_depth as usize {
-            self.pv.extend(std::iter::repeat(None).take(index + rem_depth as usize - self.pv.len()));
-            self.pv_depth = rem_depth as usize;
-        }
-        self.pv[index] = m;
-        for i in index+1-rem_depth as usize..index {
-            if !from_hash_hit {
-                self.pv[i+rem_depth as usize] = self.pv[i];
-            } else {
-                self.pv[i+rem_depth as usize] = None;
-            }
-        }
-    }
-    fn save_pv(&mut self) {
-        let mut ppv = Vec::new();
-        let mut index = self.pv_depth * (self.pv_depth - 1) / 2;
-        while self.pv.len() > index && self.pv[index].is_some() {
-            ppv.push(self.pv[index].unwrap());
-            index += 1;
-        }
-        if ppv.len() > 0 {
-            self.prev_pv = Some(ppv);
-        }
-        self.pv = Vec::new()
-    }
-    fn previous_pv_move(&self, depth: u8) -> Option<chess::Move> {
-        if self.prev_pv.is_none() {
-            return None;
-        }
-        let m = self.prev_pv.as_ref().unwrap().get(depth as usize);
-        match m {
-            Some(mm) => Some(*mm),
-            None => None,
-        }
+    fn set_bestmove(&mut self, m: Option<chess::Move>) {
+        self.bestmove = m;
     }
 }
 
 impl ABSearchMainThread {
     fn bestmove(&self) -> Option<chess::Move> {
-        if self.pv_depth == 0 {None}
-        else if self.prev_pv.is_some() {
-            let m = self.prev_pv.as_ref().unwrap().get(0);
-            match m {
-                Some(mm) => Some(*mm),
-                None => None,
-            }
-        } else {
-            None
-        }
+        self.bestmove
     }
-    fn print_pv(&self) {
-        print!("info depth {} pv", self.pv_depth);
-        let mut index = self.pv_depth*(self.pv_depth-1)/2;
-        while index < self.pv.len() && self.pv[index].is_some() {
-            print!(" {}", self.pv[index].unwrap());
+    fn print_pv(&self, depth: u8) {
+        if self.bestmove().is_none() {return;}
+        print!("info depth {} pv {}", depth, self.bestmove().unwrap());
+        let mut pos = self.pos().from_move(self.bestmove().unwrap());
+        let mut index = 1;
+        loop {
+            let hashentry = self.move_hash.get(pos.zobrist_hash());
+            if hashentry.zobrist_hash != pos.zobrist_hash() {break;}
+            let next_move = hashentry.mov();
+            if next_move.is_none() {break;}
+            print!(" {}", next_move.unwrap());
             index += 1;
+            if index > depth {break;}
+            pos.do_move(next_move.unwrap());
         }
-        print!("\n");
+        print!("\n")
     }
 }
 
@@ -483,8 +439,7 @@ fn search(thread: &mut ABSearchMainThread, depth: u8, mut alpha: ABResult, mut b
             match eval.typ {
                 ABResultType::EXACT => {
                     println!("info {} depth {} time {}", eval, d, now.elapsed().as_millis());
-                    thread.print_pv();
-                    thread.save_pv();
+                    thread.print_pv(d);
                     thread.search_info.eval = eval;
                     thread.search_info.bestmove = thread.bestmove();
                     match thread.sender.send(EngineIO::SEARCHUPDATE(thread.search_info.clone())) {
@@ -524,9 +479,7 @@ fn search_step(thread: &mut impl ABSearchThread, depth: u8, ply: u8, depth_reduc
         if hash_entry.depth >= depth-ply {
             match hash_entry.res.typ {
                 ABResultType::EXACT => {
-                    if !thread.is_helper() {
-                        thread.write_pv(depth-ply,hash_entry.mov(),true);
-                    }
+                    thread.set_bestmove(hash_entry.mov());
                     return hash_entry.res;
                 },
                 ABResultType::LOWERBOUND => {
@@ -555,11 +508,11 @@ fn search_step(thread: &mut impl ABSearchThread, depth: u8, ply: u8, depth_reduc
     //Try a null move to find a beta cutoff; search the first three plys fully.
     if !thread.pos_mut().in_check() && moves.len() > 0 && ply > 3 && ply < depth {
         thread.pos_mut().do_null_move();
-        if -search_step(thread, depth, ply+1, depth_reduction, -beta, -alpha, None) >= beta {
-            thread.pos_mut().undo_null_move(lm);
-            return beta;
-        }
+        let null_score = -search_step(thread, depth, ply+1, depth_reduction, -beta, -alpha, None);
         thread.pos_mut().undo_null_move(lm);
+        if null_score >= beta {
+            return null_score.to_lowerbound();
+        }
     }
 
     if ply + depth_reduction >= depth {
@@ -580,12 +533,11 @@ fn search_step(thread: &mut impl ABSearchThread, depth: u8, ply: u8, depth_reduc
         }
     }
 
-
     //Store castling rights for move undoing
     let castling = thread.pos().get_castling_rights();
 
     //if !thread.is_helper() {
-        evaluate::order_moves(&mut moves, thread.pos(), thread.previous_pv_move(ply), thread.move_hash().get(thread.pos().zobrist_hash()).mov());
+    evaluate::order_moves(&mut moves, thread.pos(), thread.move_hash().get(thread.pos().zobrist_hash()).mov());
     //} else {
     //    evaluate::order_moves_with_random_bias(&mut moves, thread.pos(), thread.move_hash().get(thread.pos().zobrist_hash()).mov());
     //}
@@ -601,22 +553,25 @@ fn search_step(thread: &mut impl ABSearchThread, depth: u8, ply: u8, depth_reduc
         let mut movescore = if thread.pos().pos_in_history() {
                             //If we repeat twice, it's gonna happen thrice
                                 ABResult::DRAW
-                            //Apply LMR
-                            } else if ply > 3 && !thread.pos_mut().in_check() {
-                                -search_step(thread, depth, ply+1, (i as u8)/6, -beta, -alpha, Some(moves[i]))
+                            //Apply LMR to zws searches of late moves
                             } else if ply > 3 && !thread.pos_mut().in_check() && zws {
-                                -search_step(thread, depth, ply+1, (i as u8)/6, -alpha.zero_window(), -alpha, Some(moves[i]))
+                                -search_step(thread,
+                                             depth, ply+1,
+                                             std::cmp::min((i as u8)/4 +  depth_reduction,
+                                                            depth / 3),
+                                             -alpha.zero_window(),
+                                             -alpha,
+                                             Some(moves[i]))
                             } else if zws {
-                                -search_step(thread, depth, ply+1, 0, -alpha.zero_window(), -alpha, Some(moves[i]))
+                                -search_step(thread, depth,
+                                             ply+1, 0, -alpha.zero_window(),
+                                             -alpha, Some(moves[i]))
                             } else {
                                 -search_step(thread, depth, ply+1, 0, -beta, -alpha, Some(moves[i]))
                             };
         if zws && movescore > alpha && movescore < beta {
-            movescore = if ply > 3 && !thread.pos_mut().in_check() {
-                                -search_step(thread, depth, ply+1, (i as u8)/6, -beta, -alpha, Some(moves[i]))
-                            } else {
-                                -search_step(thread, depth, ply+1, 0, -beta, -alpha, Some(moves[i]))
-                            };
+            //We apply no LMR if we search for a PV
+            movescore = -search_step(thread, depth, ply+1, 0, -beta, -alpha, Some(moves[i]));
         }
         thread.pos_mut().undo_move(moves[i], castling, lm);
         //Abort search if the helper gets a stop signal
@@ -637,14 +592,15 @@ fn search_step(thread: &mut impl ABSearchThread, depth: u8, ply: u8, depth_reduc
         }
     }
 
+    if ply == 0 {
+        thread.set_bestmove(bestmove);
+    }
+
     let zh = thread.pos().zobrist_hash();
     if fail_low {
         thread.move_hash_mut().set_if_deeper(zh, ABResultHashEntry::new(score.to_upperbound(), depth-ply, zh, bestmove.unwrap()));
         score.to_upperbound()
     } else {
-        if !thread.is_helper() {
-            thread.write_pv(depth-ply,bestmove,false);
-        }
         thread.move_hash_mut().set_if_deeper(zh, ABResultHashEntry::new(score.to_exact(), depth-ply, zh, bestmove.unwrap()));
         score.to_exact()
     }

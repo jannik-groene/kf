@@ -57,7 +57,7 @@ fn evaluate_pawns(pos: &mut chess::Position, game_state: GameState) -> i32 {
             value *= 1. - 0.1*(pawns_on_file as f64 - 1.);
             //We want to take the center
             if game_state == GameState::EARLY {
-                value += (7. - (chess::Board::get_rank(pawn) as i32 as f64 * 2. - 7.).abs())*(7. - (chess::Board::get_file(pawn) as i32 as f64 * 2. - 7.).abs())/32.;
+                value += (7. - (chess::Board::get_rank(pawn) as i32 as f64 * 2. - 7.).abs())*(7. - (chess::Board::get_file(pawn) as i32 as f64 * 2. - 7.).abs())/64.;
             }
             tot += value;
         }
@@ -194,7 +194,7 @@ pub fn evaluate(pos: &mut chess::Position) -> i32 {
     res + evaluate_mobility(&moves_us, &moves_them, game_state)
 }
 
-pub fn order_moves(movs: &mut Vec<chess::Move>, pos: &chess::Position, pv_move: Option<chess::Move>, hash_move: Option<chess::Move>) {
+pub fn order_moves(movs: &mut Vec<chess::Move>, pos: &chess::Position, hash_move: Option<chess::Move>) {
     movs.sort_unstable_by_key(|m| match m.typ { chess::MoveType::CAPTURE(_) => -pos.see(*m), _ => 500 });
     if hash_move.is_some() {
         movs.sort_by_key(|m| if *m == hash_move.unwrap() {0} else {1});
