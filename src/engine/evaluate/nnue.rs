@@ -1,5 +1,5 @@
 use super::chess;
-use super::chess::SquareMethods;
+use super::chess::{SquareMethods, SquareIndexMethods};
 
 struct NNUEState {
     //state of the first hidden layer
@@ -104,9 +104,9 @@ impl NNUEState {
         let flip = match c {chess::Color::WHITE => 0, chess::Color::BLACK => 56};
         //if the King has not moved the update is simple
         if m.piece != chess::Piece::KING || pos.color() != c {
-            let kp = pos.get_board()[(c, chess::Piece::KING)].trailing_zeros() as usize ^ flip;
-            let f = m.from.trailing_zeros() as usize ^ flip;
-            let t = m.to.trailing_zeros() as usize ^ flip;
+            let kp = pos.get_board()[(c, chess::Piece::KING)].index() ^ flip;
+            let f = m.from.index() ^ flip;
+            let t = m.to.index() ^ flip;
 
             let piece_index = calculate_piece_index(kp, m.piece, c, pos);
 
@@ -166,9 +166,9 @@ impl NNUEState {
         //if the king has moved we need to update all weights in the position
         else {
             //Overwrite the old state
-            self.initialize_color_state(pos, c, Some(m.to));
+            self.initialize_color_state(pos, c, Some(m.to.square()));
             //TODO: Handle castling and captures
-            let t = m.to.trailing_zeros() as usize ^ flip;
+            let t = m.to.index() ^ flip;
             match m.typ {
                 chess::MoveType::CAPTURE(p) => {
                     let capture_index = calculate_piece_index(t, p, c.other(), pos);

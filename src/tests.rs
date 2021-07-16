@@ -32,8 +32,8 @@ fn print_board() {
 fn simple_en_passant() {
     let mut pos = engine::chess::Position::from_fen(String::from("rnbqkbnr/pp3ppp/8/2pPp3/5P2/8/PPPP2PP/RNBQKBNR w KQkq c6 0 4")).unwrap();
     let m = engine::chess::Move{
-        from: 1 << 35,
-        to: 1 << 42,
+        from: 35,
+        to: 42,
         piece: engine::chess::Piece::PAWN,
         typ: engine::chess::MoveType::ENPASSANT,
     };
@@ -48,8 +48,8 @@ fn simple_en_passant() {
 fn simple_castle() {
     let mut pos = engine::chess::Position::from_fen(String::from("rn1qk2r/1p2bppp/p2pbn2/4p3/4P3/1NN1BP2/PPPQ2PP/R3KB1R b KQkq - 2 9")).unwrap();
     let m = engine::chess::Move {
-        from: 1 << 60,
-        to: 1 << 62,
+        from: 60,
+        to: 62,
         piece: engine::chess::Piece::KING,
         typ: engine::chess::MoveType::CASTLE,
     };
@@ -120,8 +120,8 @@ fn move_count_test_2() {
 fn simple_pinned_pawn_attack() {
     let mut pos = engine::chess::Position::from_fen(String::from("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 2")).unwrap();
     pos.do_move(engine::chess::Move {
-        from: 1 << 12,
-        to: 1 << 28,
+        from: 12,
+        to: 28,
         piece: engine::chess::Piece::PAWN,
         typ: engine::chess::MoveType::MOVE,
     });
@@ -172,8 +172,8 @@ fn simple_en_passant_remove_attacker() {
 fn simple_rook_capture() {
     let mut pos = engine::chess::Position::from_fen(String::from("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N1Q3/PPPBBPpP/R3K2R b KQkq - 1 2")).unwrap();
     pos = pos.from_move(engine::chess::Move{
-        from: 1 << 14,
-        to: 1 << 7,
+        from: 14,
+        to: 7,
         piece: engine::chess::Piece::PAWN,
         typ: engine::chess::MoveType::PROMOTIONCAPTURE((engine::chess::Piece::KNIGHT, engine::chess::Piece::ROOK)),
     });
@@ -205,7 +205,7 @@ fn move_count_test() {
         //WORKS TO DEPTH 6!
         engine::chess::Position::new(),
         //Position 2
-        //WORKS TO DEPTH 5!
+        //WORKS TO DEPTH 6!
         engine::chess::Position::from_fen(String::from("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 0")).unwrap(),
         //Position 3
         //WORKS TO DEPTH 8!
@@ -214,7 +214,7 @@ fn move_count_test() {
         //WORK TO DEPTH 6!
         engine::chess::Position::from_fen(String::from("r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1")).unwrap(),
         //Position 5
-        //WORK TO DEPTH 5!
+        //WORK TO DEPTH 6!
         engine::chess::Position::from_fen(String::from("rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8")).unwrap(),
         //Poistion 6
         //WORKS TO DEPTH 6!
@@ -227,6 +227,7 @@ fn move_count_test() {
         [1,44,1486,62379,2103487, 89941194,3048196529],
         [1,46,2079,89890,3894594,164075551,6923051137]
     ];
+    //Choose a test depth between 1 and 6, depth 6 takes about 40 minutes
     let depth: usize = 4;
     for (pos,res) in positions.iter_mut().zip(results.iter()) {
         assert!(do_perft(pos, depth) == res[depth]);
@@ -254,8 +255,8 @@ fn undo_moves() {
     //Undo normal move
     let mut pos = engine::chess::Position::new();
     let mov1 = engine::chess::Move {
-        from: 1 << 1,
-        to: 1 << 16,
+        from: 1,
+        to: 16,
         piece: engine::chess::Piece::KNIGHT,
         typ: engine::chess::MoveType::MOVE,
     };
@@ -265,8 +266,8 @@ fn undo_moves() {
     //Undo capture move
     pos = engine::chess::Position::from_fen(String::from("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1")).unwrap();
     let mov2 = engine::chess::Move {
-        from: 1 << 21,
-        to: 1 << 45,
+        from: 21,
+        to: 45,
         piece: engine::chess::Piece::QUEEN,
         typ: engine::chess::MoveType::CAPTURE(engine::chess::Piece::KNIGHT),
     };
@@ -276,8 +277,8 @@ fn undo_moves() {
     //Undo enpassant
     pos = engine::chess::Position::from_fen(String::from("rnbqkbnr/pp3ppp/8/2pPp3/5P2/8/PPPP2PP/RNBQKBNR w KQkq c6 0 4")).unwrap();
     let mov3 = engine::chess::Move{
-        from: 1 << 35,
-        to: 1 << 42,
+        from: 35,
+        to: 42,
         piece: engine::chess::Piece::PAWN,
         typ: engine::chess::MoveType::ENPASSANT,
     };
@@ -287,8 +288,8 @@ fn undo_moves() {
     //Undo castling
     pos = engine::chess::Position::from_fen(String::from("rn1qk2r/1p2bppp/p2pbn2/4p3/4P3/1NN1BP2/PPPQ2PP/R3KB1R b KQkq - 2 9")).unwrap();
     let mov4 = engine::chess::Move {
-        from: 1 << 60,
-        to: 1 << 62,
+        from: 60,
+        to: 62,
         piece: engine::chess::Piece::KING,
         typ: engine::chess::MoveType::CASTLE,
     };
