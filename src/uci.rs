@@ -49,7 +49,7 @@ fn timer(ustime: Option<u64>, _themtime: Option<u64>,
         std::thread::sleep(movetime-SAFETY_DELTA);
     }
     //Spin until we reach target time
-    while now.elapsed() < movetime {}
+    while now.elapsed() < movetime - std::time::Duration::from_micros(1) {}
     match ch.send(engine::EngineIO::TIMERENDED(id)) {
         Ok(_) => {},
         Err(_) => {},
@@ -85,19 +85,19 @@ impl UCIHandler for engine::Engine {
                     engine::EngineIO::UCIINPUT(s) => self.handle_input(s),
                     engine::EngineIO::TIMERENDED(id) => {
                         if id == self.search_id() {
-                            self.stop_search();
-                            waiting_for_search_end = true;
                             if last_search_update.is_some() {
                                 match last_search_update.as_ref().unwrap().bestmove {
                                     Some(m) => println!("bestmove {}", m),
                                     None => println!("bestmove 0000"),
                                 }
                             }
+                            self.stop_search();
+                            waiting_for_search_end = true;
                         }
                     },
                     engine::EngineIO::SEARCHUPDATE(up) => last_search_update = Some(up),
-                    engine::EngineIO::SEARCHENDED  => {
-                        if !waiting_for_search_end {
+                    engine::EngineIO::SEARCHENDED(id)  => {
+                        if !waiting_for_search_end && id == self.search_id() {
                             if last_search_update.is_some() {
                                 match last_search_update.as_ref().unwrap().bestmove {
                                     Some(m) => println!("bestmove {}", m),
@@ -130,7 +130,7 @@ impl UCIHandler for engine::Engine {
         }
     }
     fn handle_uci(&self) {
-        println!("id name kf-0.0.2");
+        println!("id name kf-0.0.3");
         println!("id author Jannik Gröne");
         self.print_config();
         println!("uciok");

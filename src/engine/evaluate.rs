@@ -199,9 +199,6 @@ pub fn order_moves(movs: &mut Vec<chess::Move>, pos: &chess::Position, hash_move
     if hash_move.is_some() {
         movs.sort_by_key(|m| if *m == hash_move.unwrap() {0} else {1});
     }
-    if pv_move.is_some() {
-        movs.sort_by_key(|m| if *m == pv_move.unwrap() {0} else {1});
-    }
 }
 
 pub fn order_moves_with_random_bias(movs: &mut Vec<chess::Move>, pos: &chess::Position, hash_move: Option<chess::Move>) {

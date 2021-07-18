@@ -5,6 +5,7 @@ use std::sync::{Arc, RwLock};
 use std::cmp::{PartialOrd, Ord};
 use std::ops::Neg;
 use std::fmt::Display;
+use std::io::{stdout, Write};
 
 use std::sync::mpsc::Sender;
 use super::EngineIO;
@@ -32,7 +33,8 @@ pub struct ABResult {
 
 #[derive(Clone)]
 struct ABResultHash {
-    hash: Arc<RwLock<Vec<ABResultHashEntry>>>,
+    //We run with two buckets. One replace on depth, on always replace
+    hash: Arc<RwLock<Vec<(ABResultHashEntry, ABResultHashEntry)>>>,
     size: usize,
 }
 
@@ -40,7 +42,7 @@ impl ABResultHash {
     fn new(size: usize) -> Self {
         let mut hash_vec = Vec::with_capacity(size);
         for _ in 0..size {
-            hash_vec.push(ABResultHashEntry::UNCHECKED);
+            hash_vec.push((ABResultHashEntry::UNCHECKED, ABResultHashEntry::UNCHECKED));
         }
         hash_vec.shrink_to_fit();
         ABResultHash {
@@ -49,18 +51,29 @@ impl ABResultHash {
         }
     }
     #[inline(always)]
-    fn get(&self, zobrist_key: u64) -> ABResultHashEntry {
-        self.hash.read().unwrap()[zobrist_key as usize % self.size]
+    fn get(&self, zobrist_key: u64) -> Option<ABResultHashEntry> {
+        let entry = self.hash.read().unwrap()[zobrist_key as usize % self.size];
+        if entry.0.zobrist_hash == zobrist_key {
+            Some(entry.0)
+        } else if entry.1.zobrist_hash == zobrist_key {
+            Some(entry.1)
+        } else {
+            None
+        }
     }
     #[inline(always)]
     fn set(&mut self, zobrist_key: u64, entry: ABResultHashEntry) {
-        self.hash.write().unwrap()[zobrist_key as usize % self.size] = entry;
-    }
-    #[inline(always)]
-    fn set_if_deeper(&mut self, zobrist_key: u64, entry: ABResultHashEntry) {
-        let mut hash_entry = self.hash.write().unwrap();
-        if hash_entry[zobrist_key as usize % self.size].depth < entry.depth {
-            *hash_entry.get_mut(zobrist_key as usize % self.size).unwrap() = entry;
+        let mut hash = self.hash.write().unwrap();
+        if zobrist_key == 0 {
+            println!("debug Zero Zobrist Key found!");
+        }
+        //Mate scores may be seen as having infinite depth
+        if hash[zobrist_key as usize % self.size].0.depth < entry.depth ||
+            (matches!(entry.res.value, ABResultValueType::MATE(_))
+                && entry.res > hash[zobrist_key as usize % self.size].0.res) {
+            hash.get_mut(zobrist_key as usize % self.size).unwrap().0 = entry;
+        } else {
+            hash.get_mut(zobrist_key as usize % self.size).unwrap().1 = entry;
         }
     }
 }
@@ -96,7 +109,10 @@ impl ABResult {
         }
         match self.value {
             ABResultValueType::CENTIS(c) => ABResult { typ: self.typ, value: ABResultValueType::CENTIS(c-ABResult::ASPIRATION_ADJUSTMENTS[count]) },
-            _ => ABResult{typ: ABResultType::EXACT, value: ABResultValueType::NEGINFTY}
+            //In case of mate take the next worse mate score, e.g. mate in 2 if we are being mated
+            //in 3 or mate in 5 if we will mate in 3
+            ABResultValueType::MATE(m) => ABResult{ typ: self.typ, value: ABResultValueType::MATE(m+2*(2*(m%2)-1)) },
+            _ => ABResult{typ: ABResultType::EXACT, value: self.value}
         }
     }
     fn aspiration_higher(&self, count: usize) -> ABResult {
@@ -105,6 +121,9 @@ impl ABResult {
         }
         match self.value {
             ABResultValueType::CENTIS(c) => ABResult { typ: self.typ, value: ABResultValueType::CENTIS(c+ABResult::ASPIRATION_ADJUSTMENTS[count]) },
+            //In case of mate take the next best mate score, e.g. mate in 4 if we are being mated
+            //in 2 or mate in 3 if we will mate in 5
+            ABResultValueType::MATE(m) => ABResult{ typ: self.typ, value: ABResultValueType::MATE(m-2*(2*(m%2)-1)) },
             _ => ABResult{typ: ABResultType::EXACT, value: ABResultValueType::INFTY}
         }
 
@@ -112,10 +131,20 @@ impl ABResult {
     fn zero_window(&self) -> ABResult {
         match self.value {
             ABResultValueType::CENTIS(c) => ABResult { value: ABResultValueType::CENTIS(c+1), typ: self.typ },
-            ABResultValueType::MATE(n) => ABResult { value: ABResultValueType::MATE(n-2), typ: self.typ },
+            ABResultValueType::MATE(n) => ABResult { value: ABResultValueType::MATE(n-2*(2*(n%2)-1)), typ: self.typ },
             ABResultValueType::INFTY => *self,
             ABResultValueType::NEGINFTY => *self,
         }
+    }
+    //Use to pass ab-bounds down the tree
+    fn neg_down(&self) -> ABResult {
+        let val = match self.value {
+            ABResultValueType::MATE(m) => ABResultValueType::MATE(m-1),
+            ABResultValueType::CENTIS(c) => ABResultValueType::CENTIS(-c),
+            ABResultValueType::NEGINFTY => ABResultValueType::INFTY,
+            ABResultValueType::INFTY => ABResultValueType::NEGINFTY,
+        };
+        ABResult {value: val, typ: self.typ}
     }
 }
 
@@ -142,6 +171,7 @@ impl Display for ABResult {
     }
 }
 
+//Neg moves a result UP the searchtree, i.e. mates become father away. Use ABResult::neg_down
 impl Neg for ABResultValueType {
     type Output = Self;
     fn neg(self) -> Self {
@@ -158,7 +188,11 @@ impl Neg for ABResult {
     type Output = ABResult;
     fn neg(self) -> Self {
         ABResult {
-            typ: self.typ,
+            typ: match self.typ {
+                ABResultType::EXACT => ABResultType::EXACT,
+                ABResultType::UPPERBOUND => ABResultType::LOWERBOUND,
+                ABResultType::LOWERBOUND => ABResultType::UPPERBOUND,
+            },
             value: -self.value,
         }
     }
@@ -235,16 +269,18 @@ pub struct SearchInfo {
     pub depth: u8,
     pub pv: Vec<chess::Move>,
     pub nodes: u64,
+    pub id: u64,
 }
 
 impl SearchInfo {
-    fn new() -> SearchInfo {
+    fn new(id: u64) -> SearchInfo {
         SearchInfo {
             bestmove: None,
             eval: ABResult::MIN,
             depth: 0,
             pv: Vec::new(),
             nodes: 0,
+            id,
         }
     }
 }
@@ -264,11 +300,11 @@ impl ABSearchManager {
             threads: 1,
             move_hash: ABResultHash::new(2),
             stop_flag: Arc::new(RwLock::new(false)),
-            search_info: SearchInfo::new(),
+            search_info: SearchInfo::new(0),
         }
     }
     pub fn set_hash_size(&mut self, size: usize) {
-        self.move_hash = ABResultHash::new(size*1_000_000/std::mem::size_of::<ABResultHashEntry>());
+        self.move_hash = ABResultHash::new(size*1_000_000/std::mem::size_of::<(ABResultHashEntry, ABResultHashEntry)>());
     }
     pub fn set_threads(&mut self, threads: usize) {
         self.threads = threads;
@@ -276,10 +312,10 @@ impl ABSearchManager {
     pub fn set_position(&mut self, pos: chess::Position) {
         self.pos = pos;
     }
-    pub fn search(&mut self, out_channel: Sender<EngineIO>, target_depth: Option<u8>) -> std::thread::JoinHandle<()> {
+    pub fn search(&mut self, out_channel: Sender<EngineIO>, target_depth: Option<u8>, search_id: u64) -> std::thread::JoinHandle<()> {
         let depth = target_depth.unwrap_or(u8::MAX);
-        self.reset_search_info();
-        *self.stop_flag.write().unwrap() = false;
+        self.reset_search_info(search_id);
+        self.stop_flag = Arc::new(RwLock::new(false));
         let mut root_search_info = ABSearchMainThread {
             pos: self.pos.clone(),
             nodes: 0,
@@ -292,8 +328,8 @@ impl ABSearchManager {
         };
         std::thread::spawn(move || search(&mut root_search_info, depth, ABResult::MIN, ABResult::MAX))
     }
-    pub fn reset_search_info(&mut self) {
-        self.search_info = SearchInfo::new();
+    pub fn reset_search_info(&mut self, id: u64) {
+        self.search_info = SearchInfo::new(id);
     }
     pub fn stop(&mut self) {
         *self.stop_flag.write().unwrap() = true;
@@ -330,7 +366,7 @@ struct ABSearchMainThread {
     stop_flag: Arc<RwLock<bool>>,
     search_info: SearchInfo,
     sender: Sender<EngineIO>,
-    bestmove: Option<chess::Move>
+    bestmove: Option<chess::Move>,
 }
 
 impl ABSearchThread for ABSearchMainThread {
@@ -354,20 +390,22 @@ impl ABSearchMainThread {
     }
     fn print_pv(&self, depth: u8) {
         if self.bestmove().is_none() {return;}
-        print!("info depth {} pv {}", depth, self.bestmove().unwrap());
+        let stdout = std::io::stdout();
+        let mut handle = stdout.lock();
+        drop(write!(handle, "info depth {} pv {}", depth, self.bestmove().unwrap()));
         let mut pos = self.pos().from_move(self.bestmove().unwrap());
         let mut index = 1;
         loop {
             let hashentry = self.move_hash.get(pos.zobrist_hash());
-            if hashentry.zobrist_hash != pos.zobrist_hash() {break;}
-            let next_move = hashentry.mov();
+            if hashentry.is_none() {break;}
+            let next_move = hashentry.unwrap().mov();
             if next_move.is_none() {break;}
-            print!(" {}", next_move.unwrap());
+            drop(write!(handle, " {}", next_move.unwrap()));
             index += 1;
-            if index > depth {break;}
+            if index >= depth {break;}
             pos.do_move(next_move.unwrap());
         }
-        print!("\n")
+        drop(write!(handle, "\n"));
     }
 }
 
@@ -391,7 +429,7 @@ impl ABSearchThread for ABSearchHelperThread {
 
 impl ABSearchHelperThread {
     fn search(&mut self, depth: u8, alpha: ABResult, beta: ABResult, lm: Option<chess::Move>) -> u64 {
-        search_step(self, depth, 0, 0, alpha, beta, lm);
+        search_step(self, depth, 0, 0, 0, alpha, beta, lm);
         self.nodes
     }
 }
@@ -399,6 +437,7 @@ impl ABSearchHelperThread {
 fn search(thread: &mut ABSearchMainThread, depth: u8, mut alpha: ABResult, mut beta: ABResult) {
     let now = Instant::now();
     let mut helper_handles = Vec::new();
+    let helper_stop_flag = Arc::new(RwLock::new(false));
     for d in 1..=depth {
         let mut fail_highs = 0;
         let mut fail_lows = 0;
@@ -410,20 +449,20 @@ fn search(thread: &mut ABSearchMainThread, depth: u8, mut alpha: ABResult, mut b
                         pos: thread.pos().clone(),
                         nodes: 0,
                         move_hash: thread.move_hash().clone(),
-                        stop_flag: thread.stop_flag().clone(),
+                        stop_flag: helper_stop_flag.clone(),
                     };
                     helper_handles.push(std::thread::spawn(move || helper_thread.search(d + i as u8 / 2, alpha, beta, None)));
                 }
             }
-            let eval = search_step(thread, d, 0, 0, alpha, beta, thread.pos().get_last_move());
-            //We reached the target depth and stopped, so we update the external values
+            let eval = search_step(thread, d, 0, 0, 0, alpha, beta, thread.pos().get_last_move());
             if thread.stop_flag().read().unwrap().eq(&true) {
-                drop(thread.sender.send(EngineIO::SEARCHENDED));
+                *helper_stop_flag.write().unwrap() = true;
+                drop(thread.sender.send(EngineIO::SEARCHENDED(thread.search_info.id)));
                 return;
             }
             if d > 2 {
                 //Set stop flag and join all helpers
-                *thread.stop_flag().write().unwrap() = true;
+                *helper_stop_flag.write().unwrap() = true;
                 for helper in helper_handles {
                     match helper.join() {
                         //Concerning but not fatal?
@@ -433,9 +472,10 @@ fn search(thread: &mut ABSearchMainThread, depth: u8, mut alpha: ABResult, mut b
                 }
                 helper_handles = Vec::new();
                 //Reset stop flag
-                *thread.stop_flag().write().unwrap() = false;
+                *helper_stop_flag.write().unwrap() = false | *thread.stop_flag.read().unwrap();
             }
             println!("info nodes {} nps {}", thread.nodes(), 1000* *thread.nodes() as u128 /now.elapsed().as_millis().clamp(1,u128::MAX));
+            //We reached the target depth and stopped, so we update the external values
             match eval.typ {
                 ABResultType::EXACT => {
                     println!("info {} depth {} time {}", eval, d, now.elapsed().as_millis());
@@ -464,32 +504,32 @@ fn search(thread: &mut ABSearchMainThread, depth: u8, mut alpha: ABResult, mut b
             }
         }
     }
-    drop(thread.sender.send(EngineIO::SEARCHENDED));
+    drop(thread.sender.send(EngineIO::SEARCHENDED(thread.search_info.id)));
 }
 
 fn search_step(thread: &mut impl ABSearchThread, depth: u8, ply: u8, depth_reduction: u8,
-               mut alpha: ABResult, beta: ABResult, lm: Option<chess::Move>) -> ABResult {
+               null_moves: u8, mut alpha: ABResult, beta: ABResult, lm: Option<chess::Move>) -> ABResult {
 
     *thread.nodes_mut() += 1;
 
     //Check if the move is already hashed
     let hash_entry = thread.move_hash().get(thread.pos().zobrist_hash());
 
-    if hash_entry.zobrist_hash == thread.pos().zobrist_hash() && hash_entry.mov().is_some() {
-        if hash_entry.depth >= depth-ply {
-            match hash_entry.res.typ {
+    if hash_entry.is_some() && hash_entry.unwrap().mov().is_some() {
+        if hash_entry.unwrap().depth >= depth-ply {
+            match hash_entry.unwrap().res.typ {
                 ABResultType::EXACT => {
-                    thread.set_bestmove(hash_entry.mov());
-                    return hash_entry.res;
+                    thread.set_bestmove(hash_entry.unwrap().mov());
+                    return hash_entry.unwrap().res;
                 },
                 ABResultType::LOWERBOUND => {
-                    if hash_entry.res >= beta {
-                        return hash_entry.res;
+                    if hash_entry.unwrap().res >= beta {
+                        return hash_entry.unwrap().res;
                     }
                 },
                 ABResultType::UPPERBOUND => {
-                    if hash_entry.res < alpha {
-                        return hash_entry.res;
+                    if hash_entry.unwrap().res < alpha {
+                        return hash_entry.unwrap().res;
                     }
                 }
             }
@@ -505,10 +545,18 @@ fn search_step(thread: &mut impl ABSearchThread, depth: u8, ply: u8, depth_reduc
         return ABResult::STALEMATE;
     }
 
+    //If we cannot beat the score, just return immediately
+    if beta.value == ABResultValueType::MATE(0) {
+        return ABResult::MATE_NOW.to_lowerbound()
+    }
+
     //Try a null move to find a beta cutoff; search the first three plys fully.
-    if !thread.pos_mut().in_check() && moves.len() > 0 && ply > 3 && ply < depth {
+    if null_moves < 3 && !thread.pos_mut().in_check() && moves.len() > 0 && ply > 3 && ply < depth
+                      && !matches!(alpha.value, ABResultValueType::MATE(_))
+                      && !matches!(beta.value, ABResultValueType::MATE(_)) {
         thread.pos_mut().do_null_move();
-        let null_score = -search_step(thread, depth, ply+1, depth_reduction, -beta, -alpha, None);
+        let null_score = -search_step(thread, depth, ply+1, depth_reduction, null_moves + 1,
+                                      beta.neg_down(), alpha.neg_down(), None);
         thread.pos_mut().undo_null_move(lm);
         if null_score >= beta {
             return null_score.to_lowerbound();
@@ -516,7 +564,7 @@ fn search_step(thread: &mut impl ABSearchThread, depth: u8, ply: u8, depth_reduc
     }
 
     if ply + depth_reduction >= depth {
-        return quiesce(thread, alpha, beta, 200, 0, lm);
+        return quiesce(thread, alpha, beta, 200 - 20 * depth_reduction as i32, 0, lm);
     }
     //Futility pruning
     else if ply + depth_reduction == depth - 1 && depth > 3 {
@@ -537,7 +585,7 @@ fn search_step(thread: &mut impl ABSearchThread, depth: u8, ply: u8, depth_reduc
     let castling = thread.pos().get_castling_rights();
 
     //if !thread.is_helper() {
-    evaluate::order_moves(&mut moves, thread.pos(), thread.move_hash().get(thread.pos().zobrist_hash()).mov());
+    evaluate::order_moves(&mut moves, thread.pos(), thread.move_hash().get(thread.pos().zobrist_hash()).map(|h| h.mov()).flatten());
     //} else {
     //    evaluate::order_moves_with_random_bias(&mut moves, thread.pos(), thread.move_hash().get(thread.pos().zobrist_hash()).mov());
     //}
@@ -557,28 +605,31 @@ fn search_step(thread: &mut impl ABSearchThread, depth: u8, ply: u8, depth_reduc
                             } else if ply > 3 && !thread.pos_mut().in_check() && zws {
                                 -search_step(thread,
                                              depth, ply+1,
-                                             std::cmp::min((i as u8)/4 +  depth_reduction,
-                                                            depth / 3),
-                                             -alpha.zero_window(),
-                                             -alpha,
+                                             std::cmp::min(((i as u8)/4)*2 + depth_reduction,
+                                                            depth / 4),
+                                             null_moves,
+                                             alpha.zero_window().neg_down(),
+                                             alpha.neg_down(),
                                              Some(moves[i]))
                             } else if zws {
-                                -search_step(thread, depth,
-                                             ply+1, 0, -alpha.zero_window(),
-                                             -alpha, Some(moves[i]))
+                                -search_step(thread, depth, ply+1, 0,
+                                             null_moves, alpha.zero_window().neg_down(),
+                                             alpha.neg_down(), Some(moves[i]))
                             } else {
-                                -search_step(thread, depth, ply+1, 0, -beta, -alpha, Some(moves[i]))
+                                -search_step(thread, depth, ply+1, 0, null_moves,
+                                             beta.neg_down(), alpha.neg_down(), Some(moves[i]))
                             };
         if zws && movescore > alpha && movescore < beta {
             //We apply no LMR if we search for a PV
-            movescore = -search_step(thread, depth, ply+1, 0, -beta, -alpha, Some(moves[i]));
+            movescore = -search_step(thread, depth, ply+1, 0, null_moves,
+                                     beta.neg_down(), alpha.neg_down(), Some(moves[i]));
         }
         thread.pos_mut().undo_move(moves[i], castling, lm);
         //Abort search if the helper gets a stop signal
         if thread.stop_flag().read().unwrap().eq(&true) {return ABResult::MIN;};
         if movescore >= beta {
             let zh = thread.pos().zobrist_hash();
-            thread.move_hash_mut().set_if_deeper(zh, ABResultHashEntry::new(movescore.to_lowerbound(), depth-ply, zh, moves[i]));
+            thread.move_hash_mut().set(zh, ABResultHashEntry::new(movescore.to_lowerbound(), depth-ply, zh, moves[i]));
             return movescore.to_lowerbound();
         }
         if movescore > score {
@@ -598,10 +649,10 @@ fn search_step(thread: &mut impl ABSearchThread, depth: u8, ply: u8, depth_reduc
 
     let zh = thread.pos().zobrist_hash();
     if fail_low {
-        thread.move_hash_mut().set_if_deeper(zh, ABResultHashEntry::new(score.to_upperbound(), depth-ply, zh, bestmove.unwrap()));
+        thread.move_hash_mut().set(zh, ABResultHashEntry::new(score.to_upperbound(), depth-ply, zh, bestmove.unwrap()));
         score.to_upperbound()
     } else {
-        thread.move_hash_mut().set_if_deeper(zh, ABResultHashEntry::new(score.to_exact(), depth-ply, zh, bestmove.unwrap()));
+        thread.move_hash_mut().set(zh, ABResultHashEntry::new(score.to_exact(), depth-ply, zh, bestmove.unwrap()));
         score.to_exact()
     }
 }
@@ -611,7 +662,9 @@ fn quiesce(thread: &mut impl ABSearchThread, mut alpha: ABResult, beta: ABResult
 
     let mut cand_moves = thread.pos_mut().get_moves();
     if cand_moves.len() == 0 && thread.pos_mut().in_check() {
-        return ABResult::MATE_NOW;
+        //Since this is not a proper search we do not return a mate score, but rather a high
+        //centiscore
+        return ABResult::exact_from_cents(-15000);
     } else if cand_moves.len() == 0 {
         return ABResult::STALEMATE;
     }
@@ -682,15 +735,15 @@ fn write_and_read_tt() {
     let mut hash = ABResultHash::new(10000);
     let entry = ABResultHashEntry::new(-ABResult::MATE_NOW, 3, 1234628935786765, chess::Move{from: 1, to: 2, piece: chess::Piece::KING, typ: chess::MoveType::MOVE});
     hash.set(1234628935786765, entry.clone());
-    assert!(hash.get(1234628935786765) == entry);
+    assert!(hash.get(1234628935786765).unwrap() == entry);
     let entry2 = ABResultHashEntry::new(-ABResult::MATE_NOW, 3, 1234628935786798, chess::Move{from: 1, to: 2, piece: chess::Piece::KING, typ: chess::MoveType::MOVE});
     let entry4 = ABResultHashEntry::new(ABResult::DRAW, 2, 1234628935786798, chess::Move{from: 4, to: 8, piece: chess::Piece::QUEEN, typ: chess::MoveType::MOVE});
-    hash.set_if_deeper(1234628935786798, entry2.clone());
-    hash.set_if_deeper(1234628935786798, entry4.clone());
-    assert!(hash.get(1234628935786798) == entry2);
+    hash.set(1234628935786798, entry2.clone());
+    hash.set(1234628935786798, entry4.clone());
+    assert!(hash.get(1234628935786798).unwrap() == entry2);
     let entry3 = ABResultHashEntry::new(-ABResult::MATE_NOW, 3, 1234628935786700, chess::Move{from: 1, to: 2, piece: chess::Piece::KING, typ: chess::MoveType::MOVE});
     let mut hash_clone = hash.clone();
-    std::thread::spawn(move || hash_clone.set_if_deeper(1234628935786700, entry3.clone()));
+    std::thread::spawn(move || hash_clone.set(1234628935786700, entry3.clone()));
     std::thread::sleep(Duration::from_millis(100));
-    assert!(hash.get(1234628935786700) == entry3);
+    assert!(hash.get(1234628935786700).unwrap() == entry3);
 }

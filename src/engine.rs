@@ -119,7 +119,7 @@ pub struct Engine {
 pub enum EngineIO {
     UCIINPUT(String),
     SEARCHUPDATE(alphabeta::SearchInfo),
-    SEARCHENDED,
+    SEARCHENDED(u64),
     TIMERENDED(u64),
 }
 
@@ -152,9 +152,10 @@ impl Engine {
     }
     pub fn start_search(&mut self, depth: Option<u8>) {
         self.search_id += 1;
-        self.search.search(self.channel.0.clone(),depth);
+        self.search.search(self.channel.0.clone(),depth, self.search_id);
     }
     pub fn stop_search(&mut self) {
+        self.search_id += 1;
         self.search.stop();
     }
     pub fn color(&self) -> chess::Color {
