@@ -98,6 +98,7 @@ impl UCIHandler for engine::Engine {
                     engine::EngineIO::SEARCHUPDATE(up) => last_search_update = Some(up),
                     engine::EngineIO::SEARCHENDED(id)  => {
                         if !waiting_for_search_end && id == self.search_id() {
+                            self.increase_search_id(); //invalidate search_id
                             if last_search_update.is_some() {
                                 match last_search_update.as_ref().unwrap().bestmove {
                                     Some(m) => println!("bestmove {}", m),
@@ -130,7 +131,7 @@ impl UCIHandler for engine::Engine {
         }
     }
     fn handle_uci(&self) {
-        println!("id name kf-0.0.3");
+        println!("id name kf-0.0.4");
         println!("id author Jannik Gröne");
         self.print_config();
         println!("uciok");

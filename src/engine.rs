@@ -158,6 +158,9 @@ impl Engine {
         self.search_id += 1;
         self.search.stop();
     }
+    pub fn increase_search_id(&mut self) {
+        self.search_id += 1;
+    }
     pub fn color(&self) -> chess::Color {
         self.search.color()
     }

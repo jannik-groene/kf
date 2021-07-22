@@ -485,7 +485,7 @@ fn search(thread: &mut ABSearchMainThread, depth: u8, mut alpha: ABResult, mut b
                     match thread.sender.send(EngineIO::SEARCHUPDATE(thread.search_info.clone())) {
                         Ok(_) => {},
                         //We end the search if we cannot communicate the results anymore
-                        Err(_) => break,
+                        Err(_) => return,
                     };
                     alpha = eval.aspiration_lower(0);
                     beta = eval.aspiration_higher(0);
