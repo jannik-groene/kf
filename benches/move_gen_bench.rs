@@ -13,12 +13,12 @@ fn attack_gen_in_opening(c: &mut Criterion<CyclesPerByte>) {
 }
 
 fn do_move_en_passant(c: &mut Criterion<CyclesPerByte>) {
-    let pos = engine::chess::Position::from_fen(String::from("rnbqkbnr/pp3ppp/8/2pPp3/5P2/8/PPPP2PP/RNBQKBNR w KQkq c6 0 4")).unwrap();
+    let mut pos = engine::chess::Position::from_fen(String::from("rnbqkbnr/pp3ppp/8/2pPp3/5P2/8/PPPP2PP/RNBQKBNR w KQkq c6 0 4")).unwrap();
     let m = engine::chess::Move {
-        from: 1 << 35,
-        to: 1 << 42,
+        from: 35,
+        to: 42,
         piece: engine::chess::Piece::PAWN,
-        promote: None,
+        typ: engine::chess::MoveType::ENPASSANT,
     };
     c.bench_function("do move en passant", |b| b.iter(|| pos.do_move(m)));
 }
