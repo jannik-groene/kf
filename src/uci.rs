@@ -131,7 +131,7 @@ impl UCIHandler for engine::Engine {
         }
     }
     fn handle_uci(&self) {
-        println!("id name kf-0.0.5-dev");
+        println!("id name kf-0.0.6-dev");
         println!("id author Jannik Gröne");
         self.print_config();
         println!("uciok");
