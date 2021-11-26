@@ -68,11 +68,11 @@ impl ABResultHash {
             println!("debug Zero Zobrist Key found!");
         }
         //Mate scores may be seen as having infinite depth
-        if hash[zobrist_key as usize % self.size].0.depth < entry.depth ||
+        if (hash[zobrist_key as usize % self.size].0.depth < entry.depth && entry.depth > 2) ||
             (matches!(entry.res.value, ABResultValueType::MATE(_))
                 && entry.res > hash[zobrist_key as usize % self.size].0.res) {
             hash.get_mut(zobrist_key as usize % self.size).unwrap().0 = entry;
-        } else {
+        } else if entry.depth > 2 {
             hash.get_mut(zobrist_key as usize % self.size).unwrap().1 = entry;
         }
     }
