@@ -588,7 +588,7 @@ fn search_step(thread: &mut impl ABSearchThread, depth: u8, ply: u8, depth_reduc
     }
 
     //Try a null move to find a beta cutoff; search the first three plys fully.
-    if null_moves < 3 && !thread.pos_mut().in_check() && moves.len() > 0 && ply > 3 && ply < depth
+    if null_moves < 3 && !thread.pos_mut().in_check() && moves.len() > 0 && ply < depth
                       && !matches!(alpha.value, ABResultValueType::MATE(_))
                       && !matches!(beta.value, ABResultValueType::MATE(_)) {
         thread.pos_mut().do_null_move();
