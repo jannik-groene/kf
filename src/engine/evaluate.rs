@@ -34,9 +34,9 @@ fn evaluate_pawns(pos: &mut chess::Position, phase: i32) -> i32 {
             };
             let rank = chess::Board::get_rank(pawn) as i32;
             if (rank-base_rank).abs() == 6 {
-                value *= 1.+(1.*phase_factor);
+                value *= 1.+(0.2*phase_factor);
             } else if (rank-base_rank).abs() == 5 {
-                value *= 1.+(0.5*phase_factor);
+                value *= 1.+(0.1*phase_factor);
             }
             //Penalize isolated pawns
             if !pawn.is_at_east_border() &&
