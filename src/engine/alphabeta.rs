@@ -697,23 +697,19 @@ fn search_step(thread: &mut impl ABSearchThread, depth: u8, ply: u8, depth_reduc
 fn quiesce(thread: &mut impl ABSearchThread, mut alpha: ABResult, beta: ABResult, delta: i32, qply: u8, lm: Option<chess::Move>) -> ABResult {
     *thread.nodes_mut() += 1;
 
-    let mut cand_moves = thread.pos_mut().get_moves();
-    if cand_moves.len() == 0 && thread.pos_mut().in_check() {
-        //Since this is not a proper search we do not return a mate score, but rather a high
-        //centiscore
-        return ABResult::exact_from_cents(-15000);
-    } else if cand_moves.len() == 0 {
-        return ABResult::STALEMATE;
+    let static_eval_centis = thread.evaluate();//evaluate::evaluate(thread.pos_mut());
+    let static_eval = ABResult::exact_from_cents(static_eval_centis);
+
+    //Adjust based on null-move hypothesis
+    if static_eval >= beta {
+        return static_eval.to_lowerbound();
+    } else if alpha < static_eval {
+        alpha = static_eval;
     }
-    //We want to explore checks in the near future fully
+
+    let mut cand_moves = thread.pos_mut().get_moves();
+    //If we are not in check we filter for tactical moves.
     if !thread.pos_mut().in_check() {
-        let static_eval_centis = thread.evaluate();//evaluate::evaluate(thread.pos_mut());
-        let static_eval = ABResult::exact_from_cents(static_eval_centis);
-        if static_eval >= beta {
-            return static_eval.to_lowerbound();
-        } else if alpha < static_eval {
-            alpha = static_eval;
-        }
         cand_moves = cand_moves.iter().copied().filter(|m| match m.typ {
                                                         chess::MoveType::CAPTURE(_) => ABResult::exact_from_cents(static_eval_centis+thread.pos().see(*m)+delta) > alpha
                                                                                         && thread.pos().see(*m) > 0,
