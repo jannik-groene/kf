@@ -628,18 +628,18 @@ fn search_step(thread: &mut impl ABSearchThread, depth: u8, ply: u8, depth_reduc
     }
 
     //We extend the normal search if we are  in check, else go into quiescence
-    if ply + depth_reduction >= depth + extension/4 && !thread.pos_mut().in_check() {
+    if ply >= depth -depth_reduction + extension/4 && !thread.pos_mut().in_check() {
         return quiesce(thread, alpha, beta, 200 - 20 * depth_reduction as i32, 0, lm);
     }
     //Futility pruning
-    else if ply + depth_reduction == depth + extension/4 - 1 && depth > 3 {
+    else if ply == depth - depth_reduction + extension/4 - 1 && depth > 3 {
         let eval = thread.evaluate();//evaluate::evaluate(thread.pos_mut());
         if ABResult::exact_from_cents(eval + 300) < alpha {
             return quiesce(thread, alpha, beta, 100, 0, lm);
         }
     }
     //Extended futility pruning
-    else if depth > 3 && ply + depth_reduction == depth + extension/4 - 2 {
+    else if depth > 3 && ply == depth - depth_reduction + extension/4 - 2 {
         let eval = thread.evaluate();//evaluate::evaluate(thread.pos_mut());
         if ABResult::exact_from_cents(eval + 500) < alpha {
             return quiesce(thread, alpha, beta, 100, 0, lm);
