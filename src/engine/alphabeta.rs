@@ -488,7 +488,7 @@ fn search(thread: &mut ABSearchMainThread, depth: u8, mut alpha: ABResult, mut b
                         stop_flag: helper_stop_flag.clone(),
                         //nnue: thread.nnue().clone(),
                     };
-                    helper_handles.push(std::thread::spawn(move || helper_thread.search(d + i as u8 / 2, alpha, beta, None)));
+                    helper_handles.push(std::thread::spawn(move || helper_thread.search(d.saturating_add(i as u8 / 2), alpha, beta, None)));
                 }
             }
             let eval = search_step(thread, d, 0, 0, 0, 0, alpha, beta, thread.pos().get_last_move());
@@ -628,11 +628,11 @@ fn search_step(thread: &mut impl ABSearchThread, depth: u8, ply: u8, depth_reduc
     }
 
     //We extend the normal search if we are  in check, else go into quiescence
-    if ply >= depth -depth_reduction + extension/4 && !thread.pos_mut().in_check() {
+    if ply >= depth - depth_reduction + extension/4 && !thread.pos_mut().in_check() {
         return quiesce(thread, alpha, beta, 200 - 20 * depth_reduction as i32, 0, lm);
     }
     //Futility pruning
-    else if ply == depth - depth_reduction + extension/4 - 1 && depth > 3 {
+    else if depth > 3 && ply == depth - depth_reduction + extension/4 - 1 {
         let eval = thread.evaluate();//evaluate::evaluate(thread.pos_mut());
         if ABResult::exact_from_cents(eval + 300) < alpha {
             return quiesce(thread, alpha, beta, 100, 0, lm);
@@ -671,11 +671,11 @@ fn search_step(thread: &mut impl ABSearchThread, depth: u8, ply: u8, depth_reduc
 
         //calculate total possible extension
         let mut move_extension = pv_extension + extension;
-        if move_extension/4 > u8::MAX - depth - 1 {
-            move_extension = (u8::MAX - depth - 1)*4;
-        }
         if move_extension/4 > depth/2 {
             move_extension = 2*depth;
+        }
+        if move_extension/4 > u8::MAX - depth {
+            move_extension = (u8::MAX - depth)*4;
         }
 
         //lmr reduction depth
@@ -735,7 +735,9 @@ fn search_step(thread: &mut impl ABSearchThread, depth: u8, ply: u8, depth_reduc
         if thread.stop_flag().read().unwrap().eq(&true) {return ABResult::MIN;};
         if movescore >= beta {
             let zh = thread.pos().zobrist_hash();
-            thread.move_hash_mut().set(zh, ABResultHashEntry::new(movescore.to_lowerbound(), depth-ply, zh, moves[i]));
+            if ply < depth {
+                thread.move_hash_mut().set(zh, ABResultHashEntry::new(movescore.to_lowerbound(), depth-ply, zh, moves[i]));
+            }
             return movescore.to_lowerbound();
         }
         if movescore > score {
@@ -755,10 +757,14 @@ fn search_step(thread: &mut impl ABSearchThread, depth: u8, ply: u8, depth_reduc
 
     let zh = thread.pos().zobrist_hash();
     if fail_low {
-        thread.move_hash_mut().set(zh, ABResultHashEntry::new(score.to_upperbound(), depth.saturating_sub(ply), zh, bestmove.unwrap()));
+        if ply < depth {
+            thread.move_hash_mut().set(zh, ABResultHashEntry::new(score.to_upperbound(), depth.saturating_sub(ply), zh, bestmove.unwrap()));
+        }
         score.to_upperbound()
     } else {
-        thread.move_hash_mut().set(zh, ABResultHashEntry::new(score.to_exact(), depth.saturating_sub(ply), zh, bestmove.unwrap()));
+        if ply < depth {
+            thread.move_hash_mut().set(zh, ABResultHashEntry::new(score.to_exact(), depth.saturating_sub(ply), zh, bestmove.unwrap()));
+        }
         score.to_exact()
     }
 }

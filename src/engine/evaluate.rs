@@ -183,7 +183,7 @@ fn evaluate_mobility(moves_us: &Vec<chess::Move>, moves_them: &Vec<chess::Move>,
                                                 _ => panic!("Invalid Position"),
                                              }).fold(0., |s, mv| s+mv);
 
-    ((move_value_us/(move_value_them+move_value_them)-0.5) * 30.) as i32
+    ((move_value_us/(move_value_us+move_value_them)-0.5) * 30.) as i32
 }
 
 //use piece values as first approximation to phase
