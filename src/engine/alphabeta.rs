@@ -549,9 +549,8 @@ fn search(thread: &mut ABSearchMainThread, depth: u8, mut alpha: ABResult, mut b
 // depth: the depth to search to
 // ply; the current depth
 // depth_reduction: how far to reduce the search depth
-// extension: how long to extend the search !! PROVIDED IN QUARTER PLYS !!
-//            a value of of 4,5,6,7 all mean search is extended by one ply
-// null_moves: how many null moves have been performed in the current search
+// extension: how many plys to extend the search due to only moves in the tree
+// // null_moves: how many null moves have been performed in the current search
 // alpha: the alpha value of the current ab search
 // beta: the beta of the current ab search
 // lm: the previous move. Needed since the last move needs to be restored
@@ -628,18 +627,18 @@ fn search_step(thread: &mut impl ABSearchThread, depth: u8, ply: u8, depth_reduc
     }
 
     //We extend the normal search if we are  in check, else go into quiescence
-    if ply >= depth - depth_reduction + extension/4 && !thread.pos_mut().in_check() {
+    if ply >= depth - depth_reduction + extension && !thread.pos_mut().in_check() {
         return quiesce(thread, alpha, beta, 200 - 20 * depth_reduction as i32, 0, lm);
     }
     //Futility pruning
-    else if depth > 3 && ply == depth - depth_reduction + extension/4 - 1 {
+    else if depth > 3 && ply == depth - depth_reduction + extension - 1 {
         let eval = thread.evaluate();//evaluate::evaluate(thread.pos_mut());
         if ABResult::exact_from_cents(eval + 300) < alpha {
             return quiesce(thread, alpha, beta, 100, 0, lm);
         }
     }
     //Extended futility pruning
-    else if depth > 3 && ply == depth - depth_reduction + extension/4 - 2 {
+    else if depth > 3 && ply == depth - depth_reduction + extension - 2 {
         let eval = thread.evaluate();//evaluate::evaluate(thread.pos_mut());
         if ABResult::exact_from_cents(eval + 500) < alpha {
             return quiesce(thread, alpha, beta, 100, 0, lm);
@@ -662,20 +661,14 @@ fn search_step(thread: &mut impl ABSearchThread, depth: u8, ply: u8, depth_reduc
     let mut zws = false;
 
     if moves.len() == 1 {
-        extension += 4;
+        extension += 1;
     }
 
     for i in 0..moves.len() {
-        //search deeper along the PV
-        let pv_extension = if ttmove.is_some() && ttmove.unwrap() == moves[i] {1} else {0};
 
         //calculate total possible extension
-        let mut move_extension = pv_extension + extension;
-        if move_extension/4 > depth/2 {
-            move_extension = 2*depth;
-        }
-        if move_extension/4 > u8::MAX - depth {
-            move_extension = (u8::MAX - depth)*4;
+        if extension > u8::MAX - depth {
+            extension = u8::MAX - depth;
         }
 
         //lmr reduction depth
@@ -712,7 +705,7 @@ fn search_step(thread: &mut impl ABSearchThread, depth: u8, ply: u8, depth_reduc
                                              depth,
                                              ply+1,
                                              0,
-                                             move_extension,
+                                             extension,
                                              null_moves,
                                              beta.neg_down(),
                                              alpha.neg_down(),
@@ -724,7 +717,7 @@ fn search_step(thread: &mut impl ABSearchThread, depth: u8, ply: u8, depth_reduc
                                      depth,
                                      ply+1,
                                      0,
-                                     move_extension,
+                                     extension,
                                      null_moves,
                                      beta.neg_down(),
                                      alpha.neg_down(),
@@ -758,12 +751,12 @@ fn search_step(thread: &mut impl ABSearchThread, depth: u8, ply: u8, depth_reduc
     let zh = thread.pos().zobrist_hash();
     if fail_low {
         if ply < depth {
-            thread.move_hash_mut().set(zh, ABResultHashEntry::new(score.to_upperbound(), depth.saturating_sub(ply), zh, bestmove.unwrap()));
+            thread.move_hash_mut().set(zh, ABResultHashEntry::new(score.to_upperbound(), (depth-depth_reduction).saturating_sub(ply+depth_reduction), zh, bestmove.unwrap()));
         }
         score.to_upperbound()
     } else {
         if ply < depth {
-            thread.move_hash_mut().set(zh, ABResultHashEntry::new(score.to_exact(), depth.saturating_sub(ply), zh, bestmove.unwrap()));
+            thread.move_hash_mut().set(zh, ABResultHashEntry::new(score.to_exact(), (depth-depth_reduction).saturating_sub(ply), zh, bestmove.unwrap()));
         }
         score.to_exact()
     }
