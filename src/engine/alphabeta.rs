@@ -686,8 +686,6 @@ fn search_step(thread: &mut impl ABSearchThread,
             lmr += std::cmp::max((depth + extension).saturating_sub(ply) / 4, 1);
         } else if i > 5 && zws {
             lmr += std::cmp::max((depth + extension).saturating_sub(ply)/ 3, i as u8/2);
-        } else if i > 5 {
-            lmr += std::cmp::max((depth + extension).saturating_sub(ply) / 6, i as u8/4);
         }
 
         thread.do_move(moves[i]);
