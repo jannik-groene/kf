@@ -708,15 +708,16 @@ fn quiesce(thread: &mut impl ABSearchThread, mut alpha: ABResult, beta: ABResult
     let static_eval_centis = thread.evaluate();//evaluate::evaluate(thread.pos_mut());
     let static_eval = ABResult::exact_from_cents(static_eval_centis);
 
-    //Adjust based on null-move hypothesis
-    if static_eval >= beta {
-        return static_eval.to_lowerbound();
-    } else if alpha < static_eval {
-        alpha = static_eval;
-    }
-
     //If we are not in check we filter for tactical moves.
     if !thread.pos_mut().in_check() {
+
+        //Adjust based on null-move hypothesis
+        if static_eval >= beta {
+            return static_eval.to_lowerbound();
+        } else if alpha < static_eval {
+            alpha = static_eval;
+        }
+
         cand_moves = cand_moves.iter().copied().filter(|m| match m.typ {
                                                         chess::MoveType::CAPTURE(_) => ABResult::exact_from_cents(static_eval_centis+thread.pos().see(*m)+delta) > alpha
                                                                                         && thread.pos().see(*m) > 0,
