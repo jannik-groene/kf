@@ -544,6 +544,17 @@ fn search(thread: &mut ABSearchMainThread, depth: u8, mut alpha: ABResult, mut b
     drop(thread.sender.send(EngineIO::SEARCHENDED(thread.search_info.id)));
 }
 
+//Parameters:
+// thread: The search thread head.
+// depth: the depth to search to
+// ply; the current depth
+// depth_reduction: how far to reduce the search depth
+// extension: how long to extend the search !! PROVIDED IN QUARTER PLYS !!
+//            a value of of 4,5,6,7 all mean search is extended by one ply
+// null_moves: how many null moves have been performed in the current search
+// alpha: the alpha value of the current ab search
+// beta: the beta of the current ab search
+// lm: the previous move. Needed since the last move needs to be restored
 fn search_step(thread: &mut impl ABSearchThread, depth: u8, ply: u8, depth_reduction: u8, mut extension: u8,
                null_moves: u8, mut alpha: ABResult, beta: ABResult, lm: Option<chess::Move>) -> ABResult {
 
@@ -608,18 +619,18 @@ fn search_step(thread: &mut impl ABSearchThread, depth: u8, ply: u8, depth_reduc
     }
 
     //We extend the normal search if we are  in check, else go into quiescence
-    if ply + depth_reduction >= depth + extension && !thread.pos_mut().in_check() {
+    if ply + depth_reduction >= depth + extension/4 && !thread.pos_mut().in_check() {
         return quiesce(thread, alpha, beta, 200 - 20 * depth_reduction as i32, 0, lm);
     }
     //Futility pruning
-    else if ply + depth_reduction == depth + extension - 1 && depth > 3 {
+    else if ply + depth_reduction == depth + extension/4 - 1 && depth > 3 {
         let eval = thread.evaluate();//evaluate::evaluate(thread.pos_mut());
         if ABResult::exact_from_cents(eval + 300) < alpha {
             return quiesce(thread, alpha, beta, 100, 0, lm);
         }
     }
     //Extended futility pruning
-    else if depth > 3 && ply + depth_reduction == depth + extension - 2 {
+    else if depth > 3 && ply + depth_reduction == depth + extension/4 - 2 {
         let eval = thread.evaluate();//evaluate::evaluate(thread.pos_mut());
         if ABResult::exact_from_cents(eval + 500) < alpha {
             return quiesce(thread, alpha, beta, 100, 0, lm);
@@ -642,11 +653,16 @@ fn search_step(thread: &mut impl ABSearchThread, depth: u8, ply: u8, depth_reduc
     let mut zws = false;
 
     if moves.len() == 1 {
-        extension += 1;
+        extension += 4;
     }
 
     for i in 0..moves.len() {
+        //search deeper along the PV
+        let pv_extension = if hash_entry.is_some()
+                                && hash_entry.unwrap().mov.decompress().unwrap() == moves[i] {1} else {0};
+
         thread.do_move(moves[i]);
+
         let mut movescore = if thread.pos().pos_in_history() {
                             //If we repeat twice, it's gonna happen thrice
                                 ABResult::DRAW
@@ -677,7 +693,7 @@ fn search_step(thread: &mut impl ABSearchThread, depth: u8, ply: u8, depth_reduc
                                              depth,
                                              ply+1,
                                              0,
-                                             extension,
+                                             extension + pv_extension,
                                              null_moves,
                                              beta.neg_down(),
                                              alpha.neg_down(),
@@ -689,7 +705,7 @@ fn search_step(thread: &mut impl ABSearchThread, depth: u8, ply: u8, depth_reduc
                                      depth,
                                      ply+1,
                                      0,
-                                     extension,
+                                     extension + pv_extension,
                                      null_moves,
                                      beta.neg_down(),
                                      alpha.neg_down(),
