@@ -600,7 +600,7 @@ fn search_step(thread: &mut impl ABSearchThread, depth: u8, ply: u8, depth_reduc
         }
     }
 
-    if ply + depth_reduction >= depth {
+    if ply + depth_reduction >= depth && !thread.pos_mut().in_check() {
         return quiesce(thread, alpha, beta, 200 - 20 * depth_reduction as i32, 0, lm);
     }
     //Futility pruning
