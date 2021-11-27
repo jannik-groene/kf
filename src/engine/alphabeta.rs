@@ -465,7 +465,7 @@ impl ABSearchThread for ABSearchHelperThread {
 
 impl ABSearchHelperThread {
     fn search(&mut self, depth: u8, alpha: ABResult, beta: ABResult, lm: Option<chess::Move>) -> u64 {
-        search_step(self, depth, 0, 0, 0, alpha, beta, lm);
+        search_step(self, depth, 0, 0, 0, 0, alpha, beta, lm);
         self.nodes
     }
 }
@@ -491,7 +491,7 @@ fn search(thread: &mut ABSearchMainThread, depth: u8, mut alpha: ABResult, mut b
                     helper_handles.push(std::thread::spawn(move || helper_thread.search(d + i as u8 / 2, alpha, beta, None)));
                 }
             }
-            let eval = search_step(thread, d, 0, 0, 0, alpha, beta, thread.pos().get_last_move());
+            let eval = search_step(thread, d, 0, 0, 0, 0, alpha, beta, thread.pos().get_last_move());
             if thread.stop_flag().read().unwrap().eq(&true) {
                 *helper_stop_flag.write().unwrap() = true;
                 drop(thread.sender.send(EngineIO::SEARCHENDED(thread.search_info.id)));
@@ -544,7 +544,7 @@ fn search(thread: &mut ABSearchMainThread, depth: u8, mut alpha: ABResult, mut b
     drop(thread.sender.send(EngineIO::SEARCHENDED(thread.search_info.id)));
 }
 
-fn search_step(thread: &mut impl ABSearchThread, depth: u8, ply: u8, depth_reduction: u8,
+fn search_step(thread: &mut impl ABSearchThread, depth: u8, ply: u8, depth_reduction: u8, mut extension: u8,
                null_moves: u8, mut alpha: ABResult, beta: ABResult, lm: Option<chess::Move>) -> ABResult {
 
     *thread.nodes_mut() += 1;
@@ -592,8 +592,15 @@ fn search_step(thread: &mut impl ABSearchThread, depth: u8, ply: u8, depth_reduc
                       && !matches!(alpha.value, ABResultValueType::MATE(_))
                       && !matches!(beta.value, ABResultValueType::MATE(_)) {
         thread.pos_mut().do_null_move();
-        let null_score = -search_step(thread, depth, ply+1, depth_reduction, null_moves + 1,
-                                      beta.neg_down(), alpha.neg_down(), None);
+        let null_score = -search_step(thread,
+                                      depth,
+                                      ply+1,
+                                      depth_reduction,
+                                      0,
+                                      null_moves + 1,
+                                      beta.neg_down(),
+                                      alpha.neg_down(),
+                                      None);
         thread.pos_mut().undo_null_move(lm);
         if null_score >= beta {
             return null_score.to_lowerbound();
@@ -601,18 +608,18 @@ fn search_step(thread: &mut impl ABSearchThread, depth: u8, ply: u8, depth_reduc
     }
 
     //We extend the normal search if we are  in check, else go into quiescence
-    if ply + depth_reduction >= depth && !thread.pos_mut().in_check() {
+    if ply + depth_reduction >= depth + extension && !thread.pos_mut().in_check() {
         return quiesce(thread, alpha, beta, 200 - 20 * depth_reduction as i32, 0, lm);
     }
     //Futility pruning
-    else if ply + depth_reduction == depth - 1 && depth > 3 {
+    else if ply + depth_reduction == depth + extension - 1 && depth > 3 {
         let eval = thread.evaluate();//evaluate::evaluate(thread.pos_mut());
         if ABResult::exact_from_cents(eval + 300) < alpha {
             return quiesce(thread, alpha, beta, 100, 0, lm);
         }
     }
     //Extended futility pruning
-    else if depth > 3 && ply + depth_reduction == depth - 2 {
+    else if depth > 3 && ply + depth_reduction == depth + extension - 2 {
         let eval = thread.evaluate();//evaluate::evaluate(thread.pos_mut());
         if ABResult::exact_from_cents(eval + 500) < alpha {
             return quiesce(thread, alpha, beta, 100, 0, lm);
@@ -634,6 +641,10 @@ fn search_step(thread: &mut impl ABSearchThread, depth: u8, ply: u8, depth_reduc
     let mut bestmove = None;
     let mut zws = false;
 
+    if moves.len() == 1 {
+        extension += 1;
+    }
+
     for i in 0..moves.len() {
         thread.do_move(moves[i]);
         let mut movescore = if thread.pos().pos_in_history() {
@@ -642,25 +653,47 @@ fn search_step(thread: &mut impl ABSearchThread, depth: u8, ply: u8, depth_reduc
                             //Apply LMR to zws searches of late moves
                             } else if ply > 3 && !thread.pos_mut().in_check() && zws {
                                 -search_step(thread,
-                                             depth, ply+1,
+                                             depth,
+                                             ply+1,
                                              std::cmp::min(((i as u8)/4)*2 + depth_reduction,
                                                             depth / 4),
                                              null_moves,
+                                             0,
                                              alpha.zero_window().neg_down(),
                                              alpha.neg_down(),
                                              Some(moves[i]))
                             } else if zws {
-                                -search_step(thread, depth, ply+1, 0,
-                                             null_moves, alpha.zero_window().neg_down(),
-                                             alpha.neg_down(), Some(moves[i]))
+                                -search_step(thread,
+                                             depth,
+                                             ply+1,
+                                             0,
+                                             0,
+                                             null_moves,
+                                             alpha.zero_window().neg_down(),
+                                             alpha.neg_down(),
+                                             Some(moves[i]))
                             } else {
-                                -search_step(thread, depth, ply+1, 0, null_moves,
-                                             beta.neg_down(), alpha.neg_down(), Some(moves[i]))
+                                -search_step(thread,
+                                             depth,
+                                             ply+1,
+                                             0,
+                                             extension,
+                                             null_moves,
+                                             beta.neg_down(),
+                                             alpha.neg_down(),
+                                             Some(moves[i]))
                             };
         if zws && movescore > alpha && movescore < beta {
             //We apply no LMR if we search for a PV
-            movescore = -search_step(thread, depth, ply+1, 0, null_moves,
-                                     beta.neg_down(), alpha.neg_down(), Some(moves[i]));
+            movescore = -search_step(thread,
+                                     depth,
+                                     ply+1,
+                                     0,
+                                     extension,
+                                     null_moves,
+                                     beta.neg_down(),
+                                     alpha.neg_down(),
+                                     Some(moves[i]));
         }
         thread.undo_move(moves[i], castling, lm);
         //Abort search if the helper gets a stop signal
