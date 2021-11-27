@@ -563,11 +563,16 @@ fn search_step(thread: &mut impl ABSearchThread, depth: u8, ply: u8, depth_reduc
     //Check if the move is already hashed
     let hash_entry = thread.move_hash().get(thread.pos().zobrist_hash());
 
+    let mut ttmove = None;
+
     if hash_entry.is_some() && hash_entry.unwrap().mov().is_some() {
+        //see if we have a TT-hit
         if hash_entry.unwrap().depth >= depth-ply {
             match hash_entry.unwrap().res.typ {
                 ABResultType::EXACT => {
-                    thread.set_bestmove(hash_entry.unwrap().mov());
+                    if ply == 0 {
+                        thread.set_bestmove(hash_entry.unwrap().mov());
+                    }
                     return hash_entry.unwrap().res;
                 },
                 ABResultType::LOWERBOUND => {
@@ -582,7 +587,11 @@ fn search_step(thread: &mut impl ABSearchThread, depth: u8, ply: u8, depth_reduc
                 }
             }
         }
+
+        ttmove = hash_entry.unwrap().mov();
+
     }
+
 
     //Check if this is a terminal position
     let mut moves = thread.pos_mut().get_moves();
@@ -641,7 +650,7 @@ fn search_step(thread: &mut impl ABSearchThread, depth: u8, ply: u8, depth_reduc
     let castling = thread.pos().get_castling_rights();
 
     //if !thread.is_helper() {
-    evaluate::order_moves(&mut moves, thread.pos(), thread.move_hash().get(thread.pos().zobrist_hash()).map(|h| h.mov()).flatten());
+    evaluate::order_moves(&mut moves, thread.pos(), ttmove);
     //} else {
     //    evaluate::order_moves_with_random_bias(&mut moves, thread.pos(), thread.move_hash().get(thread.pos().zobrist_hash()).mov());
     //}
@@ -658,8 +667,7 @@ fn search_step(thread: &mut impl ABSearchThread, depth: u8, ply: u8, depth_reduc
 
     for i in 0..moves.len() {
         //search deeper along the PV
-        let pv_extension = if hash_entry.is_some()
-                                && hash_entry.unwrap().mov.decompress().unwrap() == moves[i] {1} else {0};
+        let pv_extension = if ttmove.is_some() && ttmove.unwrap() == moves[i] {1} else {0};
 
         thread.do_move(moves[i]);
 
@@ -693,7 +701,7 @@ fn search_step(thread: &mut impl ABSearchThread, depth: u8, ply: u8, depth_reduc
                                              depth,
                                              ply+1,
                                              0,
-                                             extension + pv_extension,
+                                             std::cmp::min(depth/2,extension + pv_extension),
                                              null_moves,
                                              beta.neg_down(),
                                              alpha.neg_down(),
@@ -705,7 +713,7 @@ fn search_step(thread: &mut impl ABSearchThread, depth: u8, ply: u8, depth_reduc
                                      depth,
                                      ply+1,
                                      0,
-                                     extension + pv_extension,
+                                     std::cmp::min(depth/2,extension + pv_extension),
                                      null_moves,
                                      beta.neg_down(),
                                      alpha.neg_down(),
