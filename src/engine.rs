@@ -155,7 +155,6 @@ impl Engine {
         self.search.search(self.channel.0.clone(),depth, self.search_id);
     }
     pub fn stop_search(&mut self) {
-        self.search_id += 1;
         self.search.stop();
     }
     pub fn increase_search_id(&mut self) {

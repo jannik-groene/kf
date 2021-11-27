@@ -91,6 +91,7 @@ impl UCIHandler for engine::Engine {
                                     None => println!("bestmove 0000"),
                                 }
                             }
+                            self.increase_search_id();
                             self.stop_search();
                             waiting_for_search_end = true;
                         }
