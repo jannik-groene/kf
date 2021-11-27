@@ -671,12 +671,15 @@ fn search_step(thread: &mut impl ABSearchThread, depth: u8, ply: u8, depth_reduc
 
         //calculate total possible extension
         let mut move_extension = pv_extension + extension;
-        if move_extension/4 > u8::MAX - depth {
-            move_extension = u8::MAX - depth;
+        if move_extension/4 > u8::MAX - depth - 1 {
+            move_extension = (u8::MAX - depth - 1)*4;
         }
-        if move_extension / 4 > depth/2 {
-            move_extension = depth/2;
+        if move_extension/4 > depth/2 {
+            move_extension = 2*depth;
         }
+
+        //lmr reduction depth
+        let lmr = std::cmp::min(((i as u8)/4)*2 + depth_reduction, depth / 4);
 
         thread.do_move(moves[i]);
 
@@ -688,9 +691,8 @@ fn search_step(thread: &mut impl ABSearchThread, depth: u8, ply: u8, depth_reduc
                                 -search_step(thread,
                                              depth,
                                              ply+1,
-                                             std::cmp::min(((i as u8)/4)*2 + depth_reduction,
-                                                            depth / 4),
                                              null_moves,
+                                             lmr,
                                              0,
                                              alpha.zero_window().neg_down(),
                                              alpha.neg_down(),
@@ -753,10 +755,10 @@ fn search_step(thread: &mut impl ABSearchThread, depth: u8, ply: u8, depth_reduc
 
     let zh = thread.pos().zobrist_hash();
     if fail_low {
-        thread.move_hash_mut().set(zh, ABResultHashEntry::new(score.to_upperbound(), depth-ply, zh, bestmove.unwrap()));
+        thread.move_hash_mut().set(zh, ABResultHashEntry::new(score.to_upperbound(), depth.saturating_sub(ply), zh, bestmove.unwrap()));
         score.to_upperbound()
     } else {
-        thread.move_hash_mut().set(zh, ABResultHashEntry::new(score.to_exact(), depth-ply, zh, bestmove.unwrap()));
+        thread.move_hash_mut().set(zh, ABResultHashEntry::new(score.to_exact(), depth.saturating_sub(ply), zh, bestmove.unwrap()));
         score.to_exact()
     }
 }
