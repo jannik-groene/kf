@@ -669,6 +669,15 @@ fn search_step(thread: &mut impl ABSearchThread, depth: u8, ply: u8, depth_reduc
         //search deeper along the PV
         let pv_extension = if ttmove.is_some() && ttmove.unwrap() == moves[i] {1} else {0};
 
+        //calculate total possible extension
+        let mut move_extension = pv_extension + extension;
+        if move_extension/4 > u8::MAX - depth {
+            move_extension = u8::MAX - depth;
+        }
+        if move_extension / 4 > depth/2 {
+            move_extension = depth/2;
+        }
+
         thread.do_move(moves[i]);
 
         let mut movescore = if thread.pos().pos_in_history() {
@@ -701,7 +710,7 @@ fn search_step(thread: &mut impl ABSearchThread, depth: u8, ply: u8, depth_reduc
                                              depth,
                                              ply+1,
                                              0,
-                                             std::cmp::min(depth/2,extension + pv_extension),
+                                             move_extension,
                                              null_moves,
                                              beta.neg_down(),
                                              alpha.neg_down(),
@@ -713,7 +722,7 @@ fn search_step(thread: &mut impl ABSearchThread, depth: u8, ply: u8, depth_reduc
                                      depth,
                                      ply+1,
                                      0,
-                                     std::cmp::min(depth/2,extension + pv_extension),
+                                     move_extension,
                                      null_moves,
                                      beta.neg_down(),
                                      alpha.neg_down(),
