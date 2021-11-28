@@ -286,8 +286,7 @@ pub fn evaluate(pos: &mut chess::Position) -> i32 {
 
 pub fn order_moves(movs: &mut Vec<chess::Move>, pos: &chess::Position,
                    hash_move: Option<chess::Move>, killers: &[Option<chess::Move>; 2]) {
-    movs.sort_unstable_by_key(|m| match m.typ { chess::MoveType::CAPTURE(_) => -pos.see(*m), _ => 200 });
-    movs.sort_by_key(|m| if killers[0].map_or(false, |k| k == *m) || killers[1].map_or(false, |k| k == *m) {0} else {1});
+    movs.sort_unstable_by_key(|m| match m.typ { chess::MoveType::CAPTURE(_) => -pos.see(*m), _ => 200 } - if killers[0].map_or(false, |k| k == *m) || killers[1].map_or(false, |k| k == *m) {0} else {1});
     if hash_move.is_some() {
         movs.sort_by_key(|m| if *m == hash_move.unwrap() {0} else {1});
     }
