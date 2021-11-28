@@ -257,7 +257,7 @@ fn evaluate_king_safety(pos: &chess::Position, moves_them: &Vec<chess::Move>, ph
 pub fn evaluate(pos: &mut chess::Position) -> i32 {
     let phase = phase_factor(pos);
     let moves_us = pos.get_moves();
-    let mut res = pos.material_balance()*100;
+    let mut res = pos.material_balance()*100 + 20;
     pos.switch_color();
     let moves_them = pos.get_moves();
     res += evaluate_mobility(&moves_us, &moves_them, phase);
