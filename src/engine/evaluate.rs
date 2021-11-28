@@ -152,7 +152,7 @@ fn evaluate_knights(pos: &mut chess::Position, phase: i32) -> i32 {
 }
 fn evaluate_mobility(moves_us: &Vec<chess::Move>, moves_them: &Vec<chess::Move>, phase: i32) -> i32 {
     let phase_factor = phase as f32 / OPENING_PHASE as f32;
-    const KNIGHT_MOVE_VALUES: [f32;2] = [3.,0.8];
+    const KNIGHT_MOVE_VALUES: [f32;2] = [2.,0.8];
     const BISHOP_MOVE_VALUES: [f32;2] = [2.,0.8];
     const QUEEN_MOVE_VALUES: [f32;2] = [1.,1.];
     //Early our King will probably want to stay put
