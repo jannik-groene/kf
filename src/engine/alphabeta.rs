@@ -111,7 +111,16 @@ impl ABResult {
             ABResultValueType::CENTIS(c) => ABResult { typ: self.typ, value: ABResultValueType::CENTIS(c-ABResult::ASPIRATION_ADJUSTMENTS[count]) },
             //In case of mate take the next worse mate score, e.g. mate in 2 if we are being mated
             //in 3 or mate in 5 if we will mate in 3
-            ABResultValueType::MATE(m) => ABResult{ typ: self.typ, value: ABResultValueType::MATE(m+2*(2*(m%2)-1)) },
+            ABResultValueType::MATE(m) => {
+                let mut val = ABResultValueType::NEGINFTY;
+                //We are mating, so the next worse thing is mating slower
+                if m % 2 == 1 {
+                    val = ABResultValueType::MATE(m+2);
+                } else if m > 1 { //We are getting mated so we aspire to do so faster, if at all possible
+                    val = ABResultValueType::MATE(m-2);
+                }
+                ABResult{ typ: self.typ, value: val }
+            },
             _ => ABResult{typ: ABResultType::EXACT, value: self.value}
         }
     }
@@ -123,7 +132,16 @@ impl ABResult {
             ABResultValueType::CENTIS(c) => ABResult { typ: self.typ, value: ABResultValueType::CENTIS(c+ABResult::ASPIRATION_ADJUSTMENTS[count]) },
             //In case of mate take the next best mate score, e.g. mate in 4 if we are being mated
             //in 2 or mate in 3 if we will mate in 5
-            ABResultValueType::MATE(m) => ABResult{ typ: self.typ, value: ABResultValueType::MATE(m-2*(2*(m%2)-1)) },
+            ABResultValueType::MATE(m) => {
+                let mut val = ABResultValueType::INFTY;
+                //We are getting mated, so the next best thing is getting mated slower
+                if m % 2 == 0 {
+                    val = ABResultValueType::MATE(m+2);
+                } else if m > 1 { //We are mating so we aspire to do so faster, if at all possible
+                    val = ABResultValueType::MATE(m-2);
+                }
+                ABResult{ typ: self.typ, value: val }
+            },
             _ => ABResult{typ: ABResultType::EXACT, value: ABResultValueType::INFTY}
         }
 
@@ -131,7 +149,9 @@ impl ABResult {
     fn zero_window(&self) -> ABResult {
         match self.value {
             ABResultValueType::CENTIS(c) => ABResult { value: ABResultValueType::CENTIS(c+1), typ: self.typ },
-            ABResultValueType::MATE(n) => ABResult { value: ABResultValueType::MATE(n-2*(2*(n%2)-1)), typ: self.typ },
+            ABResultValueType::MATE(_) => {
+                self.aspiration_lower(0)
+            },
             ABResultValueType::INFTY => *self,
             ABResultValueType::NEGINFTY => *self,
         }
@@ -139,7 +159,7 @@ impl ABResult {
     //Use to pass ab-bounds down the tree
     fn neg_down(&self) -> ABResult {
         let val = match self.value {
-            ABResultValueType::MATE(m) => ABResultValueType::MATE(m-1),
+            ABResultValueType::MATE(m) => if m == 0 {ABResultValueType::INFTY} else {ABResultValueType::MATE(m-1)},
             ABResultValueType::CENTIS(c) => ABResultValueType::CENTIS(-c),
             ABResultValueType::NEGINFTY => ABResultValueType::INFTY,
             ABResultValueType::INFTY => ABResultValueType::NEGINFTY,
@@ -615,14 +635,15 @@ fn search_step(thread: &mut impl ABSearchThread,
     }
 
     //Try a null move to find a beta cutoff; search the first three plys fully.
-    if null_moves < 2 && !thread.pos_mut().in_check() && moves.len() > 0 && ply > 3 && ply < depth
+    //Should maybe avoid in late game?
+    if null_moves < 3 && !thread.pos_mut().in_check() && moves.len() > 0 && ply > 2 && ply < depth
                       && !matches!(alpha.value, ABResultValueType::MATE(_))
                       && !matches!(beta.value, ABResultValueType::MATE(_)) {
         thread.pos_mut().do_null_move();
         let null_score = -search_step(thread,
                                       depth,
                                       ply+1,
-                                      depth_reduction,
+                                      depth_reduction + 3,
                                       0,
                                       null_moves + 1,
                                       zw,
@@ -667,7 +688,6 @@ fn search_step(thread: &mut impl ABSearchThread,
     let mut score = ABResult::MIN;
     let mut fail_low = true;
     let mut bestmove = None;
-    let mut zws = zw;
 
     if moves.len() == 1 {
         extension += 1;
@@ -682,10 +702,16 @@ fn search_step(thread: &mut impl ABSearchThread,
 
         //lmr reduction depth
         let mut lmr = depth_reduction;
-        if i > 2 && zws {
+        if i > 2 {
             lmr += std::cmp::max((depth + extension).saturating_sub(ply) / 4, 1);
-        } else if i > 5 && zws {
-            lmr += std::cmp::max((depth + extension).saturating_sub(ply)/ 3, i as u8/2);
+            if !matches!(moves[i].typ, chess::MoveType::CAPTURE(_)) {
+                lmr += 1;
+            }
+        } else if i > 6 {
+            lmr += std::cmp::max((depth + extension).saturating_sub(ply) / 3, 2);
+            if !matches!(moves[i].typ, chess::MoveType::CAPTURE(_)) {
+                lmr += 2;
+            }
         }
 
         thread.do_move(moves[i]);
@@ -694,22 +720,22 @@ fn search_step(thread: &mut impl ABSearchThread,
                             //If we repeat twice, it's gonna happen thrice
                                 ABResult::DRAW
                             //Apply LMR to zws searches of late moves
-                            } else if ply > 3 && !thread.pos_mut().in_check() && zws {
+                            } else if i == 0 || !zw {
+                                -search_step(thread,
+                                             depth,
+                                             ply+1,
+                                             0,
+                                             extension,
+                                             null_moves,
+                                             false,
+                                             beta.neg_down(),
+                                             alpha.neg_down(),
+                                             Some(moves[i]))
+                            } else if ply > 2 && !thread.pos_mut().in_check() {
                                 -search_step(thread,
                                              depth,
                                              ply+1,
                                              lmr,
-                                             0,
-                                             null_moves,
-                                             true,
-                                             alpha.zero_window().neg_down(),
-                                             alpha.neg_down(),
-                                             Some(moves[i]))
-                            } else if zws {
-                                -search_step(thread,
-                                             depth,
-                                             ply+1,
-                                             depth_reduction,
                                              0,
                                              null_moves,
                                              true,
@@ -721,16 +747,16 @@ fn search_step(thread: &mut impl ABSearchThread,
                                              depth,
                                              ply+1,
                                              0,
-                                             extension,
+                                             0,
                                              null_moves,
-                                             false,
-                                             beta.neg_down(),
+                                             true,
+                                             alpha.zero_window().neg_down(),
                                              alpha.neg_down(),
                                              Some(moves[i]))
                             };
 
         //Research if we failed high in a PV node
-        if !zw && zws && movescore > alpha && movescore < beta {
+        if i != 0 && movescore > alpha && movescore < beta {
             movescore = -search_step(thread,
                                      depth,
                                      ply+1,
@@ -739,7 +765,7 @@ fn search_step(thread: &mut impl ABSearchThread,
                                      null_moves,
                                      false,
                                      beta.neg_down(),
-                                     alpha.neg_down(),
+                                     movescore.neg_down(),
                                      Some(moves[i]));
         }
 
@@ -761,7 +787,6 @@ fn search_step(thread: &mut impl ABSearchThread,
             bestmove = Some(moves[i]);
             score = movescore;
             if score > alpha {
-                zws = true;
                 fail_low = false;
                 alpha = score;
             }
@@ -788,7 +813,6 @@ fn search_step(thread: &mut impl ABSearchThread,
 
 fn quiesce(thread: &mut impl ABSearchThread, mut alpha: ABResult, beta: ABResult, delta: i32, qply: u8, lm: Option<chess::Move>) -> ABResult {
 
-    *thread.nodes_mut() += 1;
 
     let mut cand_moves = thread.pos_mut().get_moves();
 
@@ -827,6 +851,9 @@ fn quiesce(thread: &mut impl ABSearchThread, mut alpha: ABResult, beta: ABResult
                                     _ => 0,
                                 });
     }
+
+    *thread.nodes_mut() += 1;
+
     let castling = thread.pos().get_castling_rights();
     for m in cand_moves {
         //stop if we receive the flag is set;
