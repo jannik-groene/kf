@@ -348,6 +348,7 @@ impl ABSearchManager {
             search_info: self.search_info.clone(),
             sender: out_channel,
             bestmove: None,
+            killers: Vec::new(),
             //nnue: self.nnue.clone(),
         };
         std::thread::spawn(move || search(&mut root_search_info, depth, ABResult::MIN, ABResult::MAX))
@@ -371,19 +372,31 @@ impl ABSearchManager {
 trait ABSearchThread {
     fn pos(&self) -> &chess::Position;
     fn pos_mut(&mut self) -> &mut chess::Position;
+
     fn nodes(&self) -> &u64;
     fn nodes_mut(&mut self) -> &mut u64;
+
     fn move_hash_mut(&mut self) -> &mut ABResultHash;
     fn move_hash(&self) -> &ABResultHash;
+
     fn is_helper(&self) -> bool;
+
     fn stop_flag(&self) -> &Arc<RwLock<bool>>;
+
     //These are optional and not used for helper threads
     fn threads(&self) -> usize {1}
     fn set_bestmove(&mut self, _m: Option<chess::Move>) {}
+
     //fn nnue(&mut self) -> &mut evaluate::nnue::NNUEState;
     fn do_move(&mut self, m: chess::Move);
     fn undo_move(&mut self, m: chess::Move, castling: [[bool; 2]; 2], lm: Option<chess::Move>);
+
     fn evaluate(&mut self) -> i32;
+
+    //save and retrieve killer moves
+    fn register_killer(&mut self, ply: u8, m: chess::Move);
+    fn get_killers(&self, ply: u8) -> &[Option<chess::Move>; 2];
+    fn invalidate_killers(&mut self, ply: u8);
 }
 
 struct ABSearchMainThread {
@@ -395,6 +408,7 @@ struct ABSearchMainThread {
     search_info: SearchInfo,
     sender: Sender<EngineIO>,
     bestmove: Option<chess::Move>,
+    killers: Vec<([Option<chess::Move>; 2], [u8; 2])>,
     //nnue: evaluate::nnue::NNUEState,
 }
 
@@ -423,6 +437,35 @@ impl ABSearchThread for ABSearchMainThread {
     fn evaluate(&mut self) -> i32 {
         //self.nnue.evaluate_position(&self.pos) / 10
         evaluate::evaluate(self.pos_mut())
+    }
+
+    fn register_killer(&mut self, ply: u8, m: chess::Move) {
+        if self.killers.len() <= ply as usize {
+            self.killers.resize(ply as usize+1, ([None,None],[0,0]));
+        }
+        if self.killers[ply as usize].0[0] == Some(m) {
+            self.killers[ply as usize].1[0] += 1;
+        } else if self.killers[ply as usize].0[1] == Some(m) {
+            self.killers[ply as usize].1[1] += 1;
+        } else if self.killers[ply as usize].1[0] > self.killers[ply as usize].1[1] {
+            self.killers[ply as usize].0[1] = Some(m);
+            self.killers[ply as usize].1[1] = 1;
+        } else {
+            self.killers[ply as usize].0[1] = Some(m);
+            self.killers[ply as usize].1[1] = 1;
+        }
+    }
+    fn get_killers(&self, ply: u8) -> &[Option<chess::Move>; 2] {
+        if self.killers.len() <= ply as usize {
+            &[None, None]
+        } else {
+            &self.killers[ply as usize].0
+        }
+    }
+    fn invalidate_killers(&mut self, ply: u8) {
+        if self.killers.len() > ply as usize + 1 {
+            self.killers[ply as usize + 1].1 = [0,0];
+        }
     }
 }
 
@@ -456,6 +499,7 @@ struct ABSearchHelperThread {
     nodes: u64,
     move_hash: ABResultHash,
     stop_flag: Arc<RwLock<bool>>,
+    killers: Vec<([Option<chess::Move>; 2], [u8; 2])>,
     //nnue: evaluate::nnue::NNUEState,
 }
 
@@ -480,6 +524,34 @@ impl ABSearchThread for ABSearchHelperThread {
     fn evaluate(&mut self) -> i32 {
         //self.nnue.evaluate_position(&self.pos) / 10
         evaluate::evaluate(self.pos_mut())
+    }
+    fn register_killer(&mut self, ply: u8, m: chess::Move) {
+        if self.killers.len() <= ply as usize {
+            self.killers.resize(ply as usize+1, ([None,None],[0,0]));
+        }
+        if self.killers[ply as usize].0[0] == Some(m) {
+            self.killers[ply as usize].1[0] += 1;
+        } else if self.killers[ply as usize].0[1] == Some(m) {
+            self.killers[ply as usize].1[1] += 1;
+        } else if self.killers[ply as usize].1[0] > self.killers[ply as usize].1[1] {
+            self.killers[ply as usize].0[1] = Some(m);
+            self.killers[ply as usize].1[1] = 1;
+        } else {
+            self.killers[ply as usize].0[1] = Some(m);
+            self.killers[ply as usize].1[1] = 1;
+        }
+    }
+    fn get_killers(&self, ply: u8) -> &[Option<chess::Move>; 2] {
+        if self.killers.len() <= ply as usize {
+            &[None, None]
+        } else {
+            &self.killers[ply as usize].0
+        }
+    }
+    fn invalidate_killers(&mut self, ply: u8) {
+        if self.killers.len() > ply as usize + 1 {
+            self.killers[ply as usize + 1].1 = [0,0];
+        }
     }
 }
 
@@ -506,6 +578,7 @@ fn search(thread: &mut ABSearchMainThread, depth: u8, mut alpha: ABResult, mut b
                         nodes: 0,
                         move_hash: thread.move_hash().clone(),
                         stop_flag: helper_stop_flag.clone(),
+                        killers: Vec::new(),
                         //nnue: thread.nnue().clone(),
                     };
                     helper_handles.push(std::thread::spawn(move || helper_thread.search(d.saturating_add(i as u8 / 2), alpha, beta, None)));
@@ -679,7 +752,7 @@ fn search_step(thread: &mut impl ABSearchThread,
     let castling = thread.pos().get_castling_rights();
 
     //if !thread.is_helper() {
-    evaluate::order_moves(&mut moves, thread.pos(), ttmove);
+    evaluate::order_moves(&mut moves, thread.pos(), ttmove, thread.get_killers(ply));
     //} else {
     //    evaluate::order_moves_with_random_bias(&mut moves, thread.pos(), thread.move_hash().get(thread.pos().zobrist_hash()).mov());
     //}
@@ -780,6 +853,8 @@ fn search_step(thread: &mut impl ABSearchThread,
             if ply < depth {
                 thread.move_hash_mut().set(zh, ABResultHashEntry::new(movescore.to_lowerbound(), depth-ply, zh, moves[i]));
             }
+            thread.register_killer(ply, moves[i]);
+            thread.invalidate_killers(ply);
             return movescore.to_lowerbound();
         }
 
@@ -796,6 +871,9 @@ fn search_step(thread: &mut impl ABSearchThread,
     if ply == 0 {
         thread.set_bestmove(bestmove);
     }
+
+    //reset the killer move counts for ply+1
+    thread.invalidate_killers(ply);
 
     let zh = thread.pos().zobrist_hash();
     if fail_low {
