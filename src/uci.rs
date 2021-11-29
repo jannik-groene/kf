@@ -1,6 +1,8 @@
 use super::engine;
 use std::sync::mpsc::Sender;
 
+const VERSION_STRING: &str = "kf-0.0.6-1";
+
 fn read_input(ch: Sender<engine::EngineIO>) {
     let sin = std::io::stdin();
     loop {
@@ -132,7 +134,7 @@ impl UCIHandler for engine::Engine {
         }
     }
     fn handle_uci(&self) {
-        println!("id name kf-0.0.6-dev");
+        println!("id name {}", VERSION_STRING);
         println!("id author Jannik Gröne");
         self.print_config();
         println!("uciok");
