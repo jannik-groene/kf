@@ -709,9 +709,10 @@ fn search_step(thread: &mut impl ABSearchThread,
 
     //Try a null move to find a beta cutoff; search the first three plys fully.
     //Should maybe avoid in late game?
-    if null_moves < 3 && !thread.pos_mut().in_check() && moves.len() > 0 && ply > 2 && ply < depth
-                      && !matches!(alpha.value, ABResultValueType::MATE(_))
-                      && !matches!(beta.value, ABResultValueType::MATE(_)) {
+    if null_moves < std::cmp::max(depth / 3 + 1, 3)
+            && !thread.pos_mut().in_check() && moves.len() > 0 && ply > 2 && ply < depth
+            && !matches!(alpha.value, ABResultValueType::MATE(_))
+            && !matches!(beta.value, ABResultValueType::MATE(_)) {
         thread.pos_mut().do_null_move();
         let null_score = -search_step(thread,
                                       depth,
