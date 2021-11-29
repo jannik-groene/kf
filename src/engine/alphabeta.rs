@@ -776,14 +776,16 @@ fn search_step(thread: &mut impl ABSearchThread,
         //lmr reduction depth
         let mut lmr = depth_reduction;
         if i > 2 {
-            lmr += i as u8/3;
-        } else if i > 5 {
-            lmr += std::cmp::min((depth + extension).saturating_sub(ply) / 3, i as u8/2);
+            lmr += std::cmp::max((depth + extension).saturating_sub(ply) / 4, 1);
             if !matches!(moves[i].typ, chess::MoveType::CAPTURE(_)) {
                 lmr += 1;
             }
+        } else if i > 6 {
+            lmr += std::cmp::max((depth + extension).saturating_sub(ply) / 3, 2);
+            if !matches!(moves[i].typ, chess::MoveType::CAPTURE(_)) {
+                lmr += 2;
+            }
         }
-        lmr = std::cmp::min(depth/3, lmr);
 
         thread.do_move(moves[i]);
 
@@ -791,7 +793,7 @@ fn search_step(thread: &mut impl ABSearchThread,
                             //If we repeat twice, it's gonna happen thrice
                                 ABResult::DRAW
                             //Apply LMR to zws searches of late moves
-                            } else if i == 0 {
+                            } else if !zw && (i == 0 || depth < 5) {
                                 -search_step(thread,
                                              depth,
                                              ply+1,
@@ -802,12 +804,12 @@ fn search_step(thread: &mut impl ABSearchThread,
                                              beta.neg_down(),
                                              alpha.neg_down(),
                                              Some(moves[i]))
-                            } else if ply > 4 && !thread.pos_mut().in_check() {
+                            } else if ply > 2 && !thread.pos_mut().in_check() {
                                 -search_step(thread,
                                              depth,
                                              ply+1,
                                              lmr,
-                                             extension,
+                                             0,
                                              null_moves,
                                              true,
                                              alpha.zero_window().neg_down(),
@@ -818,7 +820,7 @@ fn search_step(thread: &mut impl ABSearchThread,
                                              depth,
                                              ply+1,
                                              depth_reduction,
-                                             extension,
+                                             0,
                                              null_moves,
                                              true,
                                              alpha.zero_window().neg_down(),
