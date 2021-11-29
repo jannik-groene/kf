@@ -793,7 +793,7 @@ fn search_step(thread: &mut impl ABSearchThread,
                             //If we repeat twice, it's gonna happen thrice
                                 ABResult::DRAW
                             //Apply LMR to zws searches of late moves
-                            } else if !zw && (i == 0 || depth < 5) {
+                            } else if i == 0 || !zw {
                                 -search_step(thread,
                                              depth,
                                              ply+1,
@@ -819,7 +819,7 @@ fn search_step(thread: &mut impl ABSearchThread,
                                 -search_step(thread,
                                              depth,
                                              ply+1,
-                                             depth_reduction,
+                                             0,
                                              0,
                                              null_moves,
                                              true,
