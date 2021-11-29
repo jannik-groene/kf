@@ -1,7 +1,7 @@
 use super::engine;
 use std::sync::mpsc::Sender;
 
-const VERSION_STRING: &str = "kf-0.0.6-1";
+const VERSION_STRING: &str = "kf-0.0.6-dev";
 
 fn read_input(ch: Sender<engine::EngineIO>) {
     let sin = std::io::stdin();
