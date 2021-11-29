@@ -1,4 +1,5 @@
 pub mod nnue;
+mod piecetables;
 use super::chess;
 use super::chess::{SquareMethods, SquareIndexMethods};
 use rand::{Rng, thread_rng};
@@ -10,11 +11,27 @@ enum GameState {
     LATE,
 }
 
+fn piece_table_value(p: chess::Piece, c: chess::Color, s: impl SquareMethods, phase: i32) -> i32 {
+    let index = match c {
+        chess::Color::WHITE => s.index(),
+        chess::Color::BLACK => s.index() ^ 56,
+    };
+    match p {
+        chess::Piece::PAWN => piecetables::PAWN_VALUES[index],
+        chess::Piece::KNIGHT => piecetables::KNIGHT_VALUES[index],
+        chess::Piece::BISHOP => piecetables::BISHOP_VALUES[index],
+        chess::Piece::ROOK => piecetables::ROOK_VALUES[index],
+        chess::Piece::QUEEN => piecetables::QUEEN_VALUES[index],
+        chess::Piece::KING => (piecetables::KING_EARLY_VALUES[index] * phase + piecetables::KING_LATE_VALUES[index] * (OPENING_PHASE-phase)) / OPENING_PHASE,
+        _ => 0
+    }
+}
+
 fn evaluate_pawns(pos: &mut chess::Position, phase: i32) -> i32 {
         let mut tot = 0.;
         let phase_factor = (OPENING_PHASE-phase) as f64 / OPENING_PHASE as f64;
         for pawn in pos.board[(pos.color(), chess::Piece::PAWN)].iter() {
-            let mut value = 1.;
+            let mut value = 1. + piece_table_value(chess::Piece::PAWN, pos.color(), pawn, phase) as f64 / 100.;
             //Evaluate passers as more as valuable
             let file = chess::Board::get_file(pawn);
             if chess::Board::file(file) & pos.board[(pos.color().other(), chess::Piece::PAWN)] == 0 {
@@ -26,17 +43,6 @@ fn evaluate_pawns(pos: &mut chess::Position, phase: i32) -> i32 {
                     chess::Board::file(file) & pos.board[(pos.color(), chess::Piece::QUEEN)] != 0 {
                     value *= 1.2;
                 }
-            }
-            //See if we are close to promoting
-            let base_rank = match pos.color() {
-                chess::Color::WHITE => 0,
-                chess::Color::BLACK => 7,
-            };
-            let rank = chess::Board::get_rank(pawn) as i32;
-            if (rank-base_rank).abs() == 6 {
-                value *= 1.+(0.2*phase_factor);
-            } else if (rank-base_rank).abs() == 5 {
-                value *= 1.+(0.1*phase_factor);
             }
             //Penalize isolated pawns
             if !pawn.is_at_east_border() &&
@@ -62,55 +68,22 @@ fn evaluate_pawns(pos: &mut chess::Position, phase: i32) -> i32 {
 fn evaluate_king_position(pos: &mut chess::Position, phase: i32) -> i32 {
     let king_pos = pos.get_board()[(pos.color(), chess::Piece::KING)];
     //In the late game stages we want an active king. Maybe want to keep it somewhat central?
-    let mut late_eval = -(pos.hard_pins().count_ones() as i32) * 40;
-    if !king_pos.is_at_west_border() && !king_pos.is_at_east_border() &&
-        !king_pos.is_at_north_border() && !king_pos.is_at_south_border() {
-            late_eval += 10;
-    }
-
-    //In early and mid stages we prefer a well-protected king
-    let mut early_eval = -(pos.hard_pins().count_ones() as i32) * 10;
-    match pos.color() {
-        chess::Color::WHITE => {
-            if !king_pos.is_at_south_border() {
-                early_eval -= 10;
-            } else {
-                early_eval += match chess::Board::get_file(king_pos) {
-                    chess::File::D | chess::File::E | chess::File::F => 0,
-                    _ => 10,
-                };
-            }
-        },
-        chess::Color::BLACK => {
-            if !king_pos.is_at_north_border() {
-                early_eval -= 10;
-            } else {
-                early_eval += match chess::Board::get_file(king_pos) {
-                    chess::File::C | chess::File::D | chess::File::E => 0,
-                    _ => 10,
-                };
-            }
-        }
-    };
-    (phase * early_eval + (OPENING_PHASE-phase)*late_eval)/OPENING_PHASE
+    piece_table_value(chess::Piece::KING, pos.color(), king_pos, phase)
 }
 
 fn evaluate_queens(pos: &mut chess::Position, phase: i32) -> i32 {
     let mut res: i32 = 0;
     //Do not run away with our Queen too fast
     for queen in pos.board[(pos.color(), chess::Piece::QUEEN)].iter() {
-            let base_rank = match pos.color() {
-                chess::Color::WHITE => 0,
-                chess::Color::BLACK => 7,
-            };
-            res -= ((chess::Board::get_rank(queen) as i32 - base_rank).abs() * 3 * phase)/OPENING_PHASE;
+        res += piece_table_value(chess::Piece::QUEEN, pos.color(), queen, phase);
     }
     res
 }
 
-fn evaluate_rooks(pos: &mut chess::Position, _phase: i32) -> i32 {
+fn evaluate_rooks(pos: &mut chess::Position, phase: i32) -> i32 {
     let mut res: i32 = 0;
     for rook in pos.board[(pos.color(), chess::Piece::ROOK)].iter() {
+        res += piece_table_value(chess::Piece::ROOK, pos.color(), rook, phase);
         let file = chess::Board::get_file(rook);
         //Rooks are good on semi-open and open files
         if chess::Board::file(file) & pos.board[(pos.color(), chess::Piece::PAWN)] == 0 {
@@ -132,11 +105,7 @@ fn evaluate_bishops(pos: &mut chess::Position, phase: i32) -> i32 {
     let mut res: i32 = 0;
     //Do not advance too fast
     for bishop in pos.board[(pos.color(), chess::Piece::BISHOP)].iter() {
-            let best_rank = match pos.color() {
-                chess::Color::WHITE => 3,
-                chess::Color::BLACK => 4,
-            };
-            res -= (chess::Board::get_rank(bishop) as i32 - best_rank).abs()*3*phase/OPENING_PHASE;
+            res += piece_table_value(chess::Piece::BISHOP, pos.color(), bishop, phase);
     }
     res
 }
@@ -144,9 +113,7 @@ fn evaluate_bishops(pos: &mut chess::Position, phase: i32) -> i32 {
 fn evaluate_knights(pos: &mut chess::Position, phase: i32) -> i32 {
     let mut res: i32 = 0;
     for knight in pos.board[(pos.color(), chess::Piece::KNIGHT)].iter() {
-        //we want to centralize knights
-        res += (7-(chess::Board::get_rank(knight) as i32 * 2-7).abs())*2*phase/OPENING_PHASE;
-        res += (7-(chess::Board::get_file(knight) as i32 * 2-7).abs())*2*phase/OPENING_PHASE;
+        res += piece_table_value(chess::Piece::KNIGHT, pos.color(), knight, phase);
     }
     res
 }
