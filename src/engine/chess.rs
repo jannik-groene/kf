@@ -1492,7 +1492,8 @@ impl Position {
         } else if self.castling_legal[0][0] && (m.to == 7 || m.from == 7) {
             self.castling_legal[0][0] = false;
             self.zobrist ^= constants::ZOBRIST_CASTLING_NUMBERS[0];
-        } else if self.castling_legal[1][0] && (m.to == 63 || m.from == 63) {
+        }
+        if self.castling_legal[1][0] && (m.to == 63 || m.from == 63) {
             self.castling_legal[1][0] = false;
             self.zobrist ^= constants::ZOBRIST_CASTLING_NUMBERS[2];
         } else if self.castling_legal[1][1] && (m.to == 56 || m.from == 56) {
