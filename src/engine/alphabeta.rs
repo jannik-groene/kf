@@ -781,8 +781,8 @@ fn search_step(thread: &mut impl ABSearchThread,
             if !matches!(moves[i].typ, chess::MoveType::CAPTURE(_)) {
                 lmr += 1;
             }
-        } else if i > 6 {
-            lmr += std::cmp::max((depth + extension).saturating_sub(ply) / 3, 2);
+        } else if i > 5 {
+            lmr += std::cmp::max((depth + extension).saturating_sub(ply) / 3, (depth / 4) * i as u8 + 1);
             if !matches!(moves[i].typ, chess::MoveType::CAPTURE(_)) {
                 lmr += 2;
             }
@@ -794,7 +794,7 @@ fn search_step(thread: &mut impl ABSearchThread,
                             //If we repeat twice, it's gonna happen thrice
                                 ABResult::DRAW
                             //Apply LMR to zws searches of late moves
-                            } else if i == 0 || !zw {
+                            } else if i == 0 || (!zw && depth < 5) {
                                 -search_step(thread,
                                              depth,
                                              ply+1,
