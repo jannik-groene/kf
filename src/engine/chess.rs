@@ -87,7 +87,7 @@ fn get_zobrist_table(p: Piece, c: Color) -> &'static[u64] {
             Piece::QUEEN => &constants::ZOBRIST_WHITE_QUEEN_NUMBERS,
             Piece::BISHOP => &constants::ZOBRIST_WHITE_BISHOP_NUMBERS,
             Piece::KNIGHT => &constants::ZOBRIST_WHITE_KNIGHT_NUMBERS,
-            Piece::ROOK => &constants::ZOBRIST_BLACK_ROOK_NUMBERS,
+            Piece::ROOK => &constants::ZOBRIST_WHITE_ROOK_NUMBERS,
             Piece::PAWN => &constants::ZOBRIST_WHITE_PAWN_NUMBERS,
             Piece::ANY => panic!("Invalid Piece")
         },
