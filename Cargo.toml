@@ -1,18 +1,14 @@
 [package]
 name = "kf"
-version = "0.1.0"
-authors = ["jgroene <jgroene@student.ethz.ch>"]
+version = "0.0.6"
+authors = ["jgroene <jannik.groene@gmail.com>"]
 edition = "2018"
 
 [lib]
 name = "kf_internals"
 bench = true
 
-[build]
-rustcflags=["-C", "target_cpu=native", "target_feature=+bmi2"]
-
 [profile.release]
-rustcflags=["-C", "target_cpu=native", "target_feature=+bmi2"]
 debug = 0
 
 [profile.test]

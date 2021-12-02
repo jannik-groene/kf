@@ -4,13 +4,6 @@ use super::chess;
 use super::chess::{SquareMethods, SquareIndexMethods};
 use rand::{Rng, thread_rng};
 
-#[derive(PartialEq,Copy,Clone,Debug)]
-enum GameState {
-    EARLY,
-    MID,
-    LATE,
-}
-
 fn piece_table_value(p: chess::Piece, c: chess::Color, s: impl SquareMethods, phase: i32) -> i32 {
     let index = match c {
         chess::Color::WHITE => s.index(),

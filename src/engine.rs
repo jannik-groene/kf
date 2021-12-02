@@ -1,4 +1,3 @@
-use std::sync::{Arc, RwLock};
 use std::sync::mpsc::{Sender, Receiver};
 use std::fmt::Display;
 
@@ -8,21 +7,21 @@ pub mod alphabeta;
 
 #[derive(Clone,PartialEq)]
 enum OptionValue {
-    CHECK(bool),
+//    CHECK(bool),
     SPIN(i64),
-    COMBO(String),
-    BUTTON,
-    STRING(String),
+//    COMBO(String),
+//    BUTTON,
+//    STRING(String),
 }
 
 impl Display for OptionValue {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Self::CHECK(b) => write!(f, "{}", b),
+//            Self::CHECK(b) => write!(f, "{}", b),
             Self::SPIN(n) => write!(f, "{}", n),
-            Self::COMBO(s) => write!(f, "{}", s),
-            Self::BUTTON => write!(f, ""),
-            Self::STRING(s) => write!(f, "{}", s),
+//            Self::COMBO(s) => write!(f, "{}", s),
+//            Self::BUTTON => write!(f, ""),
+//            Self::STRING(s) => write!(f, "{}", s),
         }
     }
 }
@@ -62,10 +61,10 @@ impl EngineConfig {
             print!("option name {} type ", option.id);
             match option.value {
                 OptionValue::SPIN(_) => print!("spin"),
-                OptionValue::CHECK(_) => print!("check"),
-                OptionValue::COMBO(_) => print!("combo"),
-                OptionValue::BUTTON => print!("button"),
-                OptionValue::STRING(_) => print!("string"),
+//                OptionValue::CHECK(_) => print!("check"),
+//                OptionValue::COMBO(_) => print!("combo"),
+//                OptionValue::BUTTON => print!("button"),
+//                OptionValue::STRING(_) => print!("string"),
             }
             if option.default.is_some() {
                 print!(" default {}", option.default.as_ref().unwrap());
@@ -102,7 +101,7 @@ impl EngineConfig {
                     o.value = OptionValue::SPIN(val.unwrap());
                 }
             },
-            _ => {},
+//_ => {},
         }
     }
 }
@@ -127,8 +126,8 @@ impl Engine {
     pub fn new() -> Engine {
         let config = EngineConfig::new();
         let mut search = alphabeta::ABSearchManager::new();
-        let threads = match config.get_option("Threads").unwrap() { OptionValue::SPIN(n) => n, _ => 1 };
-        let hash_size = match config.get_option("Hash").unwrap() { OptionValue::SPIN(n) => n, _ => 1 };
+        let threads = match config.get_option("Threads").unwrap() { OptionValue::SPIN(n) => n}; //, _ => 1 };
+        let hash_size = match config.get_option("Hash").unwrap() { OptionValue::SPIN(n) => n}; //, _ => 1 };
         search.set_threads(threads as usize);
         search.set_hash_size(hash_size as usize);
         Engine {
@@ -169,12 +168,12 @@ impl Engine {
     pub fn apply_options(&mut self) {
         let threads = match self.config.get_option("Threads").unwrap() {
             OptionValue::SPIN(n) => n,
-            _ => panic!("no thread number set"),
+            //_ => panic!("no thread number set"),
         };
         self.search.set_threads(threads as usize);
         let hash_size = match self.config.get_option("Hash").unwrap() {
             OptionValue::SPIN(n) => n,
-            _ => panic!("no hash size set"),
+            //_ => panic!("no hash size set"),
         };
         self.search.set_hash_size(hash_size as usize);
     }

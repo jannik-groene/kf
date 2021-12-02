@@ -1,11 +1,11 @@
 use super::chess;
 use super::evaluate;
-use std::time::{Instant, Duration};
+use std::time::Instant;
 use std::sync::{Arc, RwLock};
 use std::cmp::{PartialOrd, Ord};
 use std::ops::Neg;
 use std::fmt::Display;
-use std::io::{stdout, Write};
+use std::io::Write;
 
 use std::sync::mpsc::Sender;
 use super::EngineIO;
@@ -90,9 +90,11 @@ impl ABResult {
     fn exact_from_cents(centis: i32) -> ABResult {
         ABResult {typ: ABResultType::EXACT, value: ABResultValueType::CENTIS(centis)}
     }
+    #[allow(dead_code)]
     fn lowerbound_from_cents(centis: i32) -> ABResult {
         ABResult {typ: ABResultType::LOWERBOUND, value: ABResultValueType::CENTIS(centis)}
     }
+    #[allow(dead_code)]
     fn upperbound_from_cents(centis: i32) -> ABResult {
         ABResult {typ: ABResultType::UPPERBOUND, value: ABResultValueType::CENTIS(centis)}
     }
@@ -992,6 +994,6 @@ fn write_and_read_tt() {
     let entry3 = ABResultHashEntry::new(-ABResult::MATE_NOW, 3, 1234628935786700, chess::Move{from: 1, to: 2, piece: chess::Piece::KING, typ: chess::MoveType::MOVE});
     let mut hash_clone = hash.clone();
     std::thread::spawn(move || hash_clone.set(1234628935786700, entry3.clone()));
-    std::thread::sleep(Duration::from_millis(100));
+    std::thread::sleep(std::time::Duration::from_millis(100));
     assert!(hash.get(1234628935786700).unwrap() == entry3);
 }

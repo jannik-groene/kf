@@ -157,14 +157,11 @@ impl UCIHandler for engine::Engine {
         self.reset_hash();
     }
     fn handle_position(&mut self, tokens: Vec<&str>) {
-        let mut offset = 0;
-        let mut pos = if tokens[1] == "startpos" {
-            offset = 2;
-            engine::chess::Position::new()
+        let (offset, mut pos) = if tokens[1] == "startpos" {
+            (2, engine::chess::Position::new())
         } else if tokens[1] == "fen" {
             let fen = tokens[2..=7].join(" ");
-            offset = 8;
-            engine::chess::Position::from_fen(fen).unwrap()
+            (8, engine::chess::Position::from_fen(fen).unwrap())
         } else {
             return;
         };
