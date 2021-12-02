@@ -345,7 +345,6 @@ mod tests {
             None => {}
         };
         let moves = pos.get_moves();
-        let castle = pos.get_castling_rights();
         let m = match moves.choose(&mut thread_rng()) {
             Some(m) => m,
             None => return,
@@ -353,7 +352,7 @@ mod tests {
         nnue.do_move(*m, &pos);
         pos.do_move(*m);
         do_and_undo(pos, nnue, count-1);
-        pos.undo_move(*m, castle, None);
+        pos.undo_move();
         nnue.undo_move(*m, &pos);
         let eval2 = nnue.evaluate_position(&pos);
         if eval != eval2 {println!("evals {}, {}, {}, {:?}, {:?}", eval, eval2, *m, m.piece, m.typ)};
@@ -400,7 +399,7 @@ mod tests {
         pos.do_move(m2);
         nnue.do_move(m3, &pos);
         pos.do_move(m3);
-        pos.undo_move(m3, [[true, true],[true,true]], None);
+        pos.undo_move();
         nnue.undo_move(m3, &pos);
         nnue2.initialize_state(&pos);
         println!("{:?}\n{:?}", nnue.state[0], nnue2.state[0]);

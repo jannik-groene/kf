@@ -1,10 +1,10 @@
 pub mod engine;
 mod uci;
 
-use uci::UCIHandler;
-
 #[cfg(test)]
 mod tests;
+
+use uci::UCIHandler;
 
 fn main() {
     let mut engine = engine::Engine::new();

@@ -241,7 +241,11 @@ pub fn evaluate(pos: &mut chess::Position) -> i32 {
     res -= evaluate_king_position(pos, phase);
     res -= evaluate_king_safety(pos, &moves_us, phase);
     pos.switch_color();
-    res
+    if pos.rule_50_count() > 80 {
+        res / (pos.rule_50_count() - 80) as i32
+    } else {
+        res
+    }
 }
 
 pub fn order_moves(movs: &mut Vec<chess::Move>, pos: &chess::Position,
@@ -264,5 +268,6 @@ fn evaluate_start_pos() {
     let mut pos = chess::Position::new();
     let eval = evaluate(&mut pos);
     println!("Eval {}", eval);
-    assert!(eval == 0);
+    //everything should be equal up to the tempo
+    assert!(eval == 20);
 }

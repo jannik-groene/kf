@@ -1,4 +1,3 @@
-use std::time::Duration;
 use rand::{thread_rng, seq::SliceRandom};
 use super::engine;
 
@@ -238,12 +237,10 @@ fn do_and_undo_random_moves(pos: &mut engine::chess::Position, count: usize) {
     let moves = pos.get_moves();
     if moves.len() > 0 && count > 0 {
         let m = *pos.get_moves().choose(&mut thread_rng()).unwrap();
-        let castling = pos.get_castling_rights();
-        let lm = pos.get_last_move();
         let zobrist = pos.zobrist_hash();
         pos.do_move(m);
         do_and_undo_random_moves(pos, count-1);
-        pos.undo_move(m, castling, lm);
+        pos.undo_move();
         println!("{},{:?}", m, m.typ);
         println!("0x{:016x},0x{:016x}", zobrist, pos.zobrist_hash());
         assert!(pos.zobrist_hash() == zobrist);
@@ -261,7 +258,7 @@ fn undo_moves() {
         typ: engine::chess::MoveType::MOVE,
     };
     let mut pos2 = pos.from_move(mov1);
-    pos2.undo_move(mov1, [[true,true],[true,true]], None);
+    pos2.undo_move();
     assert!(*pos.get_board() == *pos2.get_board());
     //Undo capture move
     pos = engine::chess::Position::from_fen(String::from("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1")).unwrap();
@@ -272,7 +269,7 @@ fn undo_moves() {
         typ: engine::chess::MoveType::CAPTURE(engine::chess::Piece::KNIGHT),
     };
     pos2 = pos.from_move(mov2);
-    pos2.undo_move(mov2, [[true,true],[true,true]], None);
+    pos2.undo_move();
     assert!(*pos.get_board() == *pos2.get_board());
     //Undo enpassant
     pos = engine::chess::Position::from_fen(String::from("rnbqkbnr/pp3ppp/8/2pPp3/5P2/8/PPPP2PP/RNBQKBNR w KQkq c6 0 4")).unwrap();
@@ -283,7 +280,7 @@ fn undo_moves() {
         typ: engine::chess::MoveType::ENPASSANT,
     };
     pos2 = pos.from_move(mov3);
-    pos2.undo_move(mov3, [[true,true],[true,true]], None);
+    pos2.undo_move();
     assert!(*pos.get_board() == *pos2.get_board());
     //Undo castling
     pos = engine::chess::Position::from_fen(String::from("rn1qk2r/1p2bppp/p2pbn2/4p3/4P3/1NN1BP2/PPPQ2PP/R3KB1R b KQkq - 2 9")).unwrap();
@@ -294,13 +291,13 @@ fn undo_moves() {
         typ: engine::chess::MoveType::CASTLE,
     };
     pos2 = pos.from_move(mov4);
-    pos2.undo_move(mov4, [[true,true],[true,true]], None);
+    pos2.undo_move();
     assert!(*pos.get_board() == *pos2.get_board());
     //pawn promotion and capture
     pos = engine::chess::Position::from_fen(String::from("rnbq1bnr/pppkpPpp/8/8/8/3p4/PPPP1PPP/RNBQKBNR w KQ - 1 5")).unwrap();
     let mov5 = engine::chess::Move::from_str("f7g8q",&pos);
     pos.do_move(mov5);
-    pos.undo_move(mov5,[[true,true],[true,true]],None);
+    pos.undo_move();
     //random checks
     for _ in 0..1000 {
         pos = engine::chess::Position::new();

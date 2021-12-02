@@ -286,6 +286,7 @@ impl Board {
                     }
                 }
             },
+            MoveType::NULL => panic!("Illegal Move"),
         }
         zobrist
     }
@@ -615,6 +616,7 @@ pub enum MoveType {
     PROMOTIONCAPTURE((Piece,Piece)),
     ENPASSANT,
     CASTLE,
+    NULL,
 }
 
 #[derive(PartialEq,Clone,Copy)]
@@ -656,6 +658,7 @@ impl Move {
             MoveType::PROMOTIONCAPTURE((p,q)) => ((p as u16) << 3) | ((q as u16) << 6) | (3 << 9),
             MoveType::CASTLE => 4 << 9,
             MoveType::ENPASSANT => 5 << 9,
+            MoveType::NULL => panic!("Cannot compress null move."),
         };
         CompressedMove {
             piece_and_type,
@@ -763,13 +766,13 @@ impl Color {
 #[derive(Clone)]
 pub struct Position {
     pub board: Board,
-    last_move: Option<Move>,
+    move_history: Vec<Move>,
     to_move: Color,
     // castling contains info which types of castling are currently allowed
     //layout [[White Kingside, White Queenside],
     //        [Black Kingside, Black Queenside]]
-    castling_legal: [[bool; 2]; 2],
-    rule_50_count: u16,
+    castling_legal: Vec<[[bool; 2]; 2]>,
+    rule_50_counts: Vec<u8>,
     rep_history: Option<Arc<Position>>,
     attacked_squares: Square,
     king_attackers: Square,
@@ -787,10 +790,10 @@ impl Position {
         }
         Position {
             board,
-            last_move: None,
+            move_history: Vec::with_capacity(20),
             to_move: Color::WHITE,
-            castling_legal: [[true, true], [true, true]],
-            rule_50_count: 0,
+            castling_legal: vec![[[true, true], [true, true]]],
+            rule_50_counts: vec![0],
             rep_history: None,
             attacked_squares: 0,
             king_attackers: 0,
@@ -809,10 +812,10 @@ impl Position {
         if b.is_none() {return None;}
         let mut pos = Position {
             board: b.unwrap(),
-            last_move: None,
+            move_history: Vec::with_capacity(20),
             to_move: Color::WHITE,
-            castling_legal: [[false, false], [false, false]],
-            rule_50_count: 0,
+            castling_legal: Vec::with_capacity(20),
+            rule_50_counts: Vec::with_capacity(20),
             rep_history: None,
             attacked_squares: 0,
             king_attackers: 0,
@@ -834,123 +837,125 @@ impl Position {
             None => return None,
         }
         //Set castling rights
+        let mut castling_legal = [[false,false],[false,false]];
         match fen_parts.next() {
             Some(p) => {
                 if p.contains('K') {
-                    pos.castling_legal[0][0]=true;
+                    castling_legal[0][0]=true;
                     pos.zobrist ^= constants::ZOBRIST_CASTLING_NUMBERS[0];
                 }
                 if p.contains('Q') {
-                    pos.castling_legal[0][1]=true;
+                    castling_legal[0][1]=true;
                     pos.zobrist ^= constants::ZOBRIST_CASTLING_NUMBERS[1];
                 }
                 if p.contains('k') {
-                    pos.castling_legal[1][0]=true;
+                    castling_legal[1][0]=true;
                     pos.zobrist ^= constants::ZOBRIST_CASTLING_NUMBERS[2];
                 }
                 if p.contains('q') {
-                    pos.castling_legal[1][1]=true;
+                    castling_legal[1][1]=true;
                     pos.zobrist ^= constants::ZOBRIST_CASTLING_NUMBERS[3];
                 }
             },
             None => return None,
         }
+        pos.castling_legal.push(castling_legal);
         //Set en passant if necessary
         match fen_parts.next() {
             Some(p) => {
                 match p {
                     "-" => {},
-                    "a3" => pos.last_move = Some(Move {
+                    "a3" => pos.move_history.push(Move {
                         from: 8,
                         to: 24,
                         piece: Piece::PAWN,
                         typ: MoveType::ENPASSANT,
                     }),
-                    "b3" => pos.last_move = Some(Move {
+                    "b3" => pos.move_history.push(Move {
                         from: 9,
                         to: 25,
                         piece: Piece::PAWN,
                         typ: MoveType::ENPASSANT,
                     }),
-                    "c3" => pos.last_move = Some(Move {
+                    "c3" => pos.move_history.push(Move {
                         from: 10,
                         to: 26,
                         piece: Piece::PAWN,
                         typ: MoveType::ENPASSANT,
                     }),
-                    "d3" => pos.last_move = Some(Move {
+                    "d3" => pos.move_history.push(Move {
                         from: 11,
                         to: 27,
                         piece: Piece::PAWN,
                         typ: MoveType::ENPASSANT,
                     }),
-                    "e3" => pos.last_move = Some(Move {
+                    "e3" => pos.move_history.push(Move {
                         from: 12,
                         to: 28,
                         piece: Piece::PAWN,
                         typ: MoveType::ENPASSANT,
                     }),
-                    "f3" => pos.last_move = Some(Move {
+                    "f3" => pos.move_history.push(Move {
                         from: 13,
                         to: 29,
                         piece: Piece::PAWN,
                         typ: MoveType::ENPASSANT,
                     }),
-                    "g3" => pos.last_move = Some(Move {
+                    "g3" => pos.move_history.push(Move {
                         from: 14,
                         to: 30,
                         piece: Piece::PAWN,
                         typ: MoveType::ENPASSANT,
                     }),
-                    "h3" => pos.last_move = Some(Move {
+                    "h3" => pos.move_history.push(Move {
                         from: 15,
                         to: 31,
                         piece: Piece::PAWN,
                         typ: MoveType::ENPASSANT,
                     }),
-                    "a6" => pos.last_move = Some(Move {
+                    "a6" => pos.move_history.push(Move {
                         from: 48,
                         to: 32,
                         piece: Piece::PAWN,
                         typ: MoveType::ENPASSANT,
                     }),
-                    "b6" => pos.last_move = Some(Move {
+                    "b6" => pos.move_history.push(Move {
                         from: 49,
                         to: 33,
                         piece: Piece::PAWN,
                         typ: MoveType::ENPASSANT,
                     }),
-                    "c6" => pos.last_move = Some(Move {
+                    "c6" => pos.move_history.push(Move {
                         from: 50,
                         to: 34,
                         piece: Piece::PAWN,
                         typ: MoveType::ENPASSANT,
                     }),
-                    "d6" => pos.last_move = Some(Move {
+                    "d6" => pos.move_history.push(Move {
                         from: 51,
                         to: 35,
                         piece: Piece::PAWN,
                         typ: MoveType::ENPASSANT,
                     }),
-                    "e6" => pos.last_move = Some(Move {
+                    "e6" => pos.move_history.push(Move {
                         from: 52,
                         to: 36,
                         piece: Piece::PAWN,
                         typ: MoveType::ENPASSANT,
                     }),
-                    "f6" => pos.last_move = Some(Move {
+                    "f6" => pos.move_history.push(Move {
                         from: 53,
                         to: 37,
                         piece: Piece::PAWN,
                         typ: MoveType::ENPASSANT,
                     }),
-                    "g6" => pos.last_move = Some(Move {
+                    "g6" => pos.move_history.push(Move {
                         from: 54,
                         to: 38,
                         piece: Piece::PAWN,
                         typ: MoveType::ENPASSANT,
                     }),
-                    "h6" => pos.last_move = Some(Move {
+                    "h6" => pos.move_history.push(Move {
                         from: 55,
                         to: 39,
                         piece: Piece::PAWN,
@@ -961,13 +966,13 @@ impl Position {
             },
             None => return None,
         }
-        if pos.last_move.is_some() {
-            pos.zobrist ^= constants::ZOBRIST_ENPASSANT_NUMBERS[pos.last_move.unwrap().from.index() % 8];
+        if pos.move_history.len() > 0 {
+            pos.zobrist ^= constants::ZOBRIST_ENPASSANT_NUMBERS[pos.move_history.last().unwrap().from.index() % 8];
         }
         match fen_parts.next() {
             Some(p) => {
-                match u16::from_str_radix(p,10) {
-                    Ok(n) => pos.rule_50_count = n,
+                match u8::from_str_radix(p,10) {
+                    Ok(n) => pos.rule_50_counts.push(n),
                     Err(_) => return None,
                 }
             },
@@ -1157,7 +1162,7 @@ impl Position {
     }
     #[inline(always)]
     fn handle_en_passant(&mut self, moves: &mut Vec<Move>, check_mask: Square) {
-        match self.last_move {
+        match self.move_history.last() {
             Some(m) => {
                 if m.piece == Piece::PAWN {
                     match self.to_move {
@@ -1261,7 +1266,7 @@ impl Position {
                 const WHITE_QUEEN_CASTLE_CHECK_MASK: Square = 0b00001100;
                 const WHITE_QUEEN_CASTLE_MATERIAL_MASK: Square = 0b00001110;
                 //Check for kingside castling.
-                if self.castling_legal[0][0] {
+                if self.castling_legal.last().unwrap()[0][0] {
                     if (self.attacked_squares | self.board.occupation) & WHITE_KING_CASTLE_MASK == 0 {
                         moves.push(Move {
                             from: 4,
@@ -1271,7 +1276,7 @@ impl Position {
                         });
                     }
                 }
-                if self.castling_legal[0][1] {
+                if self.castling_legal.last().unwrap()[0][1] {
                     if self.attacked_squares & WHITE_QUEEN_CASTLE_CHECK_MASK == 0 &&
                         self.board.occupation & WHITE_QUEEN_CASTLE_MATERIAL_MASK == 0{
                         moves.push(Move {
@@ -1288,7 +1293,7 @@ impl Position {
                 const BLACK_QUEEN_CASTLE_CHECK_MASK: Square = 0b00001100 << 56;
                 const BLACK_QUEEN_CASTLE_MATERIAL_MASK: Square = 0b00001110 << 56;
                 //Check for kingside castling.
-                if self.castling_legal[1][0] {
+                if self.castling_legal.last().unwrap()[1][0] {
                     if (self.attacked_squares | self.board.occupation) & BLACK_KING_CASTLE_MASK == 0 {
                         moves.push(Move {
                             from: 60,
@@ -1298,7 +1303,7 @@ impl Position {
                         });
                     }
                 }
-                if self.castling_legal[1][1] {
+                if self.castling_legal.last().unwrap()[1][1] {
                     if self.attacked_squares & BLACK_QUEEN_CASTLE_CHECK_MASK == 0 &&
                         self.board.occupation & BLACK_QUEEN_CASTLE_MATERIAL_MASK == 0 {
                         moves.push(Move {
@@ -1392,7 +1397,8 @@ impl Position {
     pub fn get_moves(&mut self) -> Vec<Move> {
         //We expect about 35 moves in the average position
         let mut moves = Vec::with_capacity(50);
-        if self.rule_50_count == 50 || self.board.occupation.count_ones() == 2 {
+        if *self.rule_50_counts.last().unwrap_or_else(|| panic!()) == 100
+            || self.board.occupation.count_ones() == 2 {
             return moves;
         }
         if self.attacked_squares == 0 {
@@ -1464,71 +1470,80 @@ impl Position {
     }
     pub fn do_move(&mut self, m: Move) {
         if m.to.square() & (self.board[(Color::WHITE,Piece::KING)] | self.board[(Color::BLACK,Piece::KING)]) != 0 {
-            panic!("Invalid move {} in position\n{}\n(previos move {})", m, self.board, self.last_move.unwrap_or(Move {from: 1, to: 2, piece:Piece::KING, typ:MoveType::MOVE}));
+            panic!("Invalid move {} in position\n{}\n(previos move {})", m, self.board, self.move_history.last().unwrap_or(&Move {from: 1, to: 2, piece:Piece::KING, typ:MoveType::MOVE}));
         }
         //Commit zobrist hash to history stack
         self.history.push(self.zobrist);
         //Unset the Zobrist en passant flag, if necessary
-        if self.last_move.is_some() {
-            let m = self.last_move.unwrap();
+        if self.move_history.len() > 0 {
+            let m = self.move_history.last().unwrap();
             if m.piece == Piece::PAWN && (m.from < 16 || m.from > 47) && (m.to > 23 || m.to < 40) {
                 self.zobrist ^= constants::ZOBRIST_ENPASSANT_NUMBERS[m.to.index() % 8];
             }
         }
-        self.last_move = Some(m);
+        self.move_history.push(m);
+
         self.zobrist ^= self.board.do_move(m);
-        self.attacked_squares = 0;
+        let mut castling_legal = *self.castling_legal.last().unwrap_or_else(|| panic!());
         if m.piece == Piece::KING {
-            if self.castling_legal[self.to_move as usize][0] {
+            if castling_legal[self.to_move as usize][0] {
                 self.zobrist ^= constants::ZOBRIST_CASTLING_NUMBERS[2*self.to_move as usize];
             }
-            if self.castling_legal[self.to_move as usize][1] {
+            if castling_legal[self.to_move as usize][1] {
                 self.zobrist ^= constants::ZOBRIST_CASTLING_NUMBERS[2*self.to_move as usize+1];
             }
-            self.castling_legal[self.to_move as usize] = [false,false];
-        } else if self.castling_legal[0][1] && (m.to == 0 || m.from == 0) {
-            self.castling_legal[0][1] = false;
+            castling_legal[self.to_move as usize] = [false,false];
+        } else if castling_legal[0][1] && (m.to == 0 || m.from == 0) {
+            castling_legal[0][1] = false;
             self.zobrist ^= constants::ZOBRIST_CASTLING_NUMBERS[1];
-        } else if self.castling_legal[0][0] && (m.to == 7 || m.from == 7) {
-            self.castling_legal[0][0] = false;
+        } else if castling_legal[0][0] && (m.to == 7 || m.from == 7) {
+            castling_legal[0][0] = false;
             self.zobrist ^= constants::ZOBRIST_CASTLING_NUMBERS[0];
         }
-        if self.castling_legal[1][0] && (m.to == 63 || m.from == 63) {
-            self.castling_legal[1][0] = false;
+        if castling_legal[1][0] && (m.to == 63 || m.from == 63) {
+            castling_legal[1][0] = false;
             self.zobrist ^= constants::ZOBRIST_CASTLING_NUMBERS[2];
-        } else if self.castling_legal[1][1] && (m.to == 56 || m.from == 56) {
-            self.castling_legal[1][1] = false;
+        } else if castling_legal[1][1] && (m.to == 56 || m.from == 56) {
+            castling_legal[1][1] = false;
             self.zobrist ^= constants::ZOBRIST_CASTLING_NUMBERS[3];
         }
+        self.castling_legal.push(castling_legal);
+        self.attacked_squares = 0;
         self.pinned_pieces = 0;
         self.king_attackers = 0;
         self.to_move = self.to_move.other();
         self.zobrist ^= constants::ZOBRIST_BLACK_NUMBER;
+        if m.piece == Piece::PAWN || matches!(m.typ,MoveType::CAPTURE(_)) {
+            self.rule_50_counts.push(0);
+        } else {
+            self.rule_50_counts.push(*self.rule_50_counts.last().unwrap_or(&0)+1);
+        }
     }
     pub fn get_castling_rights(&self) -> [[bool;2];2] {
-        self.castling_legal
+        *self.castling_legal.last().unwrap_or_else(|| panic!("No castling rights specified."))
     }
     //TODO: find better solution for castling rights?
-    pub fn undo_move(&mut self, m: Move, castling: [[bool;2];2], lm: Option<Move>) {
+    pub fn undo_move(&mut self) {
         //remove move from history stack
         self.history.pop();
+        self.rule_50_counts.pop();
+        let m = self.move_history.pop().unwrap_or_else(|| panic!("No move to undo!"));
+        let castling = self.castling_legal.pop().unwrap_or_else(|| panic!("No castling rights specified."));
 
-        self.last_move = lm;
         self.zobrist ^= self.board.undo_move(m);
         //Reconstruct castling flags
-        if self.castling_legal[0][0] ^ castling[0][0] {
+        if self.castling_legal.last().unwrap()[0][0] ^ castling[0][0] {
             self.zobrist ^= constants::ZOBRIST_CASTLING_NUMBERS[0];
         }
-        if self.castling_legal[0][1] ^ castling[0][1] {
+        if self.castling_legal.last().unwrap()[0][1] ^ castling[0][1] {
             self.zobrist ^= constants::ZOBRIST_CASTLING_NUMBERS[1];
         }
-        if self.castling_legal[1][0] ^ castling[1][0] {
+        if self.castling_legal.last().unwrap()[1][0] ^ castling[1][0] {
             self.zobrist ^= constants::ZOBRIST_CASTLING_NUMBERS[2];
         }
-        if self.castling_legal[1][1] ^ castling[1][1] {
+        if self.castling_legal.last().unwrap()[1][1] ^ castling[1][1] {
             self.zobrist ^= constants::ZOBRIST_CASTLING_NUMBERS[3];
         }
-        self.castling_legal = castling;
         self.attacked_squares = 0;
         self.pinned_pieces = 0;
         self.king_attackers = 0;
@@ -1536,23 +1551,23 @@ impl Position {
         //switch Zobrist color flag.
         self.zobrist ^= constants::ZOBRIST_BLACK_NUMBER;
         //Set the Zobrist en passant flag, if necessary
-        if self.last_move.is_some() {
-            let m = self.last_move.unwrap();
+        if self.move_history.len() > 0 {
+            let m = self.move_history.last().unwrap();
             if m.piece == Piece::PAWN && (m.from < 16 || m.from > 47) && (m.to > 23 || m.to < 40) {
                 self.zobrist ^= constants::ZOBRIST_ENPASSANT_NUMBERS[m.to.index() % 8];
             }
         }
     }
     pub fn do_null_move(&mut self) {
-        self.last_move = None;
+        self.move_history.push(Move {typ: MoveType::NULL, piece: Piece::ANY, to: 0, from: 0});
         self.zobrist ^= constants::ZOBRIST_BLACK_NUMBER;
         self.to_move = self.to_move.other();
         self.attacked_squares = 0;
         self.pinned_pieces = 0;
         self.king_attackers = 0;
     }
-    pub fn undo_null_move(&mut self, lm: Option<Move>) {
-        self.last_move = lm;
+    pub fn undo_null_move(&mut self) {
+        self.move_history.pop();
         self.zobrist ^= constants::ZOBRIST_BLACK_NUMBER;
         self.to_move = self.to_move.other();
         self.attacked_squares = 0;
@@ -1592,7 +1607,10 @@ impl Position {
         }
     }
     pub fn get_last_move(&self) -> Option<Move> {
-        self.last_move
+        match self.move_history.last() {
+            Some(m) => Some(*m),
+            None => None,
+        }
     }
     pub fn zobrist_hash(&self) -> u64 {
         self.zobrist
@@ -1678,6 +1696,9 @@ impl Position {
     }
     pub fn pos_in_history(&self) -> bool {
         self.history.contains(&self.zobrist)
+    }
+    pub fn rule_50_count(&self) -> u8 {
+        *self.rule_50_counts.last().unwrap()
     }
 }
 

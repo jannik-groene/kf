@@ -394,7 +394,7 @@ trait ABSearchThread {
 
     //fn nnue(&mut self) -> &mut evaluate::nnue::NNUEState;
     fn do_move(&mut self, m: chess::Move);
-    fn undo_move(&mut self, m: chess::Move, castling: [[bool; 2]; 2], lm: Option<chess::Move>);
+    fn undo_move(&mut self);
 
     fn evaluate(&mut self) -> i32;
 
@@ -435,8 +435,8 @@ impl ABSearchThread for ABSearchMainThread {
         //self.nnue.do_move(m, &self.pos);
         self.pos.do_move(m);
     }
-    fn undo_move(&mut self, m: chess::Move, castling: [[bool; 2]; 2], lm: Option<chess::Move>) {
-        self.pos.undo_move(m, castling, lm);
+    fn undo_move(&mut self) {
+        self.pos.undo_move();
         //self.nnue.undo_move(m, &self.pos);
     }
     fn evaluate(&mut self) -> i32 {
@@ -522,8 +522,8 @@ impl ABSearchThread for ABSearchHelperThread {
         //self.nnue.do_move(m, &self.pos);
         self.pos.do_move(m);
     }
-    fn undo_move(&mut self, m: chess::Move, castling: [[bool; 2]; 2], lm: Option<chess::Move>) {
-        self.pos.undo_move(m, castling, lm);
+    fn undo_move(&mut self) {
+        self.pos.undo_move();
         //self.nnue.undo_move(m, &self.pos);
     }
     fn evaluate(&mut self) -> i32 {
@@ -561,8 +561,8 @@ impl ABSearchThread for ABSearchHelperThread {
 }
 
 impl ABSearchHelperThread {
-    fn search(&mut self, depth: u8, alpha: ABResult, beta: ABResult, lm: Option<chess::Move>) -> u64 {
-        search_step(self, depth, 0, 0, 0, 0, false, alpha, beta, lm);
+    fn search(&mut self, depth: u8, alpha: ABResult, beta: ABResult) -> u64 {
+        search_step(self, depth, 0, 0, 0, 0, false, alpha, beta);
         self.nodes
     }
 }
@@ -586,10 +586,10 @@ fn search(thread: &mut ABSearchMainThread, depth: u8, mut alpha: ABResult, mut b
                         killers: Vec::new(),
                         //nnue: thread.nnue().clone(),
                     };
-                    helper_handles.push(std::thread::spawn(move || helper_thread.search(d.saturating_add(i as u8 / 2), alpha, beta, None)));
+                    helper_handles.push(std::thread::spawn(move || helper_thread.search(d.saturating_add(i as u8 / 2), alpha, beta)));
                 }
             }
-            let eval = search_step(thread, d, 0, 0, 0, 0, false, alpha, beta, thread.pos().get_last_move());
+            let eval = search_step(thread, d, 0, 0, 0, 0, false, alpha, beta);
             if thread.stop_flag().read().unwrap().eq(&true) {
                 *helper_stop_flag.write().unwrap() = true;
                 drop(thread.sender.send(EngineIO::SEARCHENDED(thread.search_info.id)));
@@ -660,7 +660,6 @@ fn is_tactical(m: chess::Move) -> bool {
 // null_moves: how many null moves have been performed in the current search
 // alpha: the alpha value of the current ab search
 // beta: the beta of the current ab search
-// lm: the previous move. Needed since the last move needs to be restored
 fn search_step(thread: &mut impl ABSearchThread,
                depth: u8,
                ply: u8,
@@ -669,8 +668,7 @@ fn search_step(thread: &mut impl ABSearchThread,
                null_moves: u8,
                zw: bool,
                mut alpha: ABResult,
-               beta: ABResult,
-               lm: Option<chess::Move>) -> ABResult {
+               beta: ABResult) -> ABResult {
 
     *thread.nodes_mut() += 1;
 
@@ -737,9 +735,8 @@ fn search_step(thread: &mut impl ABSearchThread,
                                       null_moves + 1,
                                       zw,
                                       beta.neg_down(),
-                                      alpha.neg_down(),
-                                      None);
-        thread.pos_mut().undo_null_move(lm);
+                                      alpha.neg_down());
+        thread.pos_mut().undo_null_move();
         if null_score >= beta {
             return null_score.to_lowerbound();
         }
@@ -747,25 +744,22 @@ fn search_step(thread: &mut impl ABSearchThread,
 
     //We extend the normal search if we are  in check, else go into quiescence
     if ply >= depth.saturating_add(extension).saturating_sub(depth_reduction) && !thread.pos_mut().in_check() {
-        return quiesce(thread, alpha, beta, 200 - 20 * depth_reduction as i32, 0, lm);
+        return quiesce(thread, alpha, beta, 200 - 20 * depth_reduction as i32, 0);
     }
     //Futility pruning
     else if depth > 3 && ply == depth - depth_reduction + extension - 1 {
         let eval = thread.evaluate();//evaluate::evaluate(thread.pos_mut());
         if ABResult::exact_from_cents(eval + 300) < alpha {
-            return quiesce(thread, alpha, beta, 100, 0, lm);
+            return quiesce(thread, alpha, beta, 100, 0);
         }
     }
     //Extended futility pruning
     else if depth > 3 && ply == depth - depth_reduction + extension - 2 {
         let eval = thread.evaluate();//evaluate::evaluate(thread.pos_mut());
         if ABResult::exact_from_cents(eval + 500) < alpha {
-            return quiesce(thread, alpha, beta, 100, 0, lm);
+            return quiesce(thread, alpha, beta, 100, 0);
         }
     }
-
-    //Store castling rights for move undoing
-    let castling = thread.pos().get_castling_rights();
 
     //Move ordering
     evaluate::order_moves(&mut moves, thread.pos(), ttmove, thread.get_killers(ply));
@@ -809,8 +803,7 @@ fn search_step(thread: &mut impl ABSearchThread,
                                              null_moves,
                                              false,
                                              beta.neg_down(),
-                                             alpha.neg_down(),
-                                             Some(moves[i]))
+                                             alpha.neg_down())
                             //Apply lmr at sufficiently high depths on non-PV nodes
                             } else if zw && (depth+extension).saturating_sub(ply) > 4
                                          && !thread.pos_mut().in_check()
@@ -823,8 +816,7 @@ fn search_step(thread: &mut impl ABSearchThread,
                                              null_moves,
                                              true,
                                              beta.neg_down(),
-                                             alpha.neg_down(),
-                                             Some(moves[i]))
+                                             alpha.neg_down())
                             //search late nodes in PV-nodes as zero windows
                             } else {
                                 -search_step(thread,
@@ -835,8 +827,7 @@ fn search_step(thread: &mut impl ABSearchThread,
                                              null_moves,
                                              true,
                                              alpha.zero_window().neg_down(),
-                                             alpha.neg_down(),
-                                             Some(moves[i]))
+                                             alpha.neg_down())
                             };
 
         //Research if we failed high in a PV node
@@ -849,11 +840,10 @@ fn search_step(thread: &mut impl ABSearchThread,
                                      null_moves,
                                      false,
                                      beta.neg_down(),
-                                     movescore.neg_down(),
-                                     Some(moves[i]));
+                                     movescore.neg_down());
         }
 
-        thread.undo_move(moves[i], castling, lm);
+        thread.undo_move();
 
         //Abort search if the helper gets a stop signal
         if thread.stop_flag().read().unwrap().eq(&true) {return ABResult::MIN;};
@@ -900,7 +890,7 @@ fn search_step(thread: &mut impl ABSearchThread,
     }
 }
 
-fn quiesce(thread: &mut impl ABSearchThread, mut alpha: ABResult, beta: ABResult, delta: i32, qply: u8, lm: Option<chess::Move>) -> ABResult {
+fn quiesce(thread: &mut impl ABSearchThread, mut alpha: ABResult, beta: ABResult, delta: i32, qply: u8) -> ABResult {
 
     if qply > 0 {
         *thread.nodes_mut() += 1;
@@ -944,7 +934,6 @@ fn quiesce(thread: &mut impl ABSearchThread, mut alpha: ABResult, beta: ABResult
                                 });
     }
 
-    let castling = thread.pos().get_castling_rights();
     for m in cand_moves {
         //stop if we receive the flag is set;
         if thread.stop_flag().read().unwrap().eq(&true) {
@@ -953,8 +942,8 @@ fn quiesce(thread: &mut impl ABSearchThread, mut alpha: ABResult, beta: ABResult
 
         thread.do_move(m);
         //The deeper we are the more valuable captures need to be
-        let score = -quiesce(thread, -beta, -alpha, delta-20, qply+1, Some(m));
-        thread.undo_move(m, castling, lm);
+        let score = -quiesce(thread, -beta, -alpha, delta-20, qply+1);
+        thread.undo_move();
 
         if score >= beta {
             return score.to_lowerbound();
