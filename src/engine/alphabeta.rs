@@ -84,6 +84,9 @@ impl ABResult {
     const MATE_NOW: ABResult = ABResult {typ: ABResultType::EXACT, value: ABResultValueType::MATE(0)};
     const STALEMATE: ABResult = ABResult {typ: ABResultType::EXACT, value: ABResultValueType::CENTIS(0)};
     const DRAW: ABResult = ABResult {typ: ABResultType::EXACT, value: ABResultValueType::CENTIS(0)};
+    fn mate_in(moves: i32) -> ABResult {
+        ABResult {typ: ABResultType::EXACT, value: ABResultValueType::MATE(moves)}
+    }
     fn exact_from_cents(centis: i32) -> ABResult {
         ABResult {typ: ABResultType::EXACT, value: ABResultValueType::CENTIS(centis)}
     }
@@ -637,13 +640,22 @@ fn search(thread: &mut ABSearchMainThread, depth: u8, mut alpha: ABResult, mut b
     drop(thread.sender.send(EngineIO::SEARCHENDED(thread.search_info.id)));
 }
 
+fn is_tactical(m: chess::Move) -> bool {
+    match m.typ {
+        chess::MoveType::CAPTURE(_)
+            | chess::MoveType::PROMOTION(_)
+            | chess::MoveType::PROMOTIONCAPTURE(_) => true,
+        _ => false,
+    }
+}
+
 //Parameters:
 // thread: The search thread head.
 // depth: the depth to search to
 // ply; the current depth
 // depth_reduction: how far to reduce the search depth
 // extension: how many plys to extend the search due to only moves in the tree
-// // null_moves: how many null moves have been performed in the current search
+// null_moves: how many null moves have been performed in the current search
 // alpha: the alpha value of the current ab search
 // beta: the beta of the current ab search
 // lm: the previous move. Needed since the last move needs to be restored
@@ -703,14 +715,15 @@ fn search_step(thread: &mut impl ABSearchThread,
     }
 
     //If we cannot beat the score, just return immediately
-    if beta.value == ABResultValueType::MATE(0) {
-        return ABResult::MATE_NOW.to_lowerbound()
+    if alpha.value == ABResultValueType::MATE(1) {
+        return ABResult::mate_in(1).to_upperbound();
     }
 
     //Try a null move to find a beta cutoff; search the first three plys fully.
     //Should maybe avoid in late game?
-    if null_moves < std::cmp::max(depth / 3 + 1, 3)
-            && !thread.pos_mut().in_check() && moves.len() > 0 && ply > 2 && ply < depth
+    if null_moves < std::cmp::max(depth / 6 + 1, 2)
+            && !thread.pos_mut().in_check() && moves.len() > 0 && ply > 2
+            && ply < (depth+extension).saturating_sub(depth_reduction)
             && !matches!(alpha.value, ABResultValueType::MATE(_))
             && !matches!(beta.value, ABResultValueType::MATE(_)) {
         thread.pos_mut().do_null_move();
@@ -752,11 +765,8 @@ fn search_step(thread: &mut impl ABSearchThread,
     //Store castling rights for move undoing
     let castling = thread.pos().get_castling_rights();
 
-    //if !thread.is_helper() {
+    //Move ordering
     evaluate::order_moves(&mut moves, thread.pos(), ttmove, thread.get_killers(ply));
-    //} else {
-    //    evaluate::order_moves_with_random_bias(&mut moves, thread.pos(), thread.move_hash().get(thread.pos().zobrist_hash()).mov());
-    //}
 
     //Set up paramaters
     let mut score = ABResult::MIN;
@@ -776,16 +786,10 @@ fn search_step(thread: &mut impl ABSearchThread,
 
         //lmr reduction depth
         let mut lmr = depth_reduction;
-        if i > 2 {
-            lmr += std::cmp::max((depth + extension).saturating_sub(ply) / 4, 1);
-            if !matches!(moves[i].typ, chess::MoveType::CAPTURE(_)) {
-                lmr += 1;
-            }
+        if i > 2 && i <= 5 {
+            lmr += 1;
         } else if i > 5 {
-            lmr += std::cmp::max((depth + extension).saturating_sub(ply) / 3, (depth / 4) * i as u8 + 1);
-            if !matches!(moves[i].typ, chess::MoveType::CAPTURE(_)) {
-                lmr += 2;
-            }
+            lmr += (depth + extension).saturating_sub(ply) / 3;
         }
 
         thread.do_move(moves[i]);
@@ -793,8 +797,8 @@ fn search_step(thread: &mut impl ABSearchThread,
         let mut movescore = if thread.pos().pos_in_history() {
                             //If we repeat twice, it's gonna happen thrice
                                 ABResult::DRAW
-                            //Apply LMR to zws searches of late moves
-                            } else if i == 0 || (!zw && depth < 5) {
+                            //Do full searches at PV nodes,
+                            } else if i == 0 && !zw {
                                 -search_step(thread,
                                              depth,
                                              ply+1,
@@ -805,7 +809,10 @@ fn search_step(thread: &mut impl ABSearchThread,
                                              beta.neg_down(),
                                              alpha.neg_down(),
                                              Some(moves[i]))
-                            } else if ply > 2 && !thread.pos_mut().in_check() {
+                            //Apply lmr at sufficiently high depths on non-PV nodes
+                            } else if zw && (depth+extension).saturating_sub(ply) > 4
+                                         && !thread.pos_mut().in_check()
+                                         && !is_tactical(moves[i]) {
                                 -search_step(thread,
                                              depth,
                                              ply+1,
@@ -813,14 +820,15 @@ fn search_step(thread: &mut impl ABSearchThread,
                                              0,
                                              null_moves,
                                              true,
-                                             alpha.zero_window().neg_down(),
+                                             beta.neg_down(),
                                              alpha.neg_down(),
                                              Some(moves[i]))
+                            //search late nodes in PV-nodes as zero windows
                             } else {
                                 -search_step(thread,
                                              depth,
                                              ply+1,
-                                             0,
+                                             depth_reduction,
                                              0,
                                              null_moves,
                                              true,
@@ -892,6 +900,9 @@ fn search_step(thread: &mut impl ABSearchThread,
 
 fn quiesce(thread: &mut impl ABSearchThread, mut alpha: ABResult, beta: ABResult, delta: i32, qply: u8, lm: Option<chess::Move>) -> ABResult {
 
+    if qply > 0 {
+        *thread.nodes_mut() += 1;
+    }
 
     let mut cand_moves = thread.pos_mut().get_moves();
 
@@ -930,8 +941,6 @@ fn quiesce(thread: &mut impl ABSearchThread, mut alpha: ABResult, beta: ABResult
                                     _ => 0,
                                 });
     }
-
-    *thread.nodes_mut() += 1;
 
     let castling = thread.pos().get_castling_rights();
     for m in cand_moves {
