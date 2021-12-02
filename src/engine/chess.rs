@@ -1700,6 +1700,42 @@ impl Position {
     pub fn rule_50_count(&self) -> u8 {
         *self.rule_50_counts.last().unwrap()
     }
+    pub fn gives_check(&self, m: &Move) -> bool {
+        let kpos = self.board[(self.color().other(), Piece::KING)];
+        let final_piece = match m.typ {
+            MoveType::PROMOTION(p) | MoveType::PROMOTIONCAPTURE((p,_)) => p,
+            _ => m.piece,
+        };
+        match final_piece {
+            Piece::KNIGHT => self.knight_moves(kpos) & m.to.square() != 0,
+            Piece::BISHOP => self.bishop_moves(kpos) & m.to.square() != 0,
+            Piece::ROOK => self.rook_moves(kpos) & m.to.square() != 0,
+            Piece::QUEEN => (self.rook_moves(kpos) | self.bishop_moves(kpos)) & m.to.square() != 0,
+            Piece::PAWN => match self.color() {
+                Color::WHITE => {
+                    let mut attacked_sqs = 0;
+                    if !m.to.is_at_east_border() {
+                        attacked_sqs |= m.to.go_ne().square()
+                    }
+                    if !m.to.is_at_west_border() {
+                        attacked_sqs |= m.to.go_nw().square()
+                    }
+                    kpos & attacked_sqs != 0
+                }
+                Color::BLACK => {
+                    let mut attacked_sqs = 0;
+                    if !m.to.is_at_east_border() {
+                        attacked_sqs |= m.to.go_se().square()
+                    }
+                    if !m.to.is_at_west_border() {
+                        attacked_sqs |= m.to.go_sw().square()
+                    }
+                    kpos & attacked_sqs != 0
+                }
+            }
+            _ => false,
+        }
+    }
 }
 
 //Tests

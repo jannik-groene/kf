@@ -4,6 +4,35 @@ use super::chess;
 use super::chess::{SquareMethods, SquareIndexMethods};
 use rand::{Rng, thread_rng};
 
+pub fn has_pawns(pos: &chess::Position) -> bool {
+    pos.board[(chess::Color::WHITE, chess::Piece::PAWN)]
+        | pos.board[(chess::Color::BLACK, chess::Piece::PAWN)] != 0
+}
+
+pub fn has_minor_pieces(pos: &chess::Position) -> bool {
+    pos.board[(chess::Color::WHITE, chess::Piece::BISHOP)]
+        | pos.board[(chess::Color::BLACK, chess::Piece::BISHOP)]
+        | pos.board[(chess::Color::WHITE, chess::Piece::KNIGHT)]
+        | pos.board[(chess::Color::BLACK, chess::Piece::KNIGHT)] != 0
+}
+
+pub fn has_major_pieces(pos: &chess::Position) -> bool {
+    pos.board[(chess::Color::WHITE, chess::Piece::ROOK)]
+        | pos.board[(chess::Color::BLACK, chess::Piece::ROOK)]
+        | pos.board[(chess::Color::WHITE, chess::Piece::QUEEN)]
+        | pos.board[(chess::Color::BLACK, chess::Piece::QUEEN)] != 0
+}
+
+pub fn is_material_draw(pos: &chess::Position) -> bool {
+    if pos.board.occupation.count_ones() == 2 {
+        true
+    } else if pos.board.occupation.count_ones() == 3 && has_minor_pieces(pos) {
+        true
+    } else {
+        false
+    }
+}
+
 fn piece_table_value(p: chess::Piece, c: chess::Color, s: impl SquareMethods, phase: i32) -> i32 {
     let index = match c {
         chess::Color::WHITE => s.index(),
@@ -241,6 +270,18 @@ pub fn evaluate(pos: &mut chess::Position) -> i32 {
     res -= evaluate_king_position(pos, phase);
     res -= evaluate_king_safety(pos, &moves_us, phase);
     pos.switch_color();
+
+    //if we are heading into a pawnless endgame, we aim to have a material advantage of five or
+    //higher
+    //let remaining_pawns = (pos.board[(chess::Color::WHITE, chess::Piece::PAWN)]
+    //                        | pos.board[(chess::Color::BLACK, chess::Piece::PAWN)]).count_ones();
+    //dampen eval quickly for material difference
+    //if remaining_pawns == 0 && pos.material_balance() < 6 {
+    //    res /= (6-pos.material_balance())*(6-pos.material_balance());
+    //}
+
+    //adjust evaluation to be lower near 50 move rule, since possibility of improvement may be
+    //dubious
     if pos.rule_50_count() > 80 {
         res / (pos.rule_50_count() - 80) as i32
     } else {

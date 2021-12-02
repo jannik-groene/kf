@@ -53,9 +53,9 @@ impl ABResultHash {
     #[inline(always)]
     fn get(&self, zobrist_key: u64) -> Option<ABResultHashEntry> {
         let entry = self.hash.read().unwrap()[zobrist_key as usize % self.size];
-        if entry.0.zobrist_hash == zobrist_key {
+        if entry.0.depth != 0 && entry.0.zobrist_hash == zobrist_key {
             Some(entry.0)
-        } else if entry.1.zobrist_hash == zobrist_key {
+        } else if entry.1.depth != 0 && entry.1.zobrist_hash == zobrist_key {
             Some(entry.1)
         } else {
             None
@@ -63,10 +63,11 @@ impl ABResultHash {
     }
     #[inline(always)]
     fn set(&mut self, zobrist_key: u64, entry: ABResultHashEntry) {
-        let mut hash = self.hash.write().unwrap();
-        if zobrist_key == 0 {
-            println!("debug Zero Zobrist Key found!");
+        //do not commit invalid scores or low depths to the hashtable
+        if matches!(entry.res.value, ABResultValueType::INFTY | ABResultValueType::NEGINFTY) {
+            return;
         }
+        let mut hash = self.hash.write().unwrap();
         //Mate scores may be seen as having infinite depth
         if hash[zobrist_key as usize % self.size].0.depth < entry.depth ||
             (matches!(entry.res.value, ABResultValueType::MATE(_))
@@ -155,7 +156,7 @@ impl ABResult {
         match self.value {
             ABResultValueType::CENTIS(c) => ABResult { value: ABResultValueType::CENTIS(c+1), typ: self.typ },
             ABResultValueType::MATE(_) => {
-                self.aspiration_lower(0)
+                self.aspiration_higher(0)
             },
             ABResultValueType::INFTY => *self,
             ABResultValueType::NEGINFTY => *self,
@@ -642,7 +643,10 @@ fn search(thread: &mut ABSearchMainThread, depth: u8, mut alpha: ABResult, mut b
     drop(thread.sender.send(EngineIO::SEARCHENDED(thread.search_info.id)));
 }
 
-fn is_tactical(m: chess::Move) -> bool {
+fn is_tactical(pos: &chess::Position, m: chess::Move) -> bool {
+    if pos.gives_check(&m) {
+        return true;
+    }
     match m.typ {
         chess::MoveType::CAPTURE(_)
             | chess::MoveType::PROMOTION(_)
@@ -704,6 +708,10 @@ fn search_step(thread: &mut impl ABSearchThread,
 
     }
 
+    //check for obviously drawn positions
+    if evaluate::is_material_draw(thread.pos()) {
+        return ABResult::DRAW;
+    }
 
     //Check if this is a terminal position
     let mut moves = thread.pos_mut().get_moves();
@@ -807,7 +815,7 @@ fn search_step(thread: &mut impl ABSearchThread,
                             //Apply lmr at sufficiently high depths on non-PV nodes
                             } else if zw && (depth+extension).saturating_sub(ply) > 4
                                          && !thread.pos_mut().in_check()
-                                         && !is_tactical(moves[i]) {
+                                         && !is_tactical(thread.pos(), moves[i]) {
                                 -search_step(thread,
                                              depth,
                                              ply+1,
@@ -843,6 +851,8 @@ fn search_step(thread: &mut impl ABSearchThread,
                                      movescore.neg_down());
         }
 
+        if movescore == ABResult::MIN {panic!("invalid result after searching {} of {} moves\nalpha {}, beta {}", i, moves.len(), alpha, beta);}
+
         thread.undo_move();
 
         //Abort search if the helper gets a stop signal
@@ -865,9 +875,14 @@ fn search_step(thread: &mut impl ABSearchThread,
             if score > alpha {
                 fail_low = false;
                 alpha = score;
+                //break search if result is already optimal
+                if alpha == ABResult::mate_in(1) {
+                    break;
+                }
             }
         }
     }
+
 
     if ply == 0 {
         thread.set_bestmove(bestmove);
@@ -878,13 +893,13 @@ fn search_step(thread: &mut impl ABSearchThread,
 
     let zh = thread.pos().zobrist_hash();
     if fail_low {
-        if ply < depth {
-            thread.move_hash_mut().set(zh, ABResultHashEntry::new(score.to_upperbound(), (depth-depth_reduction).saturating_sub(ply+depth_reduction), zh, bestmove.unwrap()));
+        if ply < depth && bestmove.is_some() {
+            thread.move_hash_mut().set(zh, ABResultHashEntry::new(score.to_upperbound(), (depth-depth_reduction + extension).saturating_sub(ply), zh, bestmove.unwrap()));
         }
         score.to_upperbound()
     } else {
-        if ply < depth {
-            thread.move_hash_mut().set(zh, ABResultHashEntry::new(score.to_exact(), (depth-depth_reduction).saturating_sub(ply), zh, bestmove.unwrap()));
+        if ply < depth && bestmove.is_some() {
+            thread.move_hash_mut().set(zh, ABResultHashEntry::new(score.to_exact(), (depth-depth_reduction+extension).saturating_sub(ply), zh, bestmove.unwrap()));
         }
         score.to_exact()
     }
@@ -894,6 +909,11 @@ fn quiesce(thread: &mut impl ABSearchThread, mut alpha: ABResult, beta: ABResult
 
     if qply > 0 {
         *thread.nodes_mut() += 1;
+    }
+
+    //check for obviously drawn positions
+    if evaluate::is_material_draw(thread.pos()) {
+        return ABResult::DRAW;
     }
 
     let mut cand_moves = thread.pos_mut().get_moves();
@@ -917,8 +937,7 @@ fn quiesce(thread: &mut impl ABSearchThread, mut alpha: ABResult, beta: ABResult
         }
 
         cand_moves = cand_moves.iter().copied().filter(|m| match m.typ {
-                                                        chess::MoveType::CAPTURE(_) => ABResult::exact_from_cents(static_eval_centis+thread.pos().see(*m)+delta) > alpha
-                                                                                        && thread.pos().see(*m) > 0,
+                                                        chess::MoveType::CAPTURE(_) => ABResult::exact_from_cents(static_eval_centis+thread.pos().see(*m)+delta) > alpha && thread.pos().see(*m) > 0,
                                                         chess::MoveType::PROMOTION(_) |
                                                         chess::MoveType::PROMOTIONCAPTURE((_,_)) => true,
                                                         chess::MoveType::ENPASSANT => ABResult::exact_from_cents(static_eval_centis+delta+100) > alpha,
