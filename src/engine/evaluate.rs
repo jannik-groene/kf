@@ -273,12 +273,12 @@ pub fn evaluate(pos: &mut chess::Position) -> i32 {
 
     //if we are heading into a pawnless endgame, we aim to have a material advantage of five or
     //higher
-    //let remaining_pawns = (pos.board[(chess::Color::WHITE, chess::Piece::PAWN)]
-    //                        | pos.board[(chess::Color::BLACK, chess::Piece::PAWN)]).count_ones();
-    //dampen eval quickly for material difference
-    //if remaining_pawns == 0 && pos.material_balance() < 6 {
-    //    res /= (6-pos.material_balance())*(6-pos.material_balance());
-    //}
+    let remaining_pawns = (pos.board[(chess::Color::WHITE, chess::Piece::PAWN)]
+                            | pos.board[(chess::Color::BLACK, chess::Piece::PAWN)]).count_ones();
+    //dampen eval quickly for low material difference
+    if remaining_pawns < 2 && pos.material_balance().abs() < 5 && pos.board.occupation.count_ones() < 7 {
+        res /= ((5-pos.material_balance())*(5-pos.material_balance())/(remaining_pawns as i32 + 1)).clamp(1,25);
+    }
 
     //adjust evaluation to be lower near 50 move rule, since possibility of improvement may be
     //dubious

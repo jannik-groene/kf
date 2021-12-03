@@ -851,8 +851,6 @@ fn search_step(thread: &mut impl ABSearchThread,
                                      movescore.neg_down());
         }
 
-        if movescore == ABResult::MIN {panic!("invalid result after searching {} of {} moves\nalpha {}, beta {}", i, moves.len(), alpha, beta);}
-
         thread.undo_move();
 
         //Abort search if the helper gets a stop signal
