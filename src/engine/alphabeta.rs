@@ -863,7 +863,9 @@ fn search_step(thread: &mut impl ABSearchThread,
             if ply < depth {
                 thread.move_hash_mut().set(zh, ABResultHashEntry::new(movescore.to_lowerbound(), depth-ply, zh, moves[i]));
             }
-            thread.register_killer(ply, moves[i]);
+            if !matches!(moves[i].typ, chess::MoveType::CAPTURE(_)) && ttmove != Some(moves[i]) {
+                thread.register_killer(ply, moves[i]);
+            }
             thread.invalidate_killers(ply);
             return movescore.to_lowerbound();
         }
