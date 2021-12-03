@@ -129,13 +129,23 @@ fn evaluate_bishops(pos: &mut chess::Position, phase: i32) -> i32 {
     for bishop in pos.board[(pos.color(), chess::Piece::BISHOP)].iter() {
             res += piece_table_value(chess::Piece::BISHOP, pos.color(), bishop, phase);
     }
+    //give a bonus for the bishop pair
+    //TODO: check that bishops are actually of opposite color.
+    if pos.piece_count(pos.color(), chess::Piece::BISHOP) >= 2 {
+        res += 50;
+    }
     res
 }
 
 fn evaluate_knights(pos: &mut chess::Position, phase: i32) -> i32 {
     let mut res: i32 = 0;
+    //we like knights in positions with many pawns
+    let pawns = pos.piece_count(chess::Color::WHITE, chess::Piece::PAWN) + pos.piece_count(chess::Color::BLACK, chess::Piece::PAWN);
+
     for knight in pos.board[(pos.color(), chess::Piece::KNIGHT)].iter() {
         res += piece_table_value(chess::Piece::KNIGHT, pos.color(), knight, phase);
+        //bonus for closed positions
+        res += 25 * pawns / 16;
     }
     res
 }
