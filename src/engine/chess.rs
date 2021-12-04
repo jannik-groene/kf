@@ -700,10 +700,10 @@ fn display_promotion(m: &Move) -> String {
         MoveType::PROMOTION(Piece::ROOK) => "r".to_string(),
         MoveType::PROMOTION(Piece::BISHOP) => "b".to_string(),
         MoveType::PROMOTION(Piece::KNIGHT) => "n".to_string(),
-        MoveType::PROMOTIONCAPTURE((_,Piece::QUEEN)) => "q".to_string(),
-        MoveType::PROMOTIONCAPTURE((_,Piece::ROOK)) => "r".to_string(),
-        MoveType::PROMOTIONCAPTURE((_,Piece::BISHOP)) => "b".to_string(),
-        MoveType::PROMOTIONCAPTURE((_,Piece::KNIGHT)) => "n".to_string(),
+        MoveType::PROMOTIONCAPTURE((Piece::QUEEN,_)) => "q".to_string(),
+        MoveType::PROMOTIONCAPTURE((Piece::ROOK,_)) => "r".to_string(),
+        MoveType::PROMOTIONCAPTURE((Piece::BISHOP,_)) => "b".to_string(),
+        MoveType::PROMOTIONCAPTURE((Piece::KNIGHT,_)) => "n".to_string(),
         _ => "".to_string()
     }
 }
