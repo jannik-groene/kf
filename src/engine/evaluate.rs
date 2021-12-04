@@ -212,17 +212,20 @@ fn phase_factor(pos: &chess::Position) -> i32 {
 fn evaluate_king_safety(pos: &chess::Position, moves_them: &Vec<chess::Move>, phase: i32) -> i32 {
     //We count attacks near our king. If there are many we penalize the evaluation.
     const DISTANCE_ONE_MULTIPLIER: i32 = 2;
-    //const DISTANCE_TWO_MULTIPLIER: i32 = 1;
-    const SCALE: i32 = 50;
+    const DISTANCE_TWO_MULTIPLIER: i32 = 1;
+    const SCALE: i32 = 32;
     let mut safety = 0;
     let king_pos = pos.board[(pos.color(), chess::Piece::KING)];
     let king_neighbours = chess::Board::get_neighbours(king_pos);
+    let king_next_neighbours = chess::Board::get_neighbours(king_pos);
     for m in moves_them {
         if m.to.square() & king_neighbours != 0 {
             safety -= DISTANCE_ONE_MULTIPLIER * (m.piece.value() / 100);
+        } else if m.to.square() & king_next_neighbours != 0 {
+            safety -= DISTANCE_TWO_MULTIPLIER * (m.piece.value() / 100);
         }
     }
-    let mut res = (400 - safety * safety).clamp(-3000,0) / SCALE;
+    let mut res = (500 - safety * safety).clamp(-15000,0) / SCALE;
 
     //In the early game we want pawns to shield our king.
     match pos.color() {

@@ -381,6 +381,9 @@ impl Board {
     pub fn get_neighbours(s: Square) -> Square {
         constants::NEIGHBOURS[s.index()]
     }
+    pub fn get_next_neighbours(s: Square) -> Square {
+        constants::NEXT_NEIGHBOURS[s.index()]
+    }
 }
 
 pub fn square_to_string(sq: Square) -> String{

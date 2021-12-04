@@ -21,6 +21,15 @@ def calculate_neighbours(n):
         neighbours |= n >> 9
     return neighbours
 
+def calculate_next_neighbours(n):
+    neighbours = calculate_neighbours(n)
+    nneighbours = 0
+    k = 0
+    for k in range(0,64):
+        if neighbours & (1 << k) != 0:
+            nneighbours |= calculate_neighbours(1 << k)
+    return neighbours ^ nneighbours
+
 def print_as_board(n):
     for y in range(8):
         line = ""
@@ -263,6 +272,12 @@ for i in range(64):
     print("    0x{0:016x},".format(moves))
 print("];")
 
+print("pub static NEXT_NEIGHBOURS: [u64;64] = [")
+for i in range(64):
+    moves = calculate_next_neighbours(1 << i)
+    print("    0x{0:016x},".format(moves))
+print("];")
+
 print("pub static KNIGHT_MOVES: [u64;64] = [")
 for i in range(64):
     moves = calculate_knight_moves(1 << i)
@@ -325,12 +340,15 @@ for p in ["KING","QUEEN","BISHOP","KNIGHT","ROOK","PAWN"]:
             print("    0x{:016x},".format(random.randint(0,18446744073709551615)))
         print("];")
 print("pub static ZOBRIST_CASTLING_NUMBERS: [u64;4] = [")
+
 for _ in range(4):
     print("    0x{:016x},".format(random.randint(0,18446744073709551615)))
 print("];")
+
 print("pub static ZOBRIST_ENPASSANT_NUMBERS: [u64;8] = [")
 for _ in range(8):
     print("    0x{:016x},".format(random.randint(0,18446744073709551615)))
 print("];")
+
 print("pub static ZOBRIST_BLACK_NUMBER: u64 = 0x{:016x};".format(random.randint(0,18446744073709551615)))
 
