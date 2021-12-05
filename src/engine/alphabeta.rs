@@ -793,8 +793,10 @@ fn search_step(thread: &mut impl ABSearchThread,
         let mut lmr = depth_reduction;
         if i > 2 && i <= 5 {
             lmr += 1;
-        } else if i > 5 {
+        } else if i > 5 && i <=8 {
             lmr += (depth + extension).saturating_sub(ply) / 3;
+        } else if i > 8 && i as u8 / 6 < (depth + extension).saturating_sub(ply) / 3 {
+            lmr += (depth + extension).saturating_sub(ply) / 3 + i as u8 / 6;
         }
 
         thread.do_move(moves[i]);
