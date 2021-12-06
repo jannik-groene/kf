@@ -727,28 +727,9 @@ fn search_step(thread: &mut impl ABSearchThread,
         return ABResult::mate_in(1).to_upperbound();
     }
 
-    //Try a null move to find a beta cutoff; search the first three plys fully.
-    //Should maybe avoid in late game?
-    if null_moves < std::cmp::max(depth / 6 + 1, 2)
-            && (evaluate::has_minor_pieces(thread.pos()) || evaluate::has_major_pieces(thread.pos()))
-            && !thread.pos_mut().in_check() && moves.len() > 0 && ply > 2
-            && ply < (depth+extension).saturating_sub(depth_reduction)
-            && !matches!(alpha.value, ABResultValueType::MATE(_))
-            && !matches!(beta.value, ABResultValueType::MATE(_)) {
-        thread.pos_mut().do_null_move();
-        let null_score = -search_step(thread,
-                                      depth,
-                                      ply+1,
-                                      depth_reduction + 3,
-                                      0,
-                                      null_moves + 1,
-                                      zw,
-                                      beta.neg_down(),
-                                      alpha.neg_down());
-        thread.pos_mut().undo_null_move();
-        if null_score >= beta {
-            return null_score.to_lowerbound();
-        }
+    //Repeated positions are probably draws
+    if thread.pos().pos_in_history() {
+        return ABResult::DRAW;
     }
 
     //Calculate the depth we are still to search.
@@ -770,6 +751,29 @@ fn search_step(thread: &mut impl ABSearchThread,
         let eval = thread.evaluate();//evaluate::evaluate(thread.pos_mut());
         if ABResult::exact_from_cents(eval + 500) < alpha {
             return quiesce(thread, alpha, beta, 100, 0);
+        }
+    }
+
+    //Try a null move to find a beta cutoff; search the first three plys fully.
+    //Should maybe avoid in late game?
+    if null_moves < std::cmp::max(depth / 6 + 1, 2)
+            && (evaluate::has_minor_pieces(thread.pos()) || evaluate::has_major_pieces(thread.pos()))
+            && !thread.pos_mut().in_check() && moves.len() > 0 && ply > 2
+            && !matches!(alpha.value, ABResultValueType::MATE(_))
+            && !matches!(beta.value, ABResultValueType::MATE(_)) {
+        thread.pos_mut().do_null_move();
+        let null_score = -search_step(thread,
+                                      depth,
+                                      ply+1,
+                                      depth_reduction + 3,
+                                      0,
+                                      null_moves + 1,
+                                      zw,
+                                      beta.neg_down(),
+                                      alpha.neg_down());
+        thread.pos_mut().undo_null_move();
+        if null_score >= beta {
+            return null_score.to_lowerbound();
         }
     }
 
@@ -801,11 +805,7 @@ fn search_step(thread: &mut impl ABSearchThread,
 
         thread.do_move(moves[i]);
 
-        let mut movescore = if thread.pos().pos_in_history() {
-                            //If we repeat twice, it's gonna happen thrice
-                                ABResult::DRAW
-                            //Do full searches at PV nodes,
-                            } else if i == 0 && !zw {
+        let mut movescore = if i == 0 && !zw {
                                 -search_step(thread,
                                              depth,
                                              ply+1,
