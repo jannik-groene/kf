@@ -751,19 +751,22 @@ fn search_step(thread: &mut impl ABSearchThread,
         }
     }
 
+    //Calculate the depth we are still to search.
+    let depth_left: u8 = depth.saturating_add(extension).saturating_sub(depth_reduction).saturating_sub(ply);
+
     //We extend the normal search if we are  in check, else go into quiescence
-    if ply >= depth.saturating_add(extension).saturating_sub(depth_reduction) && !thread.pos_mut().in_check() {
+    if depth_left == 0 && !thread.pos_mut().in_check() {
         return quiesce(thread, alpha, beta, 200 - 20 * depth_reduction as i32, 0);
     }
     //Futility pruning
-    else if depth > 3 && ply == depth - depth_reduction + extension - 1 {
+    else if depth > 3 && depth_left == 1 {
         let eval = thread.evaluate();//evaluate::evaluate(thread.pos_mut());
         if ABResult::exact_from_cents(eval + 300) < alpha {
             return quiesce(thread, alpha, beta, 100, 0);
         }
     }
     //Extended futility pruning
-    else if depth > 3 && ply == depth - depth_reduction + extension - 2 {
+    else if depth > 3 && depth_left == 2 {
         let eval = thread.evaluate();//evaluate::evaluate(thread.pos_mut());
         if ABResult::exact_from_cents(eval + 500) < alpha {
             return quiesce(thread, alpha, beta, 100, 0);
@@ -784,20 +787,17 @@ fn search_step(thread: &mut impl ABSearchThread,
 
     for i in 0..moves.len() {
 
-        //calculate total possible extension
-        if extension > u8::MAX - depth {
-            extension = u8::MAX - depth;
-        }
+        let sigmoid = |a,b,i,d| (i as f64 / (a + i as f64) * d as f64 / b) as u8;
 
         //lmr reduction depth
-        let mut lmr = depth_reduction;
-        if i > 2 && i <= 5 {
-            lmr += 1;
-        } else if i > 5 && i <=8 {
-            lmr += (depth + extension).saturating_sub(ply) / 3;
-        } else if i > 8 && i as u8 / 6 < (depth + extension).saturating_sub(ply) / 3 {
-            lmr += (depth + extension).saturating_sub(ply) / 3 + i as u8 / 6;
-        }
+        let mut lmr = if i < 2 {
+            0
+        } else {
+            1 + sigmoid(4.,2.5,i,depth_left)
+        };
+
+        //We do not reduce to zero moves left
+        lmr = std::cmp::min(lmr, depth_left.saturating_sub(1));
 
         thread.do_move(moves[i]);
 
@@ -809,21 +809,21 @@ fn search_step(thread: &mut impl ABSearchThread,
                                 -search_step(thread,
                                              depth,
                                              ply+1,
-                                             0,
+                                             0, //depth reduction is always zero PV nodes
                                              extension,
                                              null_moves,
                                              false,
                                              beta.neg_down(),
                                              alpha.neg_down())
                             //Apply lmr at sufficiently high depths on non-PV nodes
-                            } else if zw && (depth+extension).saturating_sub(ply) > 4
+                            } else if zw && depth_left > 2
                                          && !thread.pos_mut().in_check()
                                          && !is_tactical(thread.pos(), moves[i]) {
                                 -search_step(thread,
                                              depth,
                                              ply+1,
-                                             lmr,
-                                             0,
+                                             depth_reduction+lmr,
+                                             extension,
                                              null_moves,
                                              true,
                                              beta.neg_down(),
@@ -834,7 +834,7 @@ fn search_step(thread: &mut impl ABSearchThread,
                                              depth,
                                              ply+1,
                                              depth_reduction,
-                                             0,
+                                             extension,
                                              null_moves,
                                              true,
                                              alpha.zero_window().neg_down(),
@@ -862,9 +862,7 @@ fn search_step(thread: &mut impl ABSearchThread,
         //Adjust results
         if movescore >= beta {
             let zh = thread.pos().zobrist_hash();
-            if ply < depth {
-                thread.move_hash_mut().set(zh, ABResultHashEntry::new(movescore.to_lowerbound(), depth-ply, zh, moves[i]));
-            }
+            thread.move_hash_mut().set(zh, ABResultHashEntry::new(movescore.to_lowerbound(), depth_left, zh, moves[i]));
             if !matches!(moves[i].typ, chess::MoveType::CAPTURE(_)) && ttmove != Some(moves[i]) {
                 thread.register_killer(ply, moves[i]);
             }
@@ -886,6 +884,8 @@ fn search_step(thread: &mut impl ABSearchThread,
         }
     }
 
+    assert!(bestmove.is_some());
+    assert!(ABResult::MIN < score && score < ABResult::MAX);
 
     if ply == 0 {
         thread.set_bestmove(bestmove);
@@ -896,14 +896,10 @@ fn search_step(thread: &mut impl ABSearchThread,
 
     let zh = thread.pos().zobrist_hash();
     if fail_low {
-        if ply < depth && bestmove.is_some() {
-            thread.move_hash_mut().set(zh, ABResultHashEntry::new(score.to_upperbound(), (depth-depth_reduction + extension).saturating_sub(ply), zh, bestmove.unwrap()));
-        }
+        thread.move_hash_mut().set(zh, ABResultHashEntry::new(score.to_upperbound(), depth_left, zh, bestmove.unwrap()));
         score.to_upperbound()
     } else {
-        if ply < depth && bestmove.is_some() {
-            thread.move_hash_mut().set(zh, ABResultHashEntry::new(score.to_exact(), (depth-depth_reduction+extension).saturating_sub(ply), zh, bestmove.unwrap()));
-        }
+        thread.move_hash_mut().set(zh, ABResultHashEntry::new(score.to_exact(), depth_left, zh, bestmove.unwrap()));
         score.to_exact()
     }
 }
