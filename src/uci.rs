@@ -79,7 +79,7 @@ impl UCIHandler for engine::Engine {
     fn uci_loop(&mut self) {
         let mut waiting_for_search_end = false;
         let tx = self.get_sender();
-        let mut last_search_update: Option<engine::alphabeta::SearchInfo> = None;
+        let mut last_search_update: Option<engine::search::SearchInfo> = None;
         std::thread::spawn(|| read_input(tx));
         loop {
             match self.receiver().recv() {

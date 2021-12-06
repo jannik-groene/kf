@@ -3,7 +3,7 @@ use std::fmt::Display;
 
 pub mod chess;
 pub mod evaluate;
-pub mod alphabeta;
+pub mod search;
 
 #[derive(Clone,PartialEq)]
 enum OptionValue {
@@ -107,7 +107,7 @@ impl EngineConfig {
 }
 
 pub struct Engine {
-    search: alphabeta::ABSearchManager,
+    search: search::ABSearchManager,
     pub config: EngineConfig,
     //ID of the current search
     search_id: u64,
@@ -117,7 +117,7 @@ pub struct Engine {
 #[derive(Clone)]
 pub enum EngineIO {
     UCIINPUT(String),
-    SEARCHUPDATE(alphabeta::SearchInfo),
+    SEARCHUPDATE(search::SearchInfo),
     SEARCHENDED(u64),
     TIMERENDED(u64),
 }
@@ -125,7 +125,7 @@ pub enum EngineIO {
 impl Engine {
     pub fn new() -> Engine {
         let config = EngineConfig::new();
-        let mut search = alphabeta::ABSearchManager::new();
+        let mut search = search::ABSearchManager::new();
         let threads = match config.get_option("Threads").unwrap() { OptionValue::SPIN(n) => n}; //, _ => 1 };
         let hash_size = match config.get_option("Hash").unwrap() { OptionValue::SPIN(n) => n}; //, _ => 1 };
         search.set_threads(threads as usize);
