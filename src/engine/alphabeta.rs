@@ -728,7 +728,7 @@ fn search_step(thread: &mut impl ABSearchThread,
     }
 
     //Repeated positions are probably draws
-    if thread.pos().pos_in_history() {
+    if thread.pos().pos_in_history() && ply > 0 {
         return ABResult::DRAW;
     }
 
@@ -758,7 +758,7 @@ fn search_step(thread: &mut impl ABSearchThread,
     //Should maybe avoid in late game?
     if null_moves < std::cmp::max(depth / 6 + 1, 2)
             && (evaluate::has_minor_pieces(thread.pos()) || evaluate::has_major_pieces(thread.pos()))
-            && !thread.pos_mut().in_check() && moves.len() > 0 && ply > 2
+            && !thread.pos_mut().in_check() && moves.len() > 2 && ply > 2
             && !matches!(alpha.value, ABResultValueType::MATE(_))
             && !matches!(beta.value, ABResultValueType::MATE(_)) {
         thread.pos_mut().do_null_move();
@@ -791,17 +791,11 @@ fn search_step(thread: &mut impl ABSearchThread,
 
     for i in 0..moves.len() {
 
-        let sigmoid = |a,b,i,d| (i as f64 / (a + i as f64) * d as f64 / b) as u8;
-
         //lmr reduction depth
-        let mut lmr = if i < 2 {
-            0
-        } else {
-            1 + sigmoid(4.,2.5,i,depth_left)
-        };
+        let mut lmr = ((depth_left as f64).sqrt() * (i as f64).sqrt() / 7.) as u8;
 
         //We do not reduce to zero moves left
-        lmr = std::cmp::min(lmr, depth_left.saturating_sub(1));
+        lmr = lmr.clamp(0, depth_left - 1);
 
         thread.do_move(moves[i]);
 
@@ -833,7 +827,7 @@ fn search_step(thread: &mut impl ABSearchThread,
                                 -search_step(thread,
                                              depth,
                                              ply+1,
-                                             depth_reduction,
+                                             depth_reduction+lmr/3,
                                              extension,
                                              null_moves,
                                              true,
