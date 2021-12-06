@@ -1,8 +1,11 @@
 pub mod nnue;
+pub mod eval;
 mod piecetables;
 use super::chess;
 use super::chess::{SquareMethods, SquareIndexMethods};
 use rand::{Rng, thread_rng};
+
+use eval::{Eval, Bound, Value};
 
 pub fn has_pawns(pos: &chess::Position) -> bool {
     pos.board[(chess::Color::WHITE, chess::Piece::PAWN)]
@@ -256,7 +259,7 @@ fn evaluate_king_safety(pos: &chess::Position, moves_them: &Vec<chess::Move>, ph
     res
 }
 
-pub fn evaluate(pos: &mut chess::Position) -> i32 {
+pub fn evaluate(pos: &mut chess::Position) -> Eval {
     let phase = phase_factor(pos);
     let moves_us = pos.get_moves();
     let mut res = pos.material_balance()*100 + 20;
@@ -265,7 +268,7 @@ pub fn evaluate(pos: &mut chess::Position) -> i32 {
     res += evaluate_mobility(&moves_us, &moves_them, phase);
     pos.switch_color();
     if res.abs() > 900 {
-        return res;
+        return Eval::new(Bound::EXACT, Value::CENTIS(res));
     }
     res += evaluate_pawns(pos, phase);
     res += evaluate_queens(pos, phase);
@@ -296,10 +299,9 @@ pub fn evaluate(pos: &mut chess::Position) -> i32 {
     //adjust evaluation to be lower near 50 move rule, since possibility of improvement may be
     //dubious
     if pos.rule_50_count() > 80 {
-        res / (pos.rule_50_count() - 80) as i32
-    } else {
-        res
+        res /= (pos.rule_50_count() - 80) as i32
     }
+    Eval::new(Bound::EXACT, Value::CENTIS(res))
 }
 
 pub fn order_moves(movs: &mut Vec<chess::Move>, pos: &chess::Position,
@@ -323,5 +325,5 @@ fn evaluate_start_pos() {
     let eval = evaluate(&mut pos);
     println!("Eval {}", eval);
     //everything should be equal up to the tempo
-    assert!(eval == 20);
+    assert!(eval.value() == Value::CENTIS(20));
 }

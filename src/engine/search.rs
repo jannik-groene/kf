@@ -1,231 +1,21 @@
-use super::evaluate;
 use std::time::Instant;
 use std::sync::{Arc, RwLock};
-use std::cmp::{PartialOrd, Ord};
-use std::ops::Neg;
-use std::fmt::Display;
 use std::io::Write;
 
 use std::sync::mpsc::Sender;
-use super::EngineIO;
 
 mod tt;
 
 use tt::{TranspositionTable, TTEntry};
+use super::EngineIO;
 use super::chess::{Position, Piece, Move, Color, MoveType};
-
-#[derive(Clone,PartialEq,Copy,Eq)]
-pub enum ABResultValueType {
-    MATE(i32),
-    CENTIS(i32),
-    NEGINFTY,
-    INFTY,
-}
-
-#[derive(Clone,PartialEq,Copy,Eq)]
-pub enum ABResultType {
-    EXACT,
-    UPPERBOUND,
-    LOWERBOUND,
-}
-
-#[derive(Clone,PartialEq,Copy,Eq)]
-pub struct ABResult {
-    typ: ABResultType,
-    value: ABResultValueType,
-}
-
-
-impl ABResult {
-    const MIN: ABResult = ABResult {typ: ABResultType::EXACT, value: ABResultValueType::NEGINFTY};
-    const MAX: ABResult = ABResult {typ: ABResultType::EXACT, value: ABResultValueType::INFTY};
-    const MATE_NOW: ABResult = ABResult {typ: ABResultType::EXACT, value: ABResultValueType::MATE(0)};
-    const STALEMATE: ABResult = ABResult {typ: ABResultType::EXACT, value: ABResultValueType::CENTIS(0)};
-    const DRAW: ABResult = ABResult {typ: ABResultType::EXACT, value: ABResultValueType::CENTIS(0)};
-    fn mate_in(moves: i32) -> ABResult {
-        ABResult {typ: ABResultType::EXACT, value: ABResultValueType::MATE(moves)}
-    }
-    fn exact_from_cents(centis: i32) -> ABResult {
-        ABResult {typ: ABResultType::EXACT, value: ABResultValueType::CENTIS(centis)}
-    }
-    #[allow(dead_code)]
-    fn lowerbound_from_cents(centis: i32) -> ABResult {
-        ABResult {typ: ABResultType::LOWERBOUND, value: ABResultValueType::CENTIS(centis)}
-    }
-    #[allow(dead_code)]
-    fn upperbound_from_cents(centis: i32) -> ABResult {
-        ABResult {typ: ABResultType::UPPERBOUND, value: ABResultValueType::CENTIS(centis)}
-    }
-    fn to_exact(&self) -> ABResult {
-        ABResult {typ: ABResultType::EXACT, value: self.value}
-    }
-    fn to_lowerbound(&self) -> ABResult {
-        ABResult {typ: ABResultType::LOWERBOUND, value: self.value}
-    }
-    fn to_upperbound(&self) -> ABResult {
-        ABResult {typ: ABResultType::UPPERBOUND, value: self.value}
-    }
-    const ASPIRATION_ADJUSTMENTS: [i32; 5] = [25, 50, 200, 400, 800];
-    fn aspiration_lower(&self, count: usize) -> ABResult {
-        if count >= 5 {
-            return ABResult{typ: ABResultType::EXACT, value: ABResultValueType::NEGINFTY};
-        }
-        match self.value {
-            ABResultValueType::CENTIS(c) => ABResult { typ: self.typ, value: ABResultValueType::CENTIS(c-ABResult::ASPIRATION_ADJUSTMENTS[count]) },
-            //In case of mate take the next worse mate score, e.g. mate in 2 if we are being mated
-            //in 3 or mate in 5 if we will mate in 3
-            ABResultValueType::MATE(m) => {
-                let mut val = ABResultValueType::NEGINFTY;
-                //We are mating, so the next worse thing is mating slower
-                if m % 2 == 1 {
-                    val = ABResultValueType::MATE(m+2);
-                } else if m > 1 { //We are getting mated so we aspire to do so faster, if at all possible
-                    val = ABResultValueType::MATE(m-2);
-                }
-                ABResult{ typ: self.typ, value: val }
-            },
-            _ => ABResult{typ: ABResultType::EXACT, value: self.value}
-        }
-    }
-    fn aspiration_higher(&self, count: usize) -> ABResult {
-        if count >= 5 {
-            return ABResult{typ: ABResultType::EXACT, value: ABResultValueType::INFTY};
-        }
-        match self.value {
-            ABResultValueType::CENTIS(c) => ABResult { typ: self.typ, value: ABResultValueType::CENTIS(c+ABResult::ASPIRATION_ADJUSTMENTS[count]) },
-            //In case of mate take the next best mate score, e.g. mate in 4 if we are being mated
-            //in 2 or mate in 3 if we will mate in 5
-            ABResultValueType::MATE(m) => {
-                let mut val = ABResultValueType::INFTY;
-                //We are getting mated, so the next best thing is getting mated slower
-                if m % 2 == 0 {
-                    val = ABResultValueType::MATE(m+2);
-                } else if m > 1 { //We are mating so we aspire to do so faster, if at all possible
-                    val = ABResultValueType::MATE(m-2);
-                }
-                ABResult{ typ: self.typ, value: val }
-            },
-            _ => ABResult{typ: ABResultType::EXACT, value: ABResultValueType::INFTY}
-        }
-
-    }
-    fn zero_window(&self) -> ABResult {
-        match self.value {
-            ABResultValueType::CENTIS(c) => ABResult { value: ABResultValueType::CENTIS(c+1), typ: self.typ },
-            ABResultValueType::MATE(_) => {
-                self.aspiration_higher(0)
-            },
-            ABResultValueType::INFTY => *self,
-            ABResultValueType::NEGINFTY => *self,
-        }
-    }
-    //Use to pass ab-bounds down the tree
-    fn neg_down(&self) -> ABResult {
-        let val = match self.value {
-            ABResultValueType::MATE(m) => if m == 0 {ABResultValueType::INFTY} else {ABResultValueType::MATE(m-1)},
-            ABResultValueType::CENTIS(c) => ABResultValueType::CENTIS(-c),
-            ABResultValueType::NEGINFTY => ABResultValueType::INFTY,
-            ABResultValueType::INFTY => ABResultValueType::NEGINFTY,
-        };
-        ABResult {value: val, typ: self.typ}
-    }
-}
-
-impl Display for ABResult {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match write!(f,"score ") {
-            Err(e) => {return std::fmt::Result::Err(e);},
-            _ => {},
-        }
-        match {match self.value {
-            ABResultValueType::CENTIS(c) => write!(f, "cp {}", c),
-            ABResultValueType::INFTY => write!(f, "cp 100000000"),
-            ABResultValueType::NEGINFTY => write!(f, "cp -100000000"),
-            ABResultValueType::MATE(m) =>write!(f, "mate {}", (2*(m%2)-1)*(m+1)/2),
-            }} {
-            Err(e) => {return std::fmt::Result::Err(e);},
-            _ => {},
-        }
-        match self.typ {
-            ABResultType::LOWERBOUND => write!(f," lowerbound"),
-            ABResultType::UPPERBOUND => write!(f," upperbound"),
-            ABResultType::EXACT => write!(f,""),
-        }
-    }
-}
-
-//Neg moves a result UP the searchtree, i.e. mates become father away. Use ABResult::neg_down
-impl Neg for ABResultValueType {
-    type Output = Self;
-    fn neg(self) -> Self {
-        match self {
-            Self::MATE(m) => Self::MATE(m+1),
-            Self::CENTIS(c) => Self::CENTIS(-c),
-            Self::NEGINFTY => Self::INFTY,
-            Self::INFTY => Self::NEGINFTY,
-        }
-    }
-}
-
-impl Neg for ABResult {
-    type Output = ABResult;
-    fn neg(self) -> Self {
-        ABResult {
-            typ: match self.typ {
-                ABResultType::EXACT => ABResultType::EXACT,
-                ABResultType::UPPERBOUND => ABResultType::LOWERBOUND,
-                ABResultType::LOWERBOUND => ABResultType::UPPERBOUND,
-            },
-            value: -self.value,
-        }
-    }
-}
-
-impl Ord for ABResult {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.partial_cmp(other).unwrap()
-    }
-}
-
-impl PartialOrd for ABResult {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering>{
-        match self.value {
-            ABResultValueType::MATE(m) => match other.value {
-                ABResultValueType::MATE(m2) => {
-                    //Note that we have m2.cmp(m), since mate in 3 plys is better than mate in
-                    //5 plys
-                    if m % 2 == 1 && m2 % 2 == 1 { Some(m2.cmp(&m)) }
-                    else if m % 2 == 1 && m2 % 2 == 0 { Some(std::cmp::Ordering::Greater) }
-                    else if m % 2 == 1 && m2 % 2 == 1 { Some(std::cmp::Ordering::Less) }
-                    //If we get mated, a long time off is best!
-                    else { Some(m.cmp(&m2)) }
-                }
-                ABResultValueType::INFTY => Some(std::cmp::Ordering::Less),
-                ABResultValueType::NEGINFTY => Some(std::cmp::Ordering::Greater),
-                ABResultValueType::CENTIS(_) => if m % 2 == 1 { Some(std::cmp::Ordering::Greater) } else { Some(std::cmp::Ordering::Less) },
-            },
-            ABResultValueType::INFTY => match other.value {
-                ABResultValueType::INFTY => Some(std::cmp::Ordering::Equal),
-                _ => Some(std::cmp::Ordering::Greater),
-            },
-            ABResultValueType::NEGINFTY => match other.value {
-                ABResultValueType::NEGINFTY => Some(std::cmp::Ordering::Equal),
-                _ => Some(std::cmp::Ordering::Less),
-            },
-            ABResultValueType::CENTIS(c) => match other.value {
-                ABResultValueType::MATE(m) => if m % 2 == 1 { Some(std::cmp::Ordering::Less) } else { Some(std::cmp::Ordering::Greater) },
-                ABResultValueType::INFTY => Some(std::cmp::Ordering::Less),
-                ABResultValueType::NEGINFTY => Some(std::cmp::Ordering::Greater),
-                ABResultValueType::CENTIS(c2) => Some(c.cmp(&c2)),
-            }
-        }
-    }
-}
+use super::evaluate::{evaluate, order_moves, has_major_pieces, has_minor_pieces, is_material_draw};
+use super::evaluate::eval::{Eval, Value, Bound};
 
 #[derive(Clone)]
 pub struct SearchInfo {
     pub bestmove: Option<Move>,
-    pub eval: ABResult,
+    pub eval: Eval,
     pub depth: u8,
     pub pv: Vec<Move>,
     pub nodes: u64,
@@ -236,7 +26,7 @@ impl SearchInfo {
     fn new(id: u64) -> SearchInfo {
         SearchInfo {
             bestmove: None,
-            eval: ABResult::MIN,
+            eval: Eval::MIN,
             depth: 0,
             pv: Vec::new(),
             nodes: 0,
@@ -251,7 +41,6 @@ pub struct ABSearchManager {
     tt: TranspositionTable,
     stop_flag: Arc<RwLock<bool>>,
     search_info: SearchInfo,
-    //nnue: evaluate::nnue::NNUEState,
 }
 
 impl ABSearchManager {
@@ -262,7 +51,6 @@ impl ABSearchManager {
             tt: TranspositionTable::new(2),
             stop_flag: Arc::new(RwLock::new(false)),
             search_info: SearchInfo::new(0),
-            //nnue: evaluate::nnue::NNUEState::from_weights(std::path::Path::new("/home/jannik/Code/kf/model.nnue")),
         }
     }
     pub fn set_hash_size(&mut self, size: usize) {
@@ -291,7 +79,7 @@ impl ABSearchManager {
             killers: Vec::new(),
             //nnue: self.nnue.clone(),
         };
-        std::thread::spawn(move || search(&mut root_search_info, depth, ABResult::MIN, ABResult::MAX))
+        std::thread::spawn(move || search(&mut root_search_info, depth, Eval::MIN, Eval::MAX))
     }
     pub fn reset_search_info(&mut self, id: u64) {
         self.search_info = SearchInfo::new(id);
@@ -325,11 +113,10 @@ trait ABSearchThread {
     fn threads(&self) -> usize {1}
     fn set_bestmove(&mut self, _m: Option<Move>) {}
 
-    //fn nnue(&mut self) -> &mut evaluate::nnue::NNUEState;
     fn do_move(&mut self, m: Move);
     fn undo_move(&mut self);
 
-    fn evaluate(&mut self) -> i32;
+    fn evaluate(&mut self) -> Eval;
 
     //save and retrieve killer moves
     fn register_killer(&mut self, ply: u8, m: Move);
@@ -347,7 +134,6 @@ struct ABSearchMainThread {
     sender: Sender<EngineIO>,
     bestmove: Option<Move>,
     killers: Vec<([Option<Move>; 2], [u8; 2])>,
-    //nnue: evaluate::nnue::NNUEState,
 }
 
 impl ABSearchThread for ABSearchMainThread {
@@ -363,18 +149,14 @@ impl ABSearchThread for ABSearchMainThread {
     fn set_bestmove(&mut self, m: Option<Move>) {
         self.bestmove = m;
     }
-    //fn nnue(&mut self) -> &mut evaluate::nnue::NNUEState {&mut self.nnue}
     fn do_move(&mut self, m: Move) {
-        //self.nnue.do_move(m, &self.pos);
         self.pos.do_move(m);
     }
     fn undo_move(&mut self) {
         self.pos.undo_move();
-        //self.nnue.undo_move(m, &self.pos);
     }
-    fn evaluate(&mut self) -> i32 {
-        //self.nnue.evaluate_position(&self.pos) / 10
-        evaluate::evaluate(self.pos_mut())
+    fn evaluate(&mut self) -> Eval {
+        evaluate(self.pos_mut())
     }
 
     fn register_killer(&mut self, ply: u8, m: Move) {
@@ -438,7 +220,6 @@ struct ABSearchHelperThread {
     tt: TranspositionTable,
     stop_flag: Arc<RwLock<bool>>,
     killers: Vec<([Option<Move>; 2], [u8; 2])>,
-    //nnue: evaluate::nnue::NNUEState,
 }
 
 impl ABSearchThread for ABSearchHelperThread {
@@ -450,18 +231,14 @@ impl ABSearchThread for ABSearchHelperThread {
     fn tt_mut(&mut self) -> &mut TranspositionTable {&mut self.tt}
     fn is_helper(&self) -> bool {true}
     fn stop_flag(&self) -> &Arc<RwLock<bool>> {&self.stop_flag}
-    //fn nnue(&mut self) -> &mut evaluate::nnue::NNUEState {&mut self.nnue}
     fn do_move(&mut self, m: Move) {
-        //self.nnue.do_move(m, &self.pos);
         self.pos.do_move(m);
     }
     fn undo_move(&mut self) {
         self.pos.undo_move();
-        //self.nnue.undo_move(m, &self.pos);
     }
-    fn evaluate(&mut self) -> i32 {
-        //self.nnue.evaluate_position(&self.pos) / 10
-        evaluate::evaluate(self.pos_mut())
+    fn evaluate(&mut self) -> Eval {
+        evaluate(self.pos_mut())
     }
     fn register_killer(&mut self, ply: u8, m: Move) {
         if self.killers.len() <= ply as usize {
@@ -494,13 +271,13 @@ impl ABSearchThread for ABSearchHelperThread {
 }
 
 impl ABSearchHelperThread {
-    fn search(&mut self, depth: u8, alpha: ABResult, beta: ABResult) -> u64 {
+    fn search(&mut self, depth: u8, alpha: Eval, beta: Eval) -> u64 {
         search_step(self, depth, 0, 0, 0, 0, false, alpha, beta);
         self.nodes
     }
 }
 
-fn search(thread: &mut ABSearchMainThread, depth: u8, mut alpha: ABResult, mut beta: ABResult) {
+fn search(thread: &mut ABSearchMainThread, depth: u8, mut alpha: Eval, mut beta: Eval) {
     let now = Instant::now();
     let mut helper_handles = Vec::new();
     let helper_stop_flag = Arc::new(RwLock::new(false));
@@ -544,8 +321,8 @@ fn search(thread: &mut ABSearchMainThread, depth: u8, mut alpha: ABResult, mut b
             }
             println!("info nodes {} nps {}", thread.nodes(), 1000* *thread.nodes() as u128 /now.elapsed().as_millis().clamp(1,u128::MAX));
             //We reached the target depth and stopped, so we update the external values
-            match eval.typ {
-                ABResultType::EXACT => {
+            match eval.bound() {
+                Bound::EXACT => {
                     println!("info {} depth {} time {}", eval, d, now.elapsed().as_millis());
                     thread.print_pv(d);
                     thread.search_info.eval = eval;
@@ -559,12 +336,12 @@ fn search(thread: &mut ABSearchMainThread, depth: u8, mut alpha: ABResult, mut b
                     beta = eval.aspiration_higher(0);
                     break;
                 },
-                ABResultType::LOWERBOUND => {
+                Bound::LOWERBOUND => {
                     println!("info {} depth {} time {}", eval, d, now.elapsed().as_millis());
                     fail_highs += 1;
                     beta = eval.aspiration_higher(fail_highs);
                 }
-                ABResultType::UPPERBOUND => {
+                Bound::UPPERBOUND => {
                     println!("info {} depth {} time {}", eval, d, now.elapsed().as_millis());
                     fail_lows += 1;
                     alpha = eval.aspiration_lower(fail_lows);
@@ -603,8 +380,8 @@ fn search_step(thread: &mut impl ABSearchThread,
                mut extension: u8,
                null_moves: u8,
                zw: bool,
-               mut alpha: ABResult,
-               beta: ABResult) -> ABResult {
+               mut alpha: Eval,
+               beta: Eval) -> Eval {
 
     *thread.nodes_mut() += 1;
 
@@ -616,21 +393,21 @@ fn search_step(thread: &mut impl ABSearchThread,
     if hash_entry.is_some() && hash_entry.unwrap().mov().is_some() {
         //see if we have a TT-hit
         if hash_entry.unwrap().depth() >= (depth+extension).saturating_sub(ply) {
-            match hash_entry.unwrap().res().typ {
-                ABResultType::EXACT => {
+            match hash_entry.unwrap().eval().bound() {
+                Bound::EXACT => {
                     if ply == 0 {
                         thread.set_bestmove(hash_entry.unwrap().mov());
                     }
-                    return hash_entry.unwrap().res();
+                    return hash_entry.unwrap().eval();
                 },
-                ABResultType::LOWERBOUND => {
-                    if hash_entry.unwrap().res() >= beta {
-                        return hash_entry.unwrap().res();
+                Bound::LOWERBOUND => {
+                    if hash_entry.unwrap().eval() >= beta {
+                        return hash_entry.unwrap().eval();
                     }
                 },
-                ABResultType::UPPERBOUND => {
-                    if hash_entry.unwrap().res() < alpha {
-                        return hash_entry.unwrap().res();
+                Bound::UPPERBOUND => {
+                    if hash_entry.unwrap().eval() < alpha {
+                        return hash_entry.unwrap().eval();
                     }
                 }
             }
@@ -641,27 +418,27 @@ fn search_step(thread: &mut impl ABSearchThread,
     }
 
     //check for obviously drawn positions
-    if evaluate::is_material_draw(thread.pos()) {
-        return ABResult::DRAW;
+    if is_material_draw(thread.pos()) {
+        return Eval::DRAW;
     }
 
     //Check if this is a terminal position
     let mut moves = thread.pos_mut().get_moves();
 
     if moves.len() == 0 && thread.pos_mut().in_check() {
-        return ABResult::MATE_NOW;
+        return Eval::MATE_NOW;
     } else if moves.len() == 0 {
-        return ABResult::STALEMATE;
+        return Eval::STALEMATE;
     }
 
     //If we cannot beat the score, just return immediately
-    if alpha.value == ABResultValueType::MATE(1) {
-        return ABResult::mate_in(1).to_upperbound();
+    if alpha.value() == Value::MATE(1) {
+        return Eval::mate_in(1).to_upperbound();
     }
 
     //Repeated positions are probably draws
     if thread.pos().pos_in_history() && ply > 0 {
-        return ABResult::DRAW;
+        return Eval::DRAW;
     }
 
     //Calculate the depth we are still to search.
@@ -673,15 +450,15 @@ fn search_step(thread: &mut impl ABSearchThread,
     }
     //Futility pruning
     else if depth > 3 && depth_left == 1 {
-        let eval = thread.evaluate();//evaluate::evaluate(thread.pos_mut());
-        if ABResult::exact_from_cents(eval + 300) < alpha {
+        let eval = thread.evaluate();
+        if eval + 300 < alpha {
             return quiesce(thread, alpha, beta, 100, 0);
         }
     }
     //Extended futility pruning
     else if depth > 3 && depth_left == 2 {
-        let eval = thread.evaluate();//evaluate::evaluate(thread.pos_mut());
-        if ABResult::exact_from_cents(eval + 500) < alpha {
+        let eval = thread.evaluate();
+        if eval + 500 < alpha {
             return quiesce(thread, alpha, beta, 100, 0);
         }
     }
@@ -689,10 +466,10 @@ fn search_step(thread: &mut impl ABSearchThread,
     //Try a null move to find a beta cutoff; search the first three plys fully.
     //Should maybe avoid in late game?
     if null_moves < std::cmp::max(depth / 6 + 1, 2)
-            && (evaluate::has_minor_pieces(thread.pos()) || evaluate::has_major_pieces(thread.pos()))
+            && (has_minor_pieces(thread.pos()) || has_major_pieces(thread.pos()))
             && !thread.pos_mut().in_check() && moves.len() > 2 && ply > 2
-            && !matches!(alpha.value, ABResultValueType::MATE(_))
-            && !matches!(beta.value, ABResultValueType::MATE(_)) {
+            && !matches!(alpha.value(), Value::MATE(_))
+            && !matches!(beta.value(), Value::MATE(_)) {
         thread.pos_mut().do_null_move();
         let null_score = -search_step(thread,
                                       depth,
@@ -710,10 +487,10 @@ fn search_step(thread: &mut impl ABSearchThread,
     }
 
     //Move ordering
-    evaluate::order_moves(&mut moves, thread.pos(), ttmove, thread.get_killers(ply));
+    order_moves(&mut moves, thread.pos(), ttmove, thread.get_killers(ply));
 
     //Set up paramaters
-    let mut score = ABResult::MIN;
+    let mut score = Eval::MIN;
     let mut fail_low = true;
     let mut bestmove = None;
 
@@ -783,7 +560,7 @@ fn search_step(thread: &mut impl ABSearchThread,
         thread.undo_move();
 
         //Abort search if the helper gets a stop signal
-        if thread.stop_flag().read().unwrap().eq(&true) {return ABResult::MIN;};
+        if thread.stop_flag().read().unwrap().eq(&true) {return Eval::MIN;};
 
         //Adjust results
         if movescore >= beta {
@@ -803,7 +580,7 @@ fn search_step(thread: &mut impl ABSearchThread,
                 fail_low = false;
                 alpha = score;
                 //break search if result is already optimal
-                if alpha == ABResult::mate_in(1) {
+                if alpha == Eval::mate_in(1) {
                     break;
                 }
             }
@@ -811,7 +588,7 @@ fn search_step(thread: &mut impl ABSearchThread,
     }
 
     assert!(bestmove.is_some());
-    assert!(ABResult::MIN < score && score < ABResult::MAX);
+    assert!(Eval::MIN < score && score < Eval::MAX);
 
     if ply == 0 {
         thread.set_bestmove(bestmove);
@@ -830,26 +607,25 @@ fn search_step(thread: &mut impl ABSearchThread,
     }
 }
 
-fn quiesce(thread: &mut impl ABSearchThread, mut alpha: ABResult, beta: ABResult, delta: i32, qply: u8) -> ABResult {
+fn quiesce(thread: &mut impl ABSearchThread, mut alpha: Eval, beta: Eval, delta: i32, qply: u8) -> Eval {
 
     if qply > 0 {
         *thread.nodes_mut() += 1;
     }
 
     //check for obviously drawn positions
-    if evaluate::is_material_draw(thread.pos()) {
-        return ABResult::DRAW;
+    if is_material_draw(thread.pos()) {
+        return Eval::DRAW;
     }
 
     let mut cand_moves = thread.pos_mut().get_moves();
 
     //check for terminal position
     if cand_moves.len() == 0 && thread.pos_mut().in_check() {
-        return ABResult::MATE_NOW;
+        return Eval::MATE_NOW;
     }
 
-    let static_eval_centis = thread.evaluate();//evaluate::evaluate(thread.pos_mut());
-    let static_eval = ABResult::exact_from_cents(static_eval_centis);
+    let static_eval = thread.evaluate();
 
     //If we are not in check we filter for tactical moves.
     if !thread.pos_mut().in_check() {
@@ -862,10 +638,10 @@ fn quiesce(thread: &mut impl ABSearchThread, mut alpha: ABResult, beta: ABResult
         }
 
         cand_moves = cand_moves.iter().copied().filter(|m| match m.typ {
-                                                        MoveType::CAPTURE(_) => ABResult::exact_from_cents(static_eval_centis+thread.pos().see(*m)+delta) > alpha && thread.pos().see(*m) > 0,
+                                                        MoveType::CAPTURE(_) => static_eval + thread.pos().see(*m)+delta > alpha && thread.pos().see(*m) > 0,
                                                         MoveType::PROMOTION(_) |
                                                         MoveType::PROMOTIONCAPTURE((_,_)) => true,
-                                                        MoveType::ENPASSANT => ABResult::exact_from_cents(static_eval_centis+delta+100) > alpha,
+                                                        MoveType::ENPASSANT => static_eval+delta+100 > alpha,
                                                         _ => false}).collect();
         if cand_moves.len() == 0 {
             return static_eval;
@@ -896,20 +672,5 @@ fn quiesce(thread: &mut impl ABSearchThread, mut alpha: ABResult, beta: ABResult
         }
     }
     alpha
-}
-
-//Tests
-#[test]
-fn ab_comp_test() {
-    assert!(ABResult::MIN < ABResult::MAX);
-    assert!(ABResult::MIN < ABResult::MATE_NOW);
-    assert!(ABResult::MATE_NOW < ABResult::MAX);
-    assert!(ABResult::MATE_NOW < ABResult::exact_from_cents(-100));
-    assert!(ABResult::exact_from_cents(-100) < ABResult::exact_from_cents(100));
-    assert!(ABResult::exact_from_cents(100) < -ABResult::MATE_NOW);
-    assert!(ABResult::MATE_NOW < -ABResult::MATE_NOW);
-    assert!(-ABResult::MATE_NOW > ABResult::MATE_NOW);
-    assert!(-ABResult::MATE_NOW == ABResult{typ: ABResultType::EXACT, value: ABResultValueType::MATE(1)});
-    assert!(-(-(-ABResult::MATE_NOW)) == ABResult{typ: ABResultType::EXACT, value: ABResultValueType::MATE(3)});
 }
 
