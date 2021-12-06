@@ -1,4 +1,3 @@
-use super::chess;
 use super::evaluate;
 use std::time::Instant;
 use std::sync::{Arc, RwLock};
@@ -9,6 +8,11 @@ use std::io::Write;
 
 use std::sync::mpsc::Sender;
 use super::EngineIO;
+
+mod tt;
+
+use tt::{TranspositionTable, TTEntry};
+use super::chess::{Position, Piece, Move, Color, MoveType};
 
 #[derive(Clone,PartialEq,Copy,Eq)]
 pub enum ABResultValueType {
@@ -31,53 +35,6 @@ pub struct ABResult {
     value: ABResultValueType,
 }
 
-#[derive(Clone)]
-struct ABResultHash {
-    //We run with two buckets. One replace on depth, on always replace
-    hash: Arc<RwLock<Vec<(ABResultHashEntry, ABResultHashEntry)>>>,
-    size: usize,
-}
-
-impl ABResultHash {
-    fn new(size: usize) -> Self {
-        let mut hash_vec = Vec::with_capacity(size);
-        for _ in 0..size {
-            hash_vec.push((ABResultHashEntry::UNCHECKED, ABResultHashEntry::UNCHECKED));
-        }
-        hash_vec.shrink_to_fit();
-        ABResultHash {
-            size,
-            hash: Arc::new(RwLock::new(hash_vec)),
-        }
-    }
-    #[inline(always)]
-    fn get(&self, zobrist_key: u64) -> Option<ABResultHashEntry> {
-        let entry = self.hash.read().unwrap()[zobrist_key as usize % self.size];
-        if entry.0.depth != 0 && entry.0.zobrist_hash == zobrist_key {
-            Some(entry.0)
-        } else if entry.1.depth != 0 && entry.1.zobrist_hash == zobrist_key {
-            Some(entry.1)
-        } else {
-            None
-        }
-    }
-    #[inline(always)]
-    fn set(&mut self, zobrist_key: u64, entry: ABResultHashEntry) {
-        //do not commit invalid scores or low depths to the hashtable
-        if matches!(entry.res.value, ABResultValueType::INFTY | ABResultValueType::NEGINFTY) {
-            return;
-        }
-        let mut hash = self.hash.write().unwrap();
-        //Mate scores may be seen as having infinite depth
-        if hash[zobrist_key as usize % self.size].0.depth < entry.depth ||
-            (matches!(entry.res.value, ABResultValueType::MATE(_))
-                && entry.res > hash[zobrist_key as usize % self.size].0.res) {
-            hash.get_mut(zobrist_key as usize % self.size).unwrap().0 = entry;
-        } else {
-            hash.get_mut(zobrist_key as usize % self.size).unwrap().1 = entry;
-        }
-    }
-}
 
 impl ABResult {
     const MIN: ABResult = ABResult {typ: ABResultType::EXACT, value: ABResultValueType::NEGINFTY};
@@ -265,35 +222,12 @@ impl PartialOrd for ABResult {
     }
 }
 
-#[derive(Clone,PartialEq,Copy)]
-pub struct ABResultHashEntry {
-    res: ABResult,
-    depth: u8,
-    zobrist_hash: u64,
-    mov: chess::CompressedMove,
-}
-
-impl ABResultHashEntry {
-    const UNCHECKED: ABResultHashEntry = ABResultHashEntry {res: ABResult::MIN, depth: 0, zobrist_hash: 0, mov: chess::CompressedMove{to:0, from:0, piece_and_type:0}};
-    fn mov(&self) -> Option<chess::Move> {
-        self.mov.decompress()
-    }
-    fn new(res: ABResult, depth: u8, zobrist_hash: u64, mov: chess::Move) -> ABResultHashEntry {
-        ABResultHashEntry {
-            res,
-            depth,
-            zobrist_hash,
-            mov: mov.compress(),
-        }
-    }
-}
-
 #[derive(Clone)]
 pub struct SearchInfo {
-    pub bestmove: Option<chess::Move>,
+    pub bestmove: Option<Move>,
     pub eval: ABResult,
     pub depth: u8,
-    pub pv: Vec<chess::Move>,
+    pub pv: Vec<Move>,
     pub nodes: u64,
     pub id: u64,
 }
@@ -312,9 +246,9 @@ impl SearchInfo {
 }
 
 pub struct ABSearchManager {
-    pos: chess::Position,
+    pos: Position,
     threads: usize,
-    move_hash: ABResultHash,
+    tt: TranspositionTable,
     stop_flag: Arc<RwLock<bool>>,
     search_info: SearchInfo,
     //nnue: evaluate::nnue::NNUEState,
@@ -323,21 +257,21 @@ pub struct ABSearchManager {
 impl ABSearchManager {
     pub fn new() -> ABSearchManager {
         ABSearchManager {
-            pos: chess::Position::new(),
+            pos: Position::new(),
             threads: 1,
-            move_hash: ABResultHash::new(2),
+            tt: TranspositionTable::new(2),
             stop_flag: Arc::new(RwLock::new(false)),
             search_info: SearchInfo::new(0),
             //nnue: evaluate::nnue::NNUEState::from_weights(std::path::Path::new("/home/jannik/Code/kf/model.nnue")),
         }
     }
     pub fn set_hash_size(&mut self, size: usize) {
-        self.move_hash = ABResultHash::new(size*1_000_000/std::mem::size_of::<(ABResultHashEntry, ABResultHashEntry)>());
+        self.tt = TranspositionTable::new(size*1_000_000/std::mem::size_of::<(TTEntry, TTEntry)>());
     }
     pub fn set_threads(&mut self, threads: usize) {
         self.threads = threads;
     }
-    pub fn set_position(&mut self, pos: chess::Position) {
+    pub fn set_position(&mut self, pos: Position) {
         //self.nnue.initialize_state(&pos);
         self.pos = pos;
     }
@@ -348,7 +282,7 @@ impl ABSearchManager {
         let mut root_search_info = ABSearchMainThread {
             pos: self.pos.clone(),
             nodes: 0,
-            move_hash: self.move_hash.clone(),
+            tt: self.tt.clone(),
             threads: self.threads,
             stop_flag: self.stop_flag.clone(),
             search_info: self.search_info.clone(),
@@ -365,25 +299,23 @@ impl ABSearchManager {
     pub fn stop(&mut self) {
         *self.stop_flag.write().unwrap() = true;
     }
-    pub fn color(&self) -> chess::Color {
+    pub fn color(&self) -> Color {
         self.pos.color()
     }
     pub fn reset_hash(&mut self) {
-        let s = self.move_hash.size;
-        self.move_hash = ABResultHash::new(0);
-        self.move_hash = ABResultHash::new(s);
+        self.tt.reset();
     }
 }
 
 trait ABSearchThread {
-    fn pos(&self) -> &chess::Position;
-    fn pos_mut(&mut self) -> &mut chess::Position;
+    fn pos(&self) -> &Position;
+    fn pos_mut(&mut self) -> &mut Position;
 
     fn nodes(&self) -> &u64;
     fn nodes_mut(&mut self) -> &mut u64;
 
-    fn move_hash_mut(&mut self) -> &mut ABResultHash;
-    fn move_hash(&self) -> &ABResultHash;
+    fn tt_mut(&mut self) -> &mut TranspositionTable;
+    fn tt(&self) -> &TranspositionTable;
 
     fn is_helper(&self) -> bool;
 
@@ -391,48 +323,48 @@ trait ABSearchThread {
 
     //These are optional and not used for helper threads
     fn threads(&self) -> usize {1}
-    fn set_bestmove(&mut self, _m: Option<chess::Move>) {}
+    fn set_bestmove(&mut self, _m: Option<Move>) {}
 
     //fn nnue(&mut self) -> &mut evaluate::nnue::NNUEState;
-    fn do_move(&mut self, m: chess::Move);
+    fn do_move(&mut self, m: Move);
     fn undo_move(&mut self);
 
     fn evaluate(&mut self) -> i32;
 
     //save and retrieve killer moves
-    fn register_killer(&mut self, ply: u8, m: chess::Move);
-    fn get_killers(&self, ply: u8) -> &[Option<chess::Move>; 2];
+    fn register_killer(&mut self, ply: u8, m: Move);
+    fn get_killers(&self, ply: u8) -> &[Option<Move>; 2];
     fn invalidate_killers(&mut self, ply: u8);
 }
 
 struct ABSearchMainThread {
-    pos: chess::Position,
+    pos: Position,
     nodes: u64,
     threads: usize,
-    move_hash: ABResultHash,
+    tt: TranspositionTable,
     stop_flag: Arc<RwLock<bool>>,
     search_info: SearchInfo,
     sender: Sender<EngineIO>,
-    bestmove: Option<chess::Move>,
-    killers: Vec<([Option<chess::Move>; 2], [u8; 2])>,
+    bestmove: Option<Move>,
+    killers: Vec<([Option<Move>; 2], [u8; 2])>,
     //nnue: evaluate::nnue::NNUEState,
 }
 
 impl ABSearchThread for ABSearchMainThread {
-    fn pos_mut(&mut self) -> &mut chess::Position {&mut self.pos}
-    fn pos(&self) -> &chess::Position {&self.pos}
+    fn pos_mut(&mut self) -> &mut Position {&mut self.pos}
+    fn pos(&self) -> &Position {&self.pos}
     fn nodes(&self) -> &u64 {&self.nodes}
     fn nodes_mut(&mut self) -> &mut u64 {&mut self.nodes}
-    fn move_hash(&self) -> &ABResultHash {&self.move_hash}
-    fn move_hash_mut(&mut self) -> &mut ABResultHash {&mut self.move_hash}
+    fn tt(&self) -> &TranspositionTable {&self.tt}
+    fn tt_mut(&mut self) -> &mut TranspositionTable {&mut self.tt}
     fn is_helper(&self) -> bool {false}
     fn stop_flag(&self) -> &Arc<RwLock<bool>> {&self.stop_flag}
     fn threads(&self) -> usize {self.threads}
-    fn set_bestmove(&mut self, m: Option<chess::Move>) {
+    fn set_bestmove(&mut self, m: Option<Move>) {
         self.bestmove = m;
     }
     //fn nnue(&mut self) -> &mut evaluate::nnue::NNUEState {&mut self.nnue}
-    fn do_move(&mut self, m: chess::Move) {
+    fn do_move(&mut self, m: Move) {
         //self.nnue.do_move(m, &self.pos);
         self.pos.do_move(m);
     }
@@ -445,7 +377,7 @@ impl ABSearchThread for ABSearchMainThread {
         evaluate::evaluate(self.pos_mut())
     }
 
-    fn register_killer(&mut self, ply: u8, m: chess::Move) {
+    fn register_killer(&mut self, ply: u8, m: Move) {
         if self.killers.len() <= ply as usize {
             self.killers.resize(ply as usize+1, ([None,None],[0,0]));
         }
@@ -461,7 +393,7 @@ impl ABSearchThread for ABSearchMainThread {
             self.killers[ply as usize].1[1] = 1;
         }
     }
-    fn get_killers(&self, ply: u8) -> &[Option<chess::Move>; 2] {
+    fn get_killers(&self, ply: u8) -> &[Option<Move>; 2] {
         if self.killers.len() <= ply as usize {
             &[None, None]
         } else {
@@ -476,7 +408,7 @@ impl ABSearchThread for ABSearchMainThread {
 }
 
 impl ABSearchMainThread {
-    fn bestmove(&self) -> Option<chess::Move> {
+    fn bestmove(&self) -> Option<Move> {
         self.bestmove
     }
     fn print_pv(&self, depth: u8) {
@@ -487,7 +419,7 @@ impl ABSearchMainThread {
         let mut pos = self.pos().from_move(self.bestmove().unwrap());
         let mut index = 1;
         loop {
-            let hashentry = self.move_hash.get(pos.zobrist_hash());
+            let hashentry = self.tt.get(pos.zobrist_hash());
             if hashentry.is_none() {break;}
             let next_move = hashentry.unwrap().mov();
             if next_move.is_none() {break;}
@@ -501,25 +433,25 @@ impl ABSearchMainThread {
 }
 
 struct ABSearchHelperThread {
-    pos: chess::Position,
+    pos: Position,
     nodes: u64,
-    move_hash: ABResultHash,
+    tt: TranspositionTable,
     stop_flag: Arc<RwLock<bool>>,
-    killers: Vec<([Option<chess::Move>; 2], [u8; 2])>,
+    killers: Vec<([Option<Move>; 2], [u8; 2])>,
     //nnue: evaluate::nnue::NNUEState,
 }
 
 impl ABSearchThread for ABSearchHelperThread {
-    fn pos_mut(&mut self) -> &mut chess::Position {&mut self.pos}
-    fn pos(&self) -> &chess::Position {&self.pos}
+    fn pos_mut(&mut self) -> &mut Position {&mut self.pos}
+    fn pos(&self) -> &Position {&self.pos}
     fn nodes(&self) -> &u64 {&self.nodes}
     fn nodes_mut(&mut self) -> &mut u64 {&mut self.nodes}
-    fn move_hash(&self) -> &ABResultHash {&self.move_hash}
-    fn move_hash_mut(&mut self) -> &mut ABResultHash {&mut self.move_hash}
+    fn tt(&self) -> &TranspositionTable {&self.tt}
+    fn tt_mut(&mut self) -> &mut TranspositionTable {&mut self.tt}
     fn is_helper(&self) -> bool {true}
     fn stop_flag(&self) -> &Arc<RwLock<bool>> {&self.stop_flag}
     //fn nnue(&mut self) -> &mut evaluate::nnue::NNUEState {&mut self.nnue}
-    fn do_move(&mut self, m: chess::Move) {
+    fn do_move(&mut self, m: Move) {
         //self.nnue.do_move(m, &self.pos);
         self.pos.do_move(m);
     }
@@ -531,7 +463,7 @@ impl ABSearchThread for ABSearchHelperThread {
         //self.nnue.evaluate_position(&self.pos) / 10
         evaluate::evaluate(self.pos_mut())
     }
-    fn register_killer(&mut self, ply: u8, m: chess::Move) {
+    fn register_killer(&mut self, ply: u8, m: Move) {
         if self.killers.len() <= ply as usize {
             self.killers.resize(ply as usize+1, ([None,None],[0,0]));
         }
@@ -547,7 +479,7 @@ impl ABSearchThread for ABSearchHelperThread {
             self.killers[ply as usize].1[1] = 1;
         }
     }
-    fn get_killers(&self, ply: u8) -> &[Option<chess::Move>; 2] {
+    fn get_killers(&self, ply: u8) -> &[Option<Move>; 2] {
         if self.killers.len() <= ply as usize {
             &[None, None]
         } else {
@@ -582,7 +514,7 @@ fn search(thread: &mut ABSearchMainThread, depth: u8, mut alpha: ABResult, mut b
                     let mut helper_thread = ABSearchHelperThread {
                         pos: thread.pos().clone(),
                         nodes: 0,
-                        move_hash: thread.move_hash().clone(),
+                        tt: thread.tt().clone(),
                         stop_flag: helper_stop_flag.clone(),
                         killers: Vec::new(),
                         //nnue: thread.nnue().clone(),
@@ -643,14 +575,14 @@ fn search(thread: &mut ABSearchMainThread, depth: u8, mut alpha: ABResult, mut b
     drop(thread.sender.send(EngineIO::SEARCHENDED(thread.search_info.id)));
 }
 
-fn is_tactical(pos: &chess::Position, m: chess::Move) -> bool {
+fn is_tactical(pos: &Position, m: Move) -> bool {
     if pos.gives_check(&m) {
         return true;
     }
     match m.typ {
-        chess::MoveType::CAPTURE(_)
-            | chess::MoveType::PROMOTION(_)
-            | chess::MoveType::PROMOTIONCAPTURE(_) => true,
+        MoveType::CAPTURE(_)
+            | MoveType::PROMOTION(_)
+            | MoveType::PROMOTIONCAPTURE(_) => true,
         _ => false,
     }
 }
@@ -677,28 +609,28 @@ fn search_step(thread: &mut impl ABSearchThread,
     *thread.nodes_mut() += 1;
 
     //Check if the move is already hashed
-    let hash_entry = thread.move_hash().get(thread.pos().zobrist_hash());
+    let hash_entry = thread.tt().get(thread.pos().zobrist_hash());
 
     let mut ttmove = None;
 
     if hash_entry.is_some() && hash_entry.unwrap().mov().is_some() {
         //see if we have a TT-hit
-        if hash_entry.unwrap().depth >= (depth+extension).saturating_sub(ply) {
-            match hash_entry.unwrap().res.typ {
+        if hash_entry.unwrap().depth() >= (depth+extension).saturating_sub(ply) {
+            match hash_entry.unwrap().res().typ {
                 ABResultType::EXACT => {
                     if ply == 0 {
                         thread.set_bestmove(hash_entry.unwrap().mov());
                     }
-                    return hash_entry.unwrap().res;
+                    return hash_entry.unwrap().res();
                 },
                 ABResultType::LOWERBOUND => {
-                    if hash_entry.unwrap().res >= beta {
-                        return hash_entry.unwrap().res;
+                    if hash_entry.unwrap().res() >= beta {
+                        return hash_entry.unwrap().res();
                     }
                 },
                 ABResultType::UPPERBOUND => {
-                    if hash_entry.unwrap().res < alpha {
-                        return hash_entry.unwrap().res;
+                    if hash_entry.unwrap().res() < alpha {
+                        return hash_entry.unwrap().res();
                     }
                 }
             }
@@ -856,8 +788,8 @@ fn search_step(thread: &mut impl ABSearchThread,
         //Adjust results
         if movescore >= beta {
             let zh = thread.pos().zobrist_hash();
-            thread.move_hash_mut().set(zh, ABResultHashEntry::new(movescore.to_lowerbound(), depth_left, zh, moves[i]));
-            if !matches!(moves[i].typ, chess::MoveType::CAPTURE(_)) && ttmove != Some(moves[i]) {
+            thread.tt_mut().set(zh, TTEntry::new(movescore.to_lowerbound(), depth_left, zh, moves[i]));
+            if !matches!(moves[i].typ, MoveType::CAPTURE(_)) && ttmove != Some(moves[i]) {
                 thread.register_killer(ply, moves[i]);
             }
             thread.invalidate_killers(ply);
@@ -890,10 +822,10 @@ fn search_step(thread: &mut impl ABSearchThread,
 
     let zh = thread.pos().zobrist_hash();
     if fail_low {
-        thread.move_hash_mut().set(zh, ABResultHashEntry::new(score.to_upperbound(), depth_left, zh, bestmove.unwrap()));
+        thread.tt_mut().set(zh, TTEntry::new(score.to_upperbound(), depth_left, zh, bestmove.unwrap()));
         score.to_upperbound()
     } else {
-        thread.move_hash_mut().set(zh, ABResultHashEntry::new(score.to_exact(), depth_left, zh, bestmove.unwrap()));
+        thread.tt_mut().set(zh, TTEntry::new(score.to_exact(), depth_left, zh, bestmove.unwrap()));
         score.to_exact()
     }
 }
@@ -930,18 +862,18 @@ fn quiesce(thread: &mut impl ABSearchThread, mut alpha: ABResult, beta: ABResult
         }
 
         cand_moves = cand_moves.iter().copied().filter(|m| match m.typ {
-                                                        chess::MoveType::CAPTURE(_) => ABResult::exact_from_cents(static_eval_centis+thread.pos().see(*m)+delta) > alpha && thread.pos().see(*m) > 0,
-                                                        chess::MoveType::PROMOTION(_) |
-                                                        chess::MoveType::PROMOTIONCAPTURE((_,_)) => true,
-                                                        chess::MoveType::ENPASSANT => ABResult::exact_from_cents(static_eval_centis+delta+100) > alpha,
+                                                        MoveType::CAPTURE(_) => ABResult::exact_from_cents(static_eval_centis+thread.pos().see(*m)+delta) > alpha && thread.pos().see(*m) > 0,
+                                                        MoveType::PROMOTION(_) |
+                                                        MoveType::PROMOTIONCAPTURE((_,_)) => true,
+                                                        MoveType::ENPASSANT => ABResult::exact_from_cents(static_eval_centis+delta+100) > alpha,
                                                         _ => false}).collect();
         if cand_moves.len() == 0 {
             return static_eval;
         }
         cand_moves.sort_by_key(|m| match m.typ {
-                                    chess::MoveType::CAPTURE(_) => thread.pos().see(*m),
-                                    chess::MoveType::PROMOTION(p) => p.value()-chess::Piece::PAWN.value(),
-                                    chess::MoveType::PROMOTIONCAPTURE((p_prom,p_cap)) => p_prom.value()+p_cap.value()-chess::Piece::PAWN.value(),
+                                    MoveType::CAPTURE(_) => thread.pos().see(*m),
+                                    MoveType::PROMOTION(p) => p.value()-Piece::PAWN.value(),
+                                    MoveType::PROMOTIONCAPTURE((p_prom,p_cap)) => p_prom.value()+p_cap.value()-Piece::PAWN.value(),
                                     _ => 0,
                                 });
     }
@@ -981,20 +913,3 @@ fn ab_comp_test() {
     assert!(-(-(-ABResult::MATE_NOW)) == ABResult{typ: ABResultType::EXACT, value: ABResultValueType::MATE(3)});
 }
 
-#[test]
-fn write_and_read_tt() {
-    let mut hash = ABResultHash::new(10000);
-    let entry = ABResultHashEntry::new(-ABResult::MATE_NOW, 3, 1234628935786765, chess::Move{from: 1, to: 2, piece: chess::Piece::KING, typ: chess::MoveType::MOVE});
-    hash.set(1234628935786765, entry.clone());
-    assert!(hash.get(1234628935786765).unwrap() == entry);
-    let entry2 = ABResultHashEntry::new(-ABResult::MATE_NOW, 3, 1234628935786798, chess::Move{from: 1, to: 2, piece: chess::Piece::KING, typ: chess::MoveType::MOVE});
-    let entry4 = ABResultHashEntry::new(ABResult::DRAW, 2, 1234628935786798, chess::Move{from: 4, to: 8, piece: chess::Piece::QUEEN, typ: chess::MoveType::MOVE});
-    hash.set(1234628935786798, entry2.clone());
-    hash.set(1234628935786798, entry4.clone());
-    assert!(hash.get(1234628935786798).unwrap() == entry2);
-    let entry3 = ABResultHashEntry::new(-ABResult::MATE_NOW, 3, 1234628935786700, chess::Move{from: 1, to: 2, piece: chess::Piece::KING, typ: chess::MoveType::MOVE});
-    let mut hash_clone = hash.clone();
-    std::thread::spawn(move || hash_clone.set(1234628935786700, entry3.clone()));
-    std::thread::sleep(std::time::Duration::from_millis(100));
-    assert!(hash.get(1234628935786700).unwrap() == entry3);
-}
