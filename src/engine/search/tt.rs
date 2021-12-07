@@ -62,6 +62,7 @@ pub struct TTEntry {
 
 impl TTEntry {
     const UNCHECKED: TTEntry = TTEntry {eval: Eval::MIN, depth: 0, zobrist_hash: 0, mov: CompressedMove{to:0, from:0, piece_and_type:0}};
+    #[inline(always)]
     pub fn mov(&self) -> Option<Move> {
         self.mov.decompress()
     }
@@ -73,9 +74,11 @@ impl TTEntry {
             mov: mov.compress(),
         }
     }
+    #[inline(always)]
     pub fn eval(&self) -> Eval {
         self.eval
     }
+    #[inline(always)]
     pub fn depth(&self) -> u8 {
         self.depth
     }

@@ -52,14 +52,17 @@ impl Eval {
         Eval {bound: Bound::UPPERBOUND, value: Value::CENTIS(centis)}
     }
 
+    #[inline(always)]
     pub fn to_exact(&self) -> Eval {
         Eval {bound: Bound::EXACT, value: self.value}
     }
 
+    #[inline(always)]
     pub fn to_lowerbound(&self) -> Eval {
         Eval {bound: Bound::LOWERBOUND, value: self.value}
     }
 
+    #[inline(always)]
     pub fn to_upperbound(&self) -> Eval {
         Eval {bound: Bound::UPPERBOUND, value: self.value}
     }
@@ -111,6 +114,7 @@ impl Eval {
 
     }
 
+    #[inline(always)]
     pub fn zero_window(&self) -> Eval {
         match self.value {
             Value::CENTIS(c) => Eval { value: Value::CENTIS(c+1), bound: self.bound },
@@ -123,6 +127,7 @@ impl Eval {
     }
 
     //Use to pass ab-bounds down the tree
+    #[inline(always)]
     pub fn neg_down(&self) -> Eval {
         let val = match self.value {
             Value::MATE(m) => if m == 0 {Value::INFTY} else {Value::MATE(m-1)},
@@ -133,10 +138,12 @@ impl Eval {
         Eval {value: val, bound: self.bound}
     }
 
+    #[inline(always)]
     pub fn value(&self) -> Value {
         self.value
     }
 
+    #[inline(always)]
     pub fn bound(&self) -> Bound {
         self.bound
     }
