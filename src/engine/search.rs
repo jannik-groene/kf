@@ -1,15 +1,15 @@
 use std::time::Instant;
 use std::sync::{Arc, RwLock};
-use std::io::Write;
-
 use std::sync::mpsc::Sender;
 
 mod tt;
+mod thread;
 
 use tt::{TranspositionTable, TTEntry};
+use thread::{Thread, MainThread, HelperThread};
 use super::EngineIO;
 use super::chess::{Position, Piece, Move, Color, MoveType};
-use super::evaluate::{evaluate, order_moves, has_major_pieces, has_minor_pieces, is_material_draw};
+use super::evaluate::{order_moves, has_major_pieces, has_minor_pieces, is_material_draw};
 use super::evaluate::eval::{Eval, Value, Bound};
 
 #[derive(Clone)]
@@ -67,18 +67,17 @@ impl ABSearchManager {
         let depth = target_depth.unwrap_or(u8::MAX);
         self.reset_search_info(search_id);
         self.stop_flag = Arc::new(RwLock::new(false));
-        let mut root_search_info = ABSearchMainThread {
-            pos: self.pos.clone(),
-            nodes: 0,
-            tt: self.tt.clone(),
-            threads: self.threads,
-            stop_flag: self.stop_flag.clone(),
-            search_info: self.search_info.clone(),
-            sender: out_channel,
-            bestmove: None,
-            killers: Vec::new(),
-            //nnue: self.nnue.clone(),
-        };
+        let mut root_search_info = MainThread::new(
+            self.pos.clone(),
+            0,
+            self.threads,
+            self.tt.clone(),
+            self.stop_flag.clone(),
+            self.search_info.clone(),
+            out_channel,
+            None,
+            Vec::new(),
+            );
         std::thread::spawn(move || search(&mut root_search_info, depth, Eval::MIN, Eval::MAX))
     }
     pub fn reset_search_info(&mut self, id: u64) {
@@ -95,189 +94,8 @@ impl ABSearchManager {
     }
 }
 
-trait ABSearchThread {
-    fn pos(&self) -> &Position;
-    fn pos_mut(&mut self) -> &mut Position;
 
-    fn nodes(&self) -> &u64;
-    fn nodes_mut(&mut self) -> &mut u64;
-
-    fn tt_mut(&mut self) -> &mut TranspositionTable;
-    fn tt(&self) -> &TranspositionTable;
-
-    fn is_helper(&self) -> bool;
-
-    fn stop_flag(&self) -> &Arc<RwLock<bool>>;
-
-    //These are optional and not used for helper threads
-    fn threads(&self) -> usize {1}
-    fn set_bestmove(&mut self, _m: Option<Move>) {}
-
-    fn do_move(&mut self, m: Move);
-    fn undo_move(&mut self);
-
-    fn evaluate(&mut self) -> Eval;
-
-    //save and retrieve killer moves
-    fn register_killer(&mut self, ply: u8, m: Move);
-    fn get_killers(&self, ply: u8) -> &[Option<Move>; 2];
-    fn invalidate_killers(&mut self, ply: u8);
-}
-
-struct ABSearchMainThread {
-    pos: Position,
-    nodes: u64,
-    threads: usize,
-    tt: TranspositionTable,
-    stop_flag: Arc<RwLock<bool>>,
-    search_info: SearchInfo,
-    sender: Sender<EngineIO>,
-    bestmove: Option<Move>,
-    killers: Vec<([Option<Move>; 2], [u8; 2])>,
-}
-
-impl ABSearchThread for ABSearchMainThread {
-    fn pos_mut(&mut self) -> &mut Position {&mut self.pos}
-    fn pos(&self) -> &Position {&self.pos}
-    fn nodes(&self) -> &u64 {&self.nodes}
-    fn nodes_mut(&mut self) -> &mut u64 {&mut self.nodes}
-    fn tt(&self) -> &TranspositionTable {&self.tt}
-    fn tt_mut(&mut self) -> &mut TranspositionTable {&mut self.tt}
-    fn is_helper(&self) -> bool {false}
-    fn stop_flag(&self) -> &Arc<RwLock<bool>> {&self.stop_flag}
-    fn threads(&self) -> usize {self.threads}
-    fn set_bestmove(&mut self, m: Option<Move>) {
-        self.bestmove = m;
-    }
-    fn do_move(&mut self, m: Move) {
-        self.pos.do_move(m);
-    }
-    fn undo_move(&mut self) {
-        self.pos.undo_move();
-    }
-    fn evaluate(&mut self) -> Eval {
-        evaluate(self.pos_mut())
-    }
-
-    fn register_killer(&mut self, ply: u8, m: Move) {
-        if self.killers.len() <= ply as usize {
-            self.killers.resize(ply as usize+1, ([None,None],[0,0]));
-        }
-        if self.killers[ply as usize].0[0] == Some(m) {
-            self.killers[ply as usize].1[0] += 1;
-        } else if self.killers[ply as usize].0[1] == Some(m) {
-            self.killers[ply as usize].1[1] += 1;
-        } else if self.killers[ply as usize].1[0] > self.killers[ply as usize].1[1] {
-            self.killers[ply as usize].0[1] = Some(m);
-            self.killers[ply as usize].1[1] = 1;
-        } else {
-            self.killers[ply as usize].0[1] = Some(m);
-            self.killers[ply as usize].1[1] = 1;
-        }
-    }
-    fn get_killers(&self, ply: u8) -> &[Option<Move>; 2] {
-        if self.killers.len() <= ply as usize {
-            &[None, None]
-        } else {
-            &self.killers[ply as usize].0
-        }
-    }
-    fn invalidate_killers(&mut self, ply: u8) {
-        if self.killers.len() > ply as usize + 1 {
-            self.killers[ply as usize + 1].1 = [0,0];
-        }
-    }
-}
-
-impl ABSearchMainThread {
-    fn bestmove(&self) -> Option<Move> {
-        self.bestmove
-    }
-    fn print_pv(&self, depth: u8) {
-        if self.bestmove().is_none() {return;}
-        let stdout = std::io::stdout();
-        let mut handle = stdout.lock();
-        drop(write!(handle, "info depth {} pv {}", depth, self.bestmove().unwrap()));
-        let mut pos = self.pos().from_move(self.bestmove().unwrap());
-        let mut index = 1;
-        loop {
-            let hashentry = self.tt.get(pos.zobrist_hash());
-            if hashentry.is_none() {break;}
-            let next_move = hashentry.unwrap().mov();
-            if next_move.is_none() {break;}
-            drop(write!(handle, " {}", next_move.unwrap()));
-            index += 1;
-            if index >= depth {break;}
-            pos.do_move(next_move.unwrap());
-        }
-        drop(write!(handle, "\n"));
-    }
-}
-
-struct ABSearchHelperThread {
-    pos: Position,
-    nodes: u64,
-    tt: TranspositionTable,
-    stop_flag: Arc<RwLock<bool>>,
-    killers: Vec<([Option<Move>; 2], [u8; 2])>,
-}
-
-impl ABSearchThread for ABSearchHelperThread {
-    fn pos_mut(&mut self) -> &mut Position {&mut self.pos}
-    fn pos(&self) -> &Position {&self.pos}
-    fn nodes(&self) -> &u64 {&self.nodes}
-    fn nodes_mut(&mut self) -> &mut u64 {&mut self.nodes}
-    fn tt(&self) -> &TranspositionTable {&self.tt}
-    fn tt_mut(&mut self) -> &mut TranspositionTable {&mut self.tt}
-    fn is_helper(&self) -> bool {true}
-    fn stop_flag(&self) -> &Arc<RwLock<bool>> {&self.stop_flag}
-    fn do_move(&mut self, m: Move) {
-        self.pos.do_move(m);
-    }
-    fn undo_move(&mut self) {
-        self.pos.undo_move();
-    }
-    fn evaluate(&mut self) -> Eval {
-        evaluate(self.pos_mut())
-    }
-    fn register_killer(&mut self, ply: u8, m: Move) {
-        if self.killers.len() <= ply as usize {
-            self.killers.resize(ply as usize+1, ([None,None],[0,0]));
-        }
-        if self.killers[ply as usize].0[0] == Some(m) {
-            self.killers[ply as usize].1[0] += 1;
-        } else if self.killers[ply as usize].0[1] == Some(m) {
-            self.killers[ply as usize].1[1] += 1;
-        } else if self.killers[ply as usize].1[0] > self.killers[ply as usize].1[1] {
-            self.killers[ply as usize].0[1] = Some(m);
-            self.killers[ply as usize].1[1] = 1;
-        } else {
-            self.killers[ply as usize].0[1] = Some(m);
-            self.killers[ply as usize].1[1] = 1;
-        }
-    }
-    fn get_killers(&self, ply: u8) -> &[Option<Move>; 2] {
-        if self.killers.len() <= ply as usize {
-            &[None, None]
-        } else {
-            &self.killers[ply as usize].0
-        }
-    }
-    fn invalidate_killers(&mut self, ply: u8) {
-        if self.killers.len() > ply as usize + 1 {
-            self.killers[ply as usize + 1].1 = [0,0];
-        }
-    }
-}
-
-impl ABSearchHelperThread {
-    fn search(&mut self, depth: u8, alpha: Eval, beta: Eval) -> u64 {
-        search_step(self, depth, 0, 0, 0, 0, false, alpha, beta);
-        self.nodes
-    }
-}
-
-fn search(thread: &mut ABSearchMainThread, depth: u8, mut alpha: Eval, mut beta: Eval) {
+fn search(thread: &mut MainThread, depth: u8, mut alpha: Eval, mut beta: Eval) {
     let now = Instant::now();
     let mut helper_handles = Vec::new();
     let helper_stop_flag = Arc::new(RwLock::new(false));
@@ -288,21 +106,20 @@ fn search(thread: &mut ABSearchMainThread, depth: u8, mut alpha: Eval, mut beta:
             //Spawn helper threads for search
             if thread.threads() > 1 && d > 2 {
                 for i in 1..thread.threads() {
-                    let mut helper_thread = ABSearchHelperThread {
-                        pos: thread.pos().clone(),
-                        nodes: 0,
-                        tt: thread.tt().clone(),
-                        stop_flag: helper_stop_flag.clone(),
-                        killers: Vec::new(),
-                        //nnue: thread.nnue().clone(),
-                    };
-                    helper_handles.push(std::thread::spawn(move || helper_thread.search(d.saturating_add(i as u8 / 2), alpha, beta)));
+                    let mut helper_thread = HelperThread::new(
+                        thread.pos().clone(),
+                        0,
+                        thread.tt().clone(),
+                        helper_stop_flag.clone(),
+                        Vec::new(),
+                    );
+                    helper_handles.push(std::thread::spawn(move || search_helper(&mut helper_thread, d.saturating_add(i as u8 / 2), alpha, beta)));
                 }
             }
             let eval = search_step(thread, d, 0, 0, 0, 0, false, alpha, beta);
             if thread.stop_flag().read().unwrap().eq(&true) {
                 *helper_stop_flag.write().unwrap() = true;
-                drop(thread.sender.send(EngineIO::SEARCHENDED(thread.search_info.id)));
+                drop(thread.send_info(EngineIO::SEARCHENDED(thread.search_info().id)));
                 return;
             }
             if d > 2 {
@@ -317,7 +134,7 @@ fn search(thread: &mut ABSearchMainThread, depth: u8, mut alpha: Eval, mut beta:
                 }
                 helper_handles = Vec::new();
                 //Reset stop flag
-                *helper_stop_flag.write().unwrap() = false | *thread.stop_flag.read().unwrap();
+                *helper_stop_flag.write().unwrap() = false | *thread.stop_flag().read().unwrap();
             }
             println!("info nodes {} nps {}", thread.nodes(), 1000* *thread.nodes() as u128 /now.elapsed().as_millis().clamp(1,u128::MAX));
             //We reached the target depth and stopped, so we update the external values
@@ -325,13 +142,9 @@ fn search(thread: &mut ABSearchMainThread, depth: u8, mut alpha: Eval, mut beta:
                 Bound::EXACT => {
                     println!("info {} depth {} time {}", eval, d, now.elapsed().as_millis());
                     thread.print_pv(d);
-                    thread.search_info.eval = eval;
-                    thread.search_info.bestmove = thread.bestmove();
-                    match thread.sender.send(EngineIO::SEARCHUPDATE(thread.search_info.clone())) {
-                        Ok(_) => {},
-                        //We end the search if we cannot communicate the results anymore
-                        Err(_) => return,
-                    };
+                    thread.search_info_mut().eval = eval;
+                    thread.search_info_mut().bestmove = thread.bestmove();
+                    thread.send_info(EngineIO::SEARCHUPDATE(thread.search_info().clone()));
                     alpha = eval.aspiration_lower(0);
                     beta = eval.aspiration_higher(0);
                     break;
@@ -349,7 +162,12 @@ fn search(thread: &mut ABSearchMainThread, depth: u8, mut alpha: Eval, mut beta:
             }
         }
     }
-    drop(thread.sender.send(EngineIO::SEARCHENDED(thread.search_info.id)));
+    drop(thread.send_info(EngineIO::SEARCHENDED(thread.search_info().id)));
+}
+
+fn search_helper(helper: &mut HelperThread, depth: u8, alpha: Eval, beta: Eval) -> u64 {
+    search_step(helper, depth, 0, 0, 0, 0, false, alpha, beta);
+    *helper.nodes()
 }
 
 fn is_tactical(pos: &Position, m: Move) -> bool {
@@ -373,7 +191,7 @@ fn is_tactical(pos: &Position, m: Move) -> bool {
 // null_moves: how many null moves have been performed in the current search
 // alpha: the alpha value of the current ab search
 // beta: the beta of the current ab search
-fn search_step(thread: &mut impl ABSearchThread,
+fn search_step(thread: &mut impl Thread,
                depth: u8,
                ply: u8,
                depth_reduction: u8,
@@ -607,7 +425,7 @@ fn search_step(thread: &mut impl ABSearchThread,
     }
 }
 
-fn quiesce(thread: &mut impl ABSearchThread, mut alpha: Eval, beta: Eval, delta: i32, qply: u8) -> Eval {
+fn quiesce(thread: &mut impl Thread, mut alpha: Eval, beta: Eval, delta: i32, qply: u8) -> Eval {
 
     if qply > 0 {
         *thread.nodes_mut() += 1;
