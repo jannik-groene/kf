@@ -35,7 +35,7 @@ impl SearchInfo {
     }
 }
 
-pub struct ABSearchManager {
+pub struct SearchManager {
     pos: Position,
     threads: usize,
     tt: TranspositionTable,
@@ -43,9 +43,9 @@ pub struct ABSearchManager {
     search_info: SearchInfo,
 }
 
-impl ABSearchManager {
-    pub fn new() -> ABSearchManager {
-        ABSearchManager {
+impl SearchManager {
+    pub fn new() -> SearchManager {
+        SearchManager {
             pos: Position::new(),
             threads: 1,
             tt: TranspositionTable::new(2),

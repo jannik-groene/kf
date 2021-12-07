@@ -107,7 +107,7 @@ impl EngineConfig {
 }
 
 pub struct Engine {
-    search: search::ABSearchManager,
+    search: search::SearchManager,
     pub config: EngineConfig,
     //ID of the current search
     search_id: u64,
@@ -125,7 +125,7 @@ pub enum EngineIO {
 impl Engine {
     pub fn new() -> Engine {
         let config = EngineConfig::new();
-        let mut search = search::ABSearchManager::new();
+        let mut search = search::SearchManager::new();
         let threads = match config.get_option("Threads").unwrap() { OptionValue::SPIN(n) => n}; //, _ => 1 };
         let hash_size = match config.get_option("Hash").unwrap() { OptionValue::SPIN(n) => n}; //, _ => 1 };
         search.set_threads(threads as usize);
