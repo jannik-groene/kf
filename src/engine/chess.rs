@@ -1496,7 +1496,8 @@ impl Position {
                 self.zobrist ^= constants::ZOBRIST_CASTLING_NUMBERS[2*self.to_move as usize+1];
             }
             castling_legal[self.to_move as usize] = [false,false];
-        } else if castling_legal[0][1] && (m.to == 0 || m.from == 0) {
+        }
+        if castling_legal[0][1] && (m.to == 0 || m.from == 0) {
             castling_legal[0][1] = false;
             self.zobrist ^= constants::ZOBRIST_CASTLING_NUMBERS[1];
         } else if castling_legal[0][0] && (m.to == 7 || m.from == 7) {
