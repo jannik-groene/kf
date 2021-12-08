@@ -103,27 +103,34 @@ fn evaluate_pawns(pos: &mut Position, phase: i32) -> i32 {
         };
         let behind = file ^ in_front;
 
+        let neighbours = if pawn.is_at_east_border() {
+            pawns_us & file.go_w()
+        } else if pawn.is_at_west_border() {
+            pawns_us & file.go_e()
+        } else {
+            pawns_us & (file.go_e() | file.go_w())
+        };
+
         //0. Add the base value of the pawn
         res += piece_table_value(Piece::PAWN, pos.color(), pawn, phase);
 
         //1. Check if the pawn is doubled (or worse).
         let pawns_us_on_file = file & pawns_us;
         res_early -= (pawns_us_on_file.count_ones() as i32 - 1) * 10;
-        res_late  -= (pawns_us_on_file.count_ones() as i32 - 1) * 30;
+        res_late  -= (pawns_us_on_file.count_ones() as i32 - 1) * 20;
 
         //2. Check if the pawn is isolated
         if pawn.is_at_east_border() {
-            if pawns_us & Board::file(chess::File::B) == 0 {
-                res -= 20;
+            if neighbours == 0 {
+                res -= 15;
             }
         } else if pawn.is_at_west_border() {
-            if pawns_us & Board::file(chess::File::G) == 0 {
-                res -= 20;
+            if neighbours == 0 {
+                res -= 15;
             }
         } else {
-            if (pawns_us & Board::file(Board::get_file(pawn.go_e())))
-                | (pawns_us & Board::file(Board::get_file(pawn.go_w()))) == 0 {
-                res -= 30;
+            if neighbours == 0 {
+                res -= 25;
             }
         }
 
@@ -139,8 +146,8 @@ fn evaluate_pawns(pos: &mut Position, phase: i32) -> i32 {
                 Color::BLACK => 50 / (pawn.index() as i32 / 8)
             };
             res_late += match pos.color() {
-                Color::WHITE => 100 / (7 - pawn.index() as i32 / 8),
-                Color::BLACK => 100 / (pawn.index() as i32 / 8)
+                Color::WHITE => 150 / (7 - pawn.index() as i32 / 8),
+                Color::BLACK => 150 / (pawn.index() as i32 / 8)
             };
         }
 
