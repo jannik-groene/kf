@@ -30,16 +30,17 @@ impl TranspositionTable {
         }
     }
     #[inline(always)]
-    pub fn set(&mut self, zobrist_key: u64, entry: TTEntry) {
+    pub fn set(&mut self, zobrist_key: u64, entry: TTEntry, pv: bool) {
         //do not commit invalid scores or low depths to the hashtable
         if matches!(entry.eval.value(), Value::INFTY | Value::NEGINFTY) {
             return;
         }
         let mut hash = self.hash.write().unwrap();
         //Mate scores may be seen as having infinite depth
-        if hash[zobrist_key as usize % self.size].0.depth < entry.depth ||
-            (matches!(entry.eval.value(), Value::MATE(_))
-                && entry.eval > hash[zobrist_key as usize % self.size].0.eval) {
+        if hash[zobrist_key as usize % self.size].0.depth < entry.depth
+            || (matches!(entry.eval.value(), Value::MATE(_))
+                  && entry.eval > hash[zobrist_key as usize % self.size].0.eval)
+            || pv {
             hash.get_mut(zobrist_key as usize % self.size).unwrap().0 = entry;
         } else {
             hash.get_mut(zobrist_key as usize % self.size).unwrap().1 = entry;
