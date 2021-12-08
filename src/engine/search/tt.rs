@@ -20,6 +20,9 @@ impl TranspositionTable {
     }
     #[inline(always)]
     pub fn get(&self, zobrist_key: u64) -> Option<TTEntry> {
+        if self.size == 0 {
+            return None;
+        }
         let entry = self.hash.read().unwrap()[zobrist_key as usize % self.size];
         if entry.0.depth != 0 && entry.0.zobrist_hash == zobrist_key {
             Some(entry.0)
@@ -32,7 +35,7 @@ impl TranspositionTable {
     #[inline(always)]
     pub fn set(&mut self, zobrist_key: u64, entry: TTEntry, pv: bool) {
         //do not commit invalid scores or low depths to the hashtable
-        if matches!(entry.eval.value(), Value::INFTY | Value::NEGINFTY) {
+        if self.size == 0 || matches!(entry.eval.value(), Value::INFTY | Value::NEGINFTY) {
             return;
         }
         let mut hash = self.hash.write().unwrap();
