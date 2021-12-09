@@ -203,18 +203,41 @@ fn search_step(thread: &mut impl Thread,
 
     *thread.nodes_mut() += 1;
 
+    //check for obviously drawn positions
+    if is_material_draw(thread.pos()) {
+        return Eval::DRAW;
+    }
+
+    //Repeated positions are draws
+    if thread.pos().is_threefold() {
+        return Eval::DRAW;
+    }
+
+    //If we cannot beat the score, just return immediately
+    if alpha.value() == Value::MATE(1) {
+        return Eval::mate_in(1).to_upperbound();
+    }
+
     //Check if the move is already hashed
     let hash_entry = thread.tt().get(thread.pos().zobrist_hash());
 
     let mut ttmove = None;
 
     if hash_entry.is_some() && hash_entry.unwrap().mov().is_some() {
+
+        ttmove = hash_entry.unwrap().mov();
+
+        //make sure we do not return a repetition from tt, allowing a threefold
+        thread.pos_mut().do_move(ttmove.unwrap());
+        let threefold = thread.pos().is_repetition();
+        thread.pos_mut().undo_move();
+
         //see if we have a TT-hit
-        if hash_entry.unwrap().depth() >= (depth+extension).saturating_sub(ply) {
+        if hash_entry.unwrap().depth() >= (depth+extension).saturating_sub(ply) && !threefold && zw {
             match hash_entry.unwrap().eval().bound() {
                 Bound::EXACT => {
                     if ply == 0 {
-                        thread.set_bestmove(hash_entry.unwrap().mov());
+                        thread.set_bestmove(ttmove);
                     }
                     return hash_entry.unwrap().eval();
                 },
@@ -230,14 +253,6 @@ fn search_step(thread: &mut impl Thread,
                 }
             }
         }
-
-        ttmove = hash_entry.unwrap().mov();
-
-    }
-
-    //check for obviously drawn positions
-    if is_material_draw(thread.pos()) {
-        return Eval::DRAW;
     }
 
     //Check if this is a terminal position
@@ -247,16 +262,6 @@ fn search_step(thread: &mut impl Thread,
         return Eval::MATE_NOW;
     } else if moves.len() == 0 {
         return Eval::STALEMATE;
-    }
-
-    //If we cannot beat the score, just return immediately
-    if alpha.value() == Value::MATE(1) {
-        return Eval::mate_in(1).to_upperbound();
-    }
-
-    //Repeated positions are probably draws
-    if thread.pos().pos_in_history() && ply > 0 {
-        return Eval::DRAW;
     }
 
     //Calculate the depth we are still to search.

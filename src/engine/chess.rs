@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use bitintr::Pext;
 use std::fmt;
 use std::iter::Iterator;
@@ -786,7 +785,6 @@ pub struct Position {
     //        [Black Kingside, Black Queenside]]
     castling_legal: Vec<[[bool; 2]; 2]>,
     rule_50_counts: Vec<u8>,
-    rep_history: Option<Arc<Position>>,
     attacked_squares: Square,
     king_attackers: Square,
     pinned_pieces: Square,
@@ -807,7 +805,6 @@ impl Position {
             to_move: Color::WHITE,
             castling_legal: vec![[[true, true], [true, true]]],
             rule_50_counts: vec![0],
-            rep_history: None,
             attacked_squares: 0,
             king_attackers: 0,
             pinned_pieces: 0,
@@ -829,7 +826,6 @@ impl Position {
             to_move: Color::WHITE,
             castling_legal: Vec::with_capacity(20),
             rule_50_counts: Vec::with_capacity(20),
-            rep_history: None,
             attacked_squares: 0,
             king_attackers: 0,
             pinned_pieces: 0,
@@ -1708,8 +1704,11 @@ impl Position {
         }
         return *gain.last().unwrap();
     }
-    pub fn pos_in_history(&self) -> bool {
-        self.history.contains(&self.zobrist)
+    pub fn is_threefold(&self) -> bool {
+        self.history.iter().filter(|x| **x == self.zobrist).count() > 1
+    }
+    pub fn is_repetition(&self) -> bool {
+        self.history.iter().filter(|x| **x == self.zobrist).count() > 0
     }
     pub fn rule_50_count(&self) -> u8 {
         *self.rule_50_counts.last().unwrap()
