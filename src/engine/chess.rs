@@ -75,7 +75,7 @@ pub enum Rank {
     FIFTH,
     SIXTH,
     SEVENTH,
-    EIGHT,
+    EIGHTH,
 }
 
 #[inline(always)]
@@ -125,7 +125,8 @@ impl Board {
             4 => File::E,
             5 => File::F,
             6 => File::G,
-            _ => File::H,
+            7 => File::H,
+            _ => panic!("How???")
         }
     }
     #[inline(always)]
@@ -138,7 +139,15 @@ impl Board {
             4 => Rank::FIFTH,
             5 => Rank::SIXTH,
             6 => Rank::SEVENTH,
-            _ => Rank::EIGHT,
+            7 => Rank::EIGHTH,
+            _ => panic!("Invalid square.")
+        }
+    }
+    #[inline(always)]
+    pub fn forward(sq: Square, color: Color) -> Square {
+        match color {
+            Color::WHITE => u64::MAX << ((sq.index() / 8) * 8 + 8),
+            Color::BLACK => u64::MAX >> (8 - sq.index() / 8) * 8,
         }
     }
     #[inline(always)]

@@ -93,10 +93,7 @@ fn evaluate_pawns(pos: &mut Position, phase: i32) -> i32 {
     for pawn in pawns_us.iter() {
 
         let file = Board::file(Board::get_file(pawn));
-        let in_front = match pos.color() {
-            Color::WHITE => file << ((pawn.index() / 8) * 8 + 8),
-            Color::BLACK => file >> ((8 - (pawn.index() / 8)) * 8),
-        };
+        let in_front = file & Board::forward(pawn, pos.color());
         let advance = match pos.color() {
             Color::WHITE => pawn.go_n(),
             Color::BLACK => pawn.go_s(),
@@ -210,9 +207,32 @@ fn evaluate_bishops(pos: &mut Position, phase: i32) -> i32 {
     let mut res: i32 = 0;
 
     let bishops = pos.board[(pos.color(), Piece::BISHOP)];
+    let pawns_us = pos.board[(pos.color(),Piece::PAWN)];
 
     for bishop in bishops.iter() {
             res += piece_table_value(Piece::BISHOP, pos.color(), bishop, phase);
+
+            //reduce the value of the bishop, if it is blocked in by pawns
+            let mut blocked_score = if bishop & Board::WHITE_SQUARES != 0 {
+                (pawns_us & Board::WHITE_SQUARES).count_ones().saturating_sub(3) * 10
+            } else {
+                (pawns_us & Board::BLACK_SQUARES).count_ones().saturating_sub(3) * 10
+            } as i32;
+            //if the bishop is in front of the pawns, the penalty is smaller
+            if Board::forward(bishop, pos.color()) & pawns_us < 2 {
+                blocked_score /= 2;
+            }
+            res -= blocked_score;
+    }
+
+    //check for color weaknesses
+    if bishops & Board::WHITE_SQUARES == 0 {
+        res -= 4_i32.saturating_sub((pawns_us & Board::WHITE_SQUARES).count_ones() as i32)
+                * 10 * phase / OPENING_PHASE;
+    }
+    if bishops & Board::BLACK_SQUARES == 0 {
+        res -= 4_i32.saturating_sub((pawns_us & Board::BLACK_SQUARES).count_ones() as i32)
+                * 10 * phase / OPENING_PHASE;
     }
 
     //give a bonus for the bishop pair
