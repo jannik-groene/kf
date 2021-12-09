@@ -76,7 +76,6 @@ pub enum Rank {
     SIXTH,
     SEVENTH,
     EIGHT,
-    NINTH,
 }
 
 #[inline(always)]
