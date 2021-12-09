@@ -383,7 +383,7 @@ fn search_step(thread: &mut impl Thread,
         //Adjust results
         if movescore >= beta {
             let zh = thread.pos().zobrist_hash();
-            thread.tt_mut().set(zh, TTEntry::new(movescore.to_lowerbound(), depth_left, zh, moves[i]), false);
+            thread.tt_mut().set(zh, TTEntry::new(movescore.to_lowerbound(), depth_left, zh, moves[i]));
             if !matches!(moves[i].typ, MoveType::CAPTURE(_)) && ttmove != Some(moves[i]) {
                 thread.register_killer(ply, moves[i]);
             }
@@ -417,10 +417,10 @@ fn search_step(thread: &mut impl Thread,
 
     let zh = thread.pos().zobrist_hash();
     if fail_low {
-        thread.tt_mut().set(zh, TTEntry::new(score.to_upperbound(), depth_left, zh, bestmove.unwrap()), false);
+        thread.tt_mut().set(zh, TTEntry::new(score.to_upperbound(), depth_left, zh, bestmove.unwrap()));
         score.to_upperbound()
     } else {
-        thread.tt_mut().set(zh, TTEntry::new(score.to_exact(), depth_left, zh, bestmove.unwrap()), !zw);
+        thread.tt_mut().set(zh, TTEntry::new(score.to_exact(), depth_left, zh, bestmove.unwrap()));
         score.to_exact()
     }
 }

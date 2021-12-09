@@ -1,5 +1,5 @@
 use std::sync::{Arc, RwLock};
-use super::super::evaluate::eval::{Eval, Value};
+use super::super::evaluate::eval::{Eval, Value, Bound};
 use super::super::chess::{Move, CompressedMove};
 
 #[derive(Clone)]
@@ -33,17 +33,19 @@ impl TranspositionTable {
         }
     }
     #[inline(always)]
-    pub fn set(&mut self, zobrist_key: u64, entry: TTEntry, pv: bool) {
+    pub fn set(&mut self, zobrist_key: u64, entry: TTEntry) {
         //do not commit invalid scores or low depths to the hashtable
         if self.size == 0 || matches!(entry.eval.value(), Value::INFTY | Value::NEGINFTY) {
             return;
         }
         let mut hash = self.hash.write().unwrap();
+        let hash_entry = hash[zobrist_key as usize % self.size];
         //Mate scores may be seen as having infinite depth
-        if hash[zobrist_key as usize % self.size].0.depth < entry.depth
-            || (matches!(entry.eval.value(), Value::MATE(_))
-                  && entry.eval > hash[zobrist_key as usize % self.size].0.eval)
-            || pv {
+        if (hash_entry.0.depth < entry.depth
+            || (matches!(entry.eval.value(), Value::MATE(_)) && entry.eval > hash_entry.0.eval))
+           && (hash_entry.0.depth + 5 < entry.depth
+               || entry.eval.bound() == Bound::EXACT
+               || hash_entry.0.eval().bound() != Bound::EXACT) {
             hash.get_mut(zobrist_key as usize % self.size).unwrap().0 = entry;
         } else {
             hash.get_mut(zobrist_key as usize % self.size).unwrap().1 = entry;
@@ -92,16 +94,16 @@ impl TTEntry {
 fn write_and_read_tt() {
     let mut hash = TranspositionTable::new(10000);
     let entry = TTEntry::new(-Eval::MATE_NOW, 3, 1234628935786765, Move{from: 1, to: 2, piece: super::super::chess::Piece::KING, typ: super::super::chess::MoveType::MOVE});
-    hash.set(1234628935786765, entry.clone(), false);
+    hash.set(1234628935786765, entry.clone());
     assert!(hash.get(1234628935786765).unwrap() == entry);
     let entry2 = TTEntry::new(-Eval::MATE_NOW, 3, 1234628935786798, Move{from: 1, to: 2, piece: super::super::chess::Piece::KING, typ: super::super::chess::MoveType::MOVE});
     let entry4 = TTEntry::new(Eval::DRAW, 2, 1234628935786798, Move{from: 4, to: 8, piece: super::super::chess::Piece::QUEEN, typ: super::super::chess::MoveType::MOVE});
-    hash.set(1234628935786798, entry2.clone(), false);
-    hash.set(1234628935786798, entry4.clone(), false);
+    hash.set(1234628935786798, entry2.clone());
+    hash.set(1234628935786798, entry4.clone());
     assert!(hash.get(1234628935786798).unwrap() == entry2);
     let entry3 = TTEntry::new(-Eval::MATE_NOW, 3, 1234628935786700, Move{from: 1, to: 2, piece: super::super::chess::Piece::KING, typ: super::super::chess::MoveType::MOVE});
     let mut hash_clone = hash.clone();
-    std::thread::spawn(move || hash_clone.set(1234628935786700, entry3.clone(), false));
+    std::thread::spawn(move || hash_clone.set(1234628935786700, entry3.clone()));
     std::thread::sleep(std::time::Duration::from_millis(100));
     assert!(hash.get(1234628935786700).unwrap() == entry3);
 }
