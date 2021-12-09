@@ -103,7 +103,9 @@ fn get_zobrist_table(p: Piece, c: Color) -> &'static[u64] {
 }
 
 impl Board {
-    pub const FILE: Square = 0b0000000100000001000000010000000100000001000000010000000100000001;
+    pub const BLACK_SQUARES: Square = 0b1010101001010101101010100101010110101010010101011010101001010101;
+    pub const WHITE_SQUARES: Square = u64::MAX ^ Board::BLACK_SQUARES;
+    const FILE: Square = 0b0000000100000001000000010000000100000001000000010000000100000001;
     #[inline(always)]
     pub fn file(f: File) -> Square {
         return Board::FILE << f as u64;

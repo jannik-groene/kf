@@ -208,13 +208,15 @@ fn evaluate_rooks(pos: &mut Position, phase: i32) -> i32 {
 
 fn evaluate_bishops(pos: &mut Position, phase: i32) -> i32 {
     let mut res: i32 = 0;
-    //Do not advance too fast
-    for bishop in pos.board[(pos.color(), Piece::BISHOP)].iter() {
+
+    let bishops = pos.board[(pos.color(), Piece::BISHOP)];
+
+    for bishop in bishops.iter() {
             res += piece_table_value(Piece::BISHOP, pos.color(), bishop, phase);
     }
+
     //give a bonus for the bishop pair
-    //TODO: check that bishops are actually of opposite color.
-    if pos.piece_count(pos.color(), Piece::BISHOP) >= 2 {
+    if bishops & Board::WHITE_SQUARES != 0 && bishops & Board::BLACK_SQUARES != 0 {
         res += 50;
     }
     res
