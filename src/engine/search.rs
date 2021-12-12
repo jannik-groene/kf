@@ -92,6 +92,9 @@ impl SearchManager {
     pub fn reset_hash(&mut self) {
         self.tt.reset();
     }
+    pub fn root_position(&self) -> Position {
+        return self.pos.clone();
+    }
 }
 
 

@@ -180,6 +180,35 @@ impl Engine {
     pub fn reset_hash(&mut self) {
         self.search.reset_hash();
     }
+    fn perft_step(pos: &mut chess::Position, d: u8) -> usize {
+        if d == 0 {
+            1
+        } else if d == 1 {
+            pos.get_moves().len()
+        } else {
+            let mut total = 0;
+            for m in pos.get_moves() {
+                pos.do_move(m);
+                total += Self::perft_step(pos, d-1);
+                pos.undo_move();
+            }
+            total
+        }
+    }
+    pub fn perft(&self, d: u8) {
+        let mut pos = self.search.root_position();
+        let now = std::time::Instant::now();
+        let mut total = 0;
+        for m in pos.get_moves() {
+            pos.do_move(m);
+            let m_count = Self::perft_step(&mut pos, d-1);
+            println!("Root move {} positions {}", m, m_count);
+            total += m_count;
+            pos.undo_move();
+        }
+        println!("Total {}", total);
+        println!("Time {} µs", (std::time::Instant::now()-now).as_micros());
+    }
 }
 
 #[test]

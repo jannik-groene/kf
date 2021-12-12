@@ -73,6 +73,7 @@ pub trait UCIHandler {
     fn handle_go(&mut self, tokens: Vec<&str>);
     fn handle_stop(&mut self);
     fn handle_ponderhit(&self);
+    fn handle_perft(&self, _tokens: Vec<&str>) {}
 }
 
 impl UCIHandler for engine::Engine {
@@ -130,6 +131,7 @@ impl UCIHandler for engine::Engine {
             "stop" => self.handle_stop(),
             "handle_ponderhit" => self.handle_ponderhit(),
             "quit" => std::process::exit(0),
+            "perft" => self.handle_perft(tokens),
             _ => eprintln!("Did not recognize command \"{}\"", tokens[0])
         }
     }
@@ -212,4 +214,7 @@ impl UCIHandler for engine::Engine {
         self.stop_search();
     }
     fn handle_ponderhit(&self) {}
+    fn handle_perft(&self, tokens: Vec<&str>) {
+        self.perft(u8::from_str_radix(tokens[1], 10).unwrap());
+    }
 }
