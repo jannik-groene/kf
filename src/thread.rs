@@ -2,13 +2,15 @@ use std::sync::{Arc, RwLock};
 use std::sync::mpsc::Sender;
 use std::io::Write;
 
-use super::super::chess::{Position, Move};
-use super::tt::TranspositionTable;
-use super::SearchInfo;
+use crate::{
+    chess::{Position, Move},
+    tt::TranspositionTable,
+    search::SearchInfo,
+    evaluate::evaluate,
+    eval::Eval,
+    engine::EngineIO,
+};
 
-use super::super::evaluate::evaluate;
-use super::super::evaluate::eval::Eval;
-use super::super::EngineIO;
 
 pub trait Thread {
     fn pos(&self) -> &Position;

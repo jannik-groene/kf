@@ -1,13 +1,23 @@
-pub mod engine;
+mod engine;
 mod uci;
+mod chess;
+mod search;
+mod tt;
+mod thread;
+mod evaluate;
+mod eval;
+mod piecetables;
+
+use crate::{
+    engine::Engine,
+    uci::UCIHandler,
+};
 
 #[cfg(test)]
 mod tests;
 
-use uci::UCIHandler;
-
 fn main() {
-    let mut engine = engine::Engine::new();
+    let mut engine = Engine::new();
     engine.uci_loop();
 }
 

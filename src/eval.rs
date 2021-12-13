@@ -38,6 +38,7 @@ impl Eval {
         Eval {bound: Bound::EXACT, value: Value::MATE(moves)}
     }
 
+    #[allow(dead_code)]
     pub fn exact_from_cents(centis: i32) -> Eval {
         Eval {bound: Bound::EXACT, value: Value::CENTIS(centis)}
     }

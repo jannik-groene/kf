@@ -1,14 +1,18 @@
-use super::engine;
+use crate::{
+    engine::{EngineIO, Engine},
+    chess::{Position, Move, Color},
+    search::SearchInfo,
+};
 use std::sync::mpsc::Sender;
 
 const VERSION_STRING: &str = "kf-0.0.7-dev";
 
-fn read_input(ch: Sender<engine::EngineIO>) {
+fn read_input(ch: Sender<EngineIO>) {
     let sin = std::io::stdin();
     loop {
         let mut s = String::new();
         sin.read_line(&mut s).unwrap();
-        match ch.send(engine::EngineIO::UCIINPUT(s)) {
+        match ch.send(EngineIO::UCIINPUT(s)) {
             Ok(_) => {},
             Err(_) => break,
         }
@@ -19,7 +23,7 @@ fn read_input(ch: Sender<engine::EngineIO>) {
 fn timer(ustime: Option<u64>, _themtime: Option<u64>,
          usinc: Option<u64>, _theminc: Option<u64>,
          movestogo: Option<u64>, movetime: Option<u64>,
-         id: u64, ch: Sender<engine::EngineIO>) {
+         id: u64, ch: Sender<EngineIO>) {
     const SAFETY_DELTA: std::time::Duration = std::time::Duration::from_millis(1);
     let now = std::time::Instant::now();
     //We play with increment
@@ -52,7 +56,7 @@ fn timer(ustime: Option<u64>, _themtime: Option<u64>,
     }
     //Spin until we reach target time
     while now.elapsed() < movetime - std::time::Duration::from_micros(1) {}
-    match ch.send(engine::EngineIO::TIMERENDED(id)) {
+    match ch.send(EngineIO::TIMERENDED(id)) {
         Ok(_) => {},
         Err(_) => {},
     }
@@ -76,17 +80,17 @@ pub trait UCIHandler {
     fn handle_perft(&self, _tokens: Vec<&str>) {}
 }
 
-impl UCIHandler for engine::Engine {
+impl UCIHandler for Engine {
     fn uci_loop(&mut self) {
         let mut waiting_for_search_end = false;
         let tx = self.get_sender();
-        let mut last_search_update: Option<engine::search::SearchInfo> = None;
+        let mut last_search_update: Option<SearchInfo> = None;
         std::thread::spawn(|| read_input(tx));
         loop {
             match self.receiver().recv() {
                 Ok(io) => match io {
-                    engine::EngineIO::UCIINPUT(s) => self.handle_input(s),
-                    engine::EngineIO::TIMERENDED(id) => {
+                    EngineIO::UCIINPUT(s) => self.handle_input(s),
+                    EngineIO::TIMERENDED(id) => {
                         if id == self.search_id() {
                             if last_search_update.is_some() {
                                 match last_search_update.as_ref().unwrap().bestmove {
@@ -99,8 +103,8 @@ impl UCIHandler for engine::Engine {
                             waiting_for_search_end = true;
                         }
                     },
-                    engine::EngineIO::SEARCHUPDATE(up) => last_search_update = Some(up),
-                    engine::EngineIO::SEARCHENDED(id)  => {
+                    EngineIO::SEARCHUPDATE(up) => last_search_update = Some(up),
+                    EngineIO::SEARCHENDED(id)  => {
                         if !waiting_for_search_end && id == self.search_id() {
                             self.increase_search_id(); //invalidate search_id
                             if last_search_update.is_some() {
@@ -160,16 +164,16 @@ impl UCIHandler for engine::Engine {
     }
     fn handle_position(&mut self, tokens: Vec<&str>) {
         let (offset, mut pos) = if tokens[1] == "startpos" {
-            (2, engine::chess::Position::new())
+            (2, Position::new())
         } else if tokens[1] == "fen" {
             let fen = tokens[2..=7].join(" ");
-            (8, engine::chess::Position::from_fen(fen).unwrap())
+            (8, Position::from_fen(fen).unwrap())
         } else {
             return;
         };
         if tokens.len() > offset && tokens[offset] == "moves" {
             for m in tokens[offset+1..].iter() {
-                pos.do_move(engine::chess::Move::from_str(m, &pos));
+                pos.do_move(Move::from_str(m, &pos));
             }
         }
         self.set_position(pos)
@@ -205,8 +209,8 @@ impl UCIHandler for engine::Engine {
         let tx = self.get_sender();
         let id = self.search_id() + 1;
         match self.color() {
-            engine::chess::Color::WHITE => std::thread::spawn(move || timer(wtime, btime, winc, binc, movestogo, movetime, id, tx)),
-            engine::chess::Color::BLACK => std::thread::spawn(move || timer(btime, wtime, binc, winc, movestogo, movetime, id, tx)),
+            Color::WHITE => std::thread::spawn(move || timer(wtime, btime, winc, binc, movestogo, movetime, id, tx)),
+            Color::BLACK => std::thread::spawn(move || timer(btime, wtime, binc, winc, movestogo, movetime, id, tx)),
         };
         self.start_search(None);
     }

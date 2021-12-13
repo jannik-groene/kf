@@ -1,6 +1,8 @@
 use std::sync::{Arc, RwLock};
-use super::super::evaluate::eval::{Eval, Value, Bound};
-use super::super::chess::{Move, CompressedMove};
+use crate::{
+    eval::{Eval, Value, Bound},
+    chess::{Move, CompressedMove},
+};
 
 #[derive(Clone)]
 pub struct TranspositionTable {
@@ -93,15 +95,15 @@ impl TTEntry {
 #[test]
 fn write_and_read_tt() {
     let mut hash = TranspositionTable::new(10000);
-    let entry = TTEntry::new(-Eval::MATE_NOW, 3, 1234628935786765, Move{from: 1, to: 2, piece: super::super::chess::Piece::KING, typ: super::super::chess::MoveType::MOVE});
+    let entry = TTEntry::new(-Eval::MATE_NOW, 3, 1234628935786765, Move{from: 1, to: 2, piece: crate::chess::Piece::KING, typ: crate::chess::MoveType::MOVE});
     hash.set(1234628935786765, entry.clone());
     assert!(hash.get(1234628935786765).unwrap() == entry);
-    let entry2 = TTEntry::new(-Eval::MATE_NOW, 3, 1234628935786798, Move{from: 1, to: 2, piece: super::super::chess::Piece::KING, typ: super::super::chess::MoveType::MOVE});
-    let entry4 = TTEntry::new(Eval::DRAW, 2, 1234628935786798, Move{from: 4, to: 8, piece: super::super::chess::Piece::QUEEN, typ: super::super::chess::MoveType::MOVE});
+    let entry2 = TTEntry::new(-Eval::MATE_NOW, 3, 1234628935786798, Move{from: 1, to: 2, piece: crate::chess::Piece::KING, typ: crate::chess::MoveType::MOVE});
+    let entry4 = TTEntry::new(Eval::DRAW, 2, 1234628935786798, Move{from: 4, to: 8, piece: crate::chess::Piece::QUEEN, typ: crate::chess::MoveType::MOVE});
     hash.set(1234628935786798, entry2.clone());
     hash.set(1234628935786798, entry4.clone());
     assert!(hash.get(1234628935786798).unwrap() == entry2);
-    let entry3 = TTEntry::new(-Eval::MATE_NOW, 3, 1234628935786700, Move{from: 1, to: 2, piece: super::super::chess::Piece::KING, typ: super::super::chess::MoveType::MOVE});
+    let entry3 = TTEntry::new(-Eval::MATE_NOW, 3, 1234628935786700, Move{from: 1, to: 2, piece: crate::chess::Piece::KING, typ: crate::chess::MoveType::MOVE});
     let mut hash_clone = hash.clone();
     std::thread::spawn(move || hash_clone.set(1234628935786700, entry3.clone()));
     std::thread::sleep(std::time::Duration::from_millis(100));

@@ -1,12 +1,10 @@
-pub mod nnue;
-pub mod eval;
-mod piecetables;
-use super::chess;
-use super::chess::{Position, Move, MoveType, MoveList, Board, Piece, Color, SquareMethods, SquareIndexMethods};
-use rand::{Rng, thread_rng};
+use crate::{
+    chess::{Position, Move, MoveType, MoveList, Board, Piece, Color, SquareMethods, SquareIndexMethods},
+    eval::{Eval, Bound, Value},
+    piecetables,
+};
 
-use eval::{Eval, Bound, Value};
-
+#[allow(dead_code)]
 pub fn has_pawns(pos: &Position) -> bool {
     pos.board[(Color::WHITE, Piece::PAWN)]
         | pos.board[(Color::BLACK, Piece::PAWN)] != 0
@@ -409,13 +407,6 @@ pub fn evaluate(pos: &mut Position) -> Eval {
 pub fn order_moves(movs: &mut MoveList, pos: &Position,
                    hash_move: Option<Move>, killers: &[Option<Move>; 2]) {
     movs.sort_unstable_by_key(|m| match m.typ { MoveType::CAPTURE(_) => -pos.see(*m), _ => 200 } - if killers[0].map_or(false, |k| k == *m) || killers[1].map_or(false, |k| k == *m) {0} else {1});
-    if hash_move.is_some() {
-        movs.sort_by_key(|m| if *m == hash_move.unwrap() {0} else {1});
-    }
-}
-
-pub fn order_moves_with_random_bias(movs: &mut MoveList, pos: &Position, hash_move: Option<Move>) {
-    movs.sort_unstable_by_key(|m| match m.typ { MoveType::CAPTURE(_) => -pos.see(*m), _ => 0 } + thread_rng().gen_range(-60..=60));
     if hash_move.is_some() {
         movs.sort_by_key(|m| if *m == hash_move.unwrap() {0} else {1});
     }

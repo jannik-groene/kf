@@ -1,9 +1,10 @@
 use std::sync::mpsc::{Sender, Receiver};
 use std::fmt::Display;
 
-pub mod chess;
-pub mod evaluate;
-pub mod search;
+use crate::{
+    search::{SearchManager, SearchInfo},
+    chess::{Position, Color},
+};
 
 #[derive(Clone,PartialEq)]
 enum OptionValue {
@@ -107,7 +108,7 @@ impl EngineConfig {
 }
 
 pub struct Engine {
-    search: search::SearchManager,
+    search: SearchManager,
     pub config: EngineConfig,
     //ID of the current search
     search_id: u64,
@@ -117,7 +118,7 @@ pub struct Engine {
 #[derive(Clone)]
 pub enum EngineIO {
     UCIINPUT(String),
-    SEARCHUPDATE(search::SearchInfo),
+    SEARCHUPDATE(SearchInfo),
     SEARCHENDED(u64),
     TIMERENDED(u64),
 }
@@ -125,7 +126,7 @@ pub enum EngineIO {
 impl Engine {
     pub fn new() -> Engine {
         let config = EngineConfig::new();
-        let mut search = search::SearchManager::new();
+        let mut search = SearchManager::new();
         let threads = match config.get_option("Threads").unwrap() { OptionValue::SPIN(n) => n}; //, _ => 1 };
         let hash_size = match config.get_option("Hash").unwrap() { OptionValue::SPIN(n) => n}; //, _ => 1 };
         search.set_threads(threads as usize);
@@ -146,7 +147,7 @@ impl Engine {
     pub fn print_config(&self) {
         self.config.print_config();
     }
-    pub fn set_position(&mut self, pos: chess::Position) {
+    pub fn set_position(&mut self, pos: Position) {
         self.search.set_position(pos);
     }
     pub fn start_search(&mut self, depth: Option<u8>) {
@@ -159,7 +160,7 @@ impl Engine {
     pub fn increase_search_id(&mut self) {
         self.search_id += 1;
     }
-    pub fn color(&self) -> chess::Color {
+    pub fn color(&self) -> Color {
         self.search.color()
     }
     pub fn search_id(&self) -> u64 {
@@ -180,7 +181,7 @@ impl Engine {
     pub fn reset_hash(&mut self) {
         self.search.reset_hash();
     }
-    fn perft_step(pos: &mut chess::Position, d: u8) -> usize {
+    fn perft_step(pos: &mut Position, d: u8) -> usize {
         if d == 0 {
             1
         } else if d == 1 {

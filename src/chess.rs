@@ -109,7 +109,9 @@ impl Board {
     pub fn file(f: File) -> Square {
         return Board::FILE << f as u64;
     }
+    #[allow(dead_code)]
     pub const RANK: Square = 0b11111111;
+    #[allow(dead_code)]
     #[inline]
     pub fn rank(r: Rank) -> Square {
         return Board::RANK << r as u64;
@@ -128,6 +130,7 @@ impl Board {
             _ => panic!("How???")
         }
     }
+    #[allow(dead_code)]
     #[inline]
     pub fn get_rank(sq: Square) -> Rank {
         match sq.trailing_zeros() / 8 {
@@ -1395,6 +1398,7 @@ impl Position {
                 }
             }
     }
+    #[allow(dead_code)]
     pub fn get_opponent_moves(&mut self) -> MoveList {
         self.to_move = self.to_move.other();
         self.attacked_squares = 0;
@@ -1529,6 +1533,7 @@ impl Position {
             self.rule_50_counts.push(*self.rule_50_counts.last().unwrap_or(&0)+1);
         }
     }
+    #[allow(dead_code)]
     pub fn get_castling_rights(&self) -> [[bool;2];2] {
         *self.castling_legal.last().unwrap_or_else(|| panic!("No castling rights specified."))
     }
@@ -1593,6 +1598,7 @@ impl Position {
     pub fn piece_count(&self, c: Color, p: Piece) -> i32 {
         self.board[(c,p)].count_ones() as i32
     }
+    #[allow(dead_code)]
     pub fn total_piece_count(&self) -> i32 {
         self.board.occupation.count_ones() as i32
     }
@@ -1602,9 +1608,11 @@ impl Position {
     pub fn material_balance(&self) -> i32 {
         return self.material_count(self.to_move) - self.material_count(self.to_move.other());
     }
+    #[allow(dead_code)]
     pub fn is_attacked(&self, sq: Square) -> bool {
         return self.attacked_squares & sq != 0;
     }
+    #[allow(dead_code)]
     pub fn piece_attacks(&self, p: Piece, c: Color, from: Square, target: Square) -> bool {
         match p {
             Piece::PAWN => self.pawn_attacks(from, c) & target != 0,
@@ -1616,6 +1624,7 @@ impl Position {
             _ => false,
         }
     }
+    #[allow(dead_code)]
     pub fn get_last_move(&self) -> Option<Move> {
         match self.move_history.last() {
             Some(m) => Some(*m),
@@ -1625,12 +1634,14 @@ impl Position {
     pub fn zobrist_hash(&self) -> u64 {
         self.zobrist
     }
+    #[allow(dead_code)]
     pub fn color_factor(&self) -> i32 {
         match self.to_move {
             Color::WHITE => 1,
             Color::BLACK => -1,
         }
     }
+    #[allow(dead_code)]
     pub fn hard_pins(&mut self) -> Square {
         if self.attacked_squares == 0 {
             self.generate_attack_table();

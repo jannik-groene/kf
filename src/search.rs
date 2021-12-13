@@ -2,15 +2,14 @@ use std::time::Instant;
 use std::sync::{Arc, RwLock};
 use std::sync::mpsc::Sender;
 
-mod tt;
-mod thread;
-
-use tt::{TranspositionTable, TTEntry};
-use thread::{Thread, MainThread, HelperThread};
-use super::EngineIO;
-use super::chess::{Position, Piece, Move, Color, MoveType};
-use super::evaluate::{order_moves, has_major_pieces, has_minor_pieces, is_material_draw};
-use super::evaluate::eval::{Eval, Value, Bound};
+use crate:: {
+    tt::{TranspositionTable, TTEntry},
+    thread::{Thread, MainThread, HelperThread},
+    engine::EngineIO,
+    chess::{Position, Piece, Move, Color, MoveType},
+    evaluate::{order_moves, has_major_pieces, has_minor_pieces, is_material_draw},
+    eval::{Eval, Value, Bound},
+};
 
 #[derive(Clone)]
 pub struct SearchInfo {
