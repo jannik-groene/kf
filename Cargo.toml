@@ -2,14 +2,17 @@
 name = "kf"
 version = "0.0.7"
 authors = ["jgroene <jannik.groene@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 [lib]
 name = "kf_internals"
 bench = true
 
 [profile.release]
-debug = 0
+debug = true
+opt-level = 3
+lto = true
+codegen-units = 1
 
 [profile.test]
 opt-level = 3
@@ -17,7 +20,8 @@ opt-level = 3
 [dependencies]
 bitintr = { version = "0.3.0" }
 rand = "*"
-rayon = "*"
+arrayvec = { version = "0.7.2" }
+lazy_static = "1.4.0"
 
 [dev-dependencies]
 criterion = "0.3"
