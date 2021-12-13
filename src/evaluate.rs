@@ -312,6 +312,16 @@ fn phase_factor(pos: &Position) -> i32 {
     phase
 }
 
+fn attacker_weight(p: Piece) -> i32 {
+    match p {
+        Piece::PAWN => 1,
+        Piece::BISHOP | Piece::KNIGHT => 2,
+        Piece::ROOK => 3,
+        Piece::QUEEN => 5,
+        _ => 0,
+    }
+}
+
 fn evaluate_king_safety(pos: &Position, moves_them: &MoveList, phase: i32) -> i32 {
     //We count attacks near our king. If there are many we penalize the evaluation.
     const DISTANCE_ONE_MULTIPLIER: i32 = 2;
@@ -321,42 +331,43 @@ fn evaluate_king_safety(pos: &Position, moves_them: &MoveList, phase: i32) -> i3
     let king_pos = pos.board[(pos.color(), Piece::KING)];
     let king_neighbours = Board::get_neighbours(king_pos);
     let king_next_neighbours = Board::get_next_neighbours(king_pos);
+    let mut attackers = 0;
     for m in moves_them {
         if m.to.square() & king_neighbours != 0 {
-            safety -= DISTANCE_ONE_MULTIPLIER * (m.piece.value() / 100);
+            safety -= DISTANCE_ONE_MULTIPLIER * attacker_weight(m.piece);
+            attackers |= m.from.square();
         } else if m.to.square() & king_next_neighbours != 0 {
-            safety -= DISTANCE_TWO_MULTIPLIER * (m.piece.value() / 100);
+            safety -= DISTANCE_TWO_MULTIPLIER * attacker_weight(m.piece);
+            attackers |= m.from.square();
         }
     }
-    let mut res = (500 - safety * safety).clamp(-15000,0) / SCALE;
+    let (mut res_early, res_late) = if attackers.count_ones() > 1 {
+        (((- safety * safety) / SCALE).clamp(-500,0), -safety)
+    } else {(0,0)};
 
     //In the early game we want pawns to shield our king.
     match pos.color() {
         Color::WHITE => {
             if king_pos.index() < 2 {
-                res += ((0b111 << 8) &
-                        pos.get_board()[(Color::WHITE, Piece::PAWN)]).count_ones() as i32
-                    * 5 * phase / OPENING_PHASE;
+                res_early += ((0b111 << 8) &
+                        pos.get_board()[(Color::WHITE, Piece::PAWN)]).count_ones() as i32 * 5;
             } else if king_pos.index() < 8 && king_pos.index() > 4 {
-                res += ((0b11100000 << 8) &
-                        pos.get_board()[(Color::WHITE, Piece::PAWN)]).count_ones() as i32
-                    * 5 * phase / OPENING_PHASE;
+                res_early += ((0b11100000 << 8) &
+                        pos.get_board()[(Color::WHITE, Piece::PAWN)]).count_ones() as i32 * 5;
             }
         },
         Color::BLACK => {
             if king_pos.index() > 47 && king_pos.index() < 51 {
-                res += ((0b111 << 48) &
-                        pos.get_board()[(Color::BLACK, Piece::PAWN)]).count_ones() as i32
-                    * 5 * phase / OPENING_PHASE;
+                res_early += ((0b111 << 48) &
+                        pos.get_board()[(Color::BLACK, Piece::PAWN)]).count_ones() as i32 * 5;
             } else if king_pos.index() > 61 {
-                res += ((0b11100000 << 48) &
-                        pos.get_board()[(Color::BLACK, Piece::PAWN)]).count_ones() as i32
-                    * 5 * phase / OPENING_PHASE;
+                res_early += ((0b11100000 << 48) &
+                        pos.get_board()[(Color::BLACK, Piece::PAWN)]).count_ones() as i32 * 5;
             }
         }
     }
 
-    res
+    res_early * phase / OPENING_PHASE + res_late * (OPENING_PHASE - phase) / OPENING_PHASE
 }
 
 pub fn evaluate(pos: &mut Position) -> Eval {
