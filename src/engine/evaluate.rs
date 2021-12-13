@@ -2,7 +2,7 @@ pub mod nnue;
 pub mod eval;
 mod piecetables;
 use super::chess;
-use super::chess::{Position, Move, MoveType, Board, Piece, Color, SquareMethods, SquareIndexMethods};
+use super::chess::{Position, Move, MoveType, MoveList, Board, Piece, Color, SquareMethods, SquareIndexMethods};
 use rand::{Rng, thread_rng};
 
 use eval::{Eval, Bound, Value};
@@ -254,7 +254,7 @@ fn evaluate_knights(pos: &mut Position, phase: i32) -> i32 {
     }
     res
 }
-fn evaluate_mobility(moves_us: &Vec<Move>, moves_them: &Vec<Move>, phase: i32) -> i32 {
+fn evaluate_mobility(moves_us: &MoveList, moves_them: &MoveList, phase: i32) -> i32 {
     let phase_factor = phase as f32 / OPENING_PHASE as f32;
     const KNIGHT_MOVE_VALUES: [f32;2] = [1.,1.5];
     const BISHOP_MOVE_VALUES: [f32;2] = [2.,1.];
@@ -314,7 +314,7 @@ fn phase_factor(pos: &Position) -> i32 {
     phase
 }
 
-fn evaluate_king_safety(pos: &Position, moves_them: &Vec<Move>, phase: i32) -> i32 {
+fn evaluate_king_safety(pos: &Position, moves_them: &MoveList, phase: i32) -> i32 {
     //We count attacks near our king. If there are many we penalize the evaluation.
     const DISTANCE_ONE_MULTIPLIER: i32 = 2;
     const DISTANCE_TWO_MULTIPLIER: i32 = 1;
@@ -406,7 +406,7 @@ pub fn evaluate(pos: &mut Position) -> Eval {
     Eval::new(Bound::EXACT, Value::CENTIS(res))
 }
 
-pub fn order_moves(movs: &mut Vec<Move>, pos: &Position,
+pub fn order_moves(movs: &mut MoveList, pos: &Position,
                    hash_move: Option<Move>, killers: &[Option<Move>; 2]) {
     movs.sort_unstable_by_key(|m| match m.typ { MoveType::CAPTURE(_) => -pos.see(*m), _ => 200 } - if killers[0].map_or(false, |k| k == *m) || killers[1].map_or(false, |k| k == *m) {0} else {1});
     if hash_move.is_some() {
@@ -414,7 +414,7 @@ pub fn order_moves(movs: &mut Vec<Move>, pos: &Position,
     }
 }
 
-pub fn order_moves_with_random_bias(movs: &mut Vec<Move>, pos: &Position, hash_move: Option<Move>) {
+pub fn order_moves_with_random_bias(movs: &mut MoveList, pos: &Position, hash_move: Option<Move>) {
     movs.sort_unstable_by_key(|m| match m.typ { MoveType::CAPTURE(_) => -pos.see(*m), _ => 0 } + thread_rng().gen_range(-60..=60));
     if hash_move.is_some() {
         movs.sort_by_key(|m| if *m == hash_move.unwrap() {0} else {1});

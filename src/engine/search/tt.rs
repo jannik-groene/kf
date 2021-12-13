@@ -18,7 +18,7 @@ impl TranspositionTable {
             hash: Arc::new(RwLock::new(hash_vec)),
         }
     }
-    #[inline(always)]
+    #[inline]
     pub fn get(&self, zobrist_key: u64) -> Option<TTEntry> {
         if self.size == 0 {
             return None;
@@ -32,7 +32,7 @@ impl TranspositionTable {
             None
         }
     }
-    #[inline(always)]
+    #[inline]
     pub fn set(&mut self, zobrist_key: u64, entry: TTEntry) {
         //do not commit invalid scores or low depths to the hashtable
         if self.size == 0 || matches!(entry.eval.value(), Value::INFTY | Value::NEGINFTY) {
@@ -68,7 +68,7 @@ pub struct TTEntry {
 
 impl TTEntry {
     const UNCHECKED: TTEntry = TTEntry {eval: Eval::MIN, depth: 0, zobrist_hash: 0, mov: CompressedMove{to:0, from:0, piece_and_type:0}};
-    #[inline(always)]
+    #[inline]
     pub fn mov(&self) -> Option<Move> {
         self.mov.decompress()
     }
@@ -80,11 +80,11 @@ impl TTEntry {
             mov: mov.compress(),
         }
     }
-    #[inline(always)]
+    #[inline]
     pub fn eval(&self) -> Eval {
         self.eval
     }
-    #[inline(always)]
+    #[inline]
     pub fn depth(&self) -> u8 {
         self.depth
     }

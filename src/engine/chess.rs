@@ -77,7 +77,7 @@ pub enum Rank {
     EIGHTH,
 }
 
-#[inline(always)]
+#[inline]
 fn get_zobrist_table(p: Piece, c: Color) -> &'static[u64] {
     match c {
         Color::WHITE => match p {
@@ -105,16 +105,16 @@ impl Board {
     pub const BLACK_SQUARES: Square = 0b1010101001010101101010100101010110101010010101011010101001010101;
     pub const WHITE_SQUARES: Square = u64::MAX ^ Board::BLACK_SQUARES;
     const FILE: Square = 0b0000000100000001000000010000000100000001000000010000000100000001;
-    #[inline(always)]
+    #[inline]
     pub fn file(f: File) -> Square {
         return Board::FILE << f as u64;
     }
     pub const RANK: Square = 0b11111111;
-    #[inline(always)]
+    #[inline]
     pub fn rank(r: Rank) -> Square {
         return Board::RANK << r as u64;
     }
-    #[inline(always)]
+    #[inline]
     pub fn get_file(sq: Square) -> File {
         match sq.trailing_zeros() % 8 {
             0 => File::A,
@@ -128,7 +128,7 @@ impl Board {
             _ => panic!("How???")
         }
     }
-    #[inline(always)]
+    #[inline]
     pub fn get_rank(sq: Square) -> Rank {
         match sq.trailing_zeros() / 8 {
             0 => Rank::FIRST,
@@ -142,14 +142,14 @@ impl Board {
             _ => panic!("Invalid square.")
         }
     }
-    #[inline(always)]
+    #[inline]
     pub fn forward(sq: Square, color: Color) -> Square {
         match color {
             Color::WHITE => u64::MAX << ((sq.index() / 8) * 8 + 8),
             Color::BLACK => u64::MAX >> (8 - sq.index() / 8) * 8,
         }
     }
-    #[inline(always)]
+    #[inline]
     pub fn piece_at(&self, sq: Square) -> Option<Piece> {
         if (self[(Color::WHITE, Piece::PAWN)] | self[(Color::BLACK, Piece::PAWN)]) & sq != 0 {
             Some(Piece::PAWN)
@@ -208,7 +208,7 @@ impl Board {
         Some(board)
     }
     //returns the zobrist xor factor after applying a move to the board
-    #[inline(always)]
+    #[inline]
     fn do_move_for_color(&mut self, m: Move, color: Color) -> u64 {
         //Move the moving Piece
         let mut zobrist = get_zobrist_table(m.piece, color)[m.from.index()];
@@ -299,7 +299,7 @@ impl Board {
         }
         zobrist
     }
-    #[inline(always)]
+    #[inline]
     pub fn do_move(&mut self, m: Move) -> u64 {
         let color = if self[(Color::WHITE, m.piece)] & m.from.square() != 0 {
             Color::WHITE
@@ -308,7 +308,7 @@ impl Board {
         };
         self.do_move_for_color(m,color)
     }
-    #[inline(always)]
+    #[inline]
     pub fn undo_move(&mut self, m: Move) -> u64 {
         let color = if self[(Color::WHITE, Piece::ANY)] & m.to.square() != 0 {
             Color::WHITE
@@ -473,6 +473,7 @@ pub struct SquareIterator {
 impl Iterator for SquareIterator {
     type Item = Square;
 
+    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         if self.state == 0 {
             None
@@ -502,55 +503,55 @@ pub trait SquareMethods {
 }
 
 impl SquareMethods for Square {
-    #[inline(always)]
+    #[inline]
     fn go_n(self) -> Square {
         self << 8
     }
-    #[inline(always)]
+    #[inline]
     fn go_s(self) -> Square {
         self >> 8
     }
-    #[inline(always)]
+    #[inline]
     fn go_w(self) -> Square {
         self >> 1
     }
-    #[inline(always)]
+    #[inline]
     fn go_e(self) -> Square {
         self << 1
     }
-    #[inline(always)]
+    #[inline]
     fn go_nw(self) -> Square {
         self << 7
     }
-    #[inline(always)]
+    #[inline]
     fn go_ne(self) -> Square {
         self << 9
     }
-    #[inline(always)]
+    #[inline]
     fn go_se(self) -> Square {
         self >> 7
     }
-    #[inline(always)]
+    #[inline]
     fn go_sw(self) -> Square {
         self >> 9
     }
-    #[inline(always)]
+    #[inline]
     fn is_at_west_border(self) -> bool {
         self & WEST_BORDER != 0
     }
-    #[inline(always)]
+    #[inline]
     fn is_at_east_border(self) -> bool {
         self & EAST_BORDER != 0
     }
-    #[inline(always)]
+    #[inline]
     fn is_at_north_border(self) -> bool {
         self > 1 << 55
     }
-    #[inline(always)]
+    #[inline]
     fn is_at_south_border(self) -> bool {
         self < 1 << 8
     }
-    #[inline(always)]
+    #[inline]
     fn iter(self) -> SquareIterator {
         SquareIterator { state: self }
     }
@@ -560,55 +561,55 @@ impl SquareMethods for Square {
 }
 
 impl SquareMethods for SquareIndex {
-    #[inline(always)]
+    #[inline]
     fn go_n(self) -> SquareIndex {
         self + 8
     }
-    #[inline(always)]
+    #[inline]
     fn go_s(self) -> SquareIndex {
         self - 8
     }
-    #[inline(always)]
+    #[inline]
     fn go_w(self) -> SquareIndex {
         self - 1
     }
-    #[inline(always)]
+    #[inline]
     fn go_e(self) -> SquareIndex {
         self + 1
     }
-    #[inline(always)]
+    #[inline]
     fn go_nw(self) -> SquareIndex {
         self + 7
     }
-    #[inline(always)]
+    #[inline]
     fn go_ne(self) -> SquareIndex {
         self + 9
     }
-    #[inline(always)]
+    #[inline]
     fn go_se(self) -> SquareIndex {
         self - 7
     }
-    #[inline(always)]
+    #[inline]
     fn go_sw(self) -> SquareIndex {
         self - 9
     }
-    #[inline(always)]
+    #[inline]
     fn is_at_west_border(self) -> bool {
         self % 8 == 0
     }
-    #[inline(always)]
+    #[inline]
     fn is_at_east_border(self) -> bool {
         self % 8 == 7
     }
-    #[inline(always)]
+    #[inline]
     fn is_at_north_border(self) -> bool {
         self > 55
     }
-    #[inline(always)]
+    #[inline]
     fn is_at_south_border(self) -> bool {
         self < 8
     }
-    #[inline(always)]
+    #[inline]
     fn iter(self) -> SquareIterator {
         SquareIterator { state: self.square() }
     }
@@ -702,6 +703,8 @@ impl CompressedMove {
         Some(Move {from: self.from, to: self.to, piece, typ,})
     }
 }
+
+pub type MoveList = arrayvec::ArrayVec<Move,256>;
 
 fn display_promotion(m: &Move) -> String {
     match m.typ {
@@ -991,47 +994,45 @@ impl Position {
     }
     // Compute the knight moves from a given square using the lookup table
     // Computes the possible moves from the least significant bit in the Square
-    #[inline(always)]
+    #[inline]
     fn knight_moves(&self, sq: Square) -> Square {
         constants::KNIGHT_MOVES[sq.index()]
     }
     // Compute the rook moves from a given square using the lookup table and PEXT/PDEP boards
     // Computes the possible moves from the least significant bit in the Square
-    #[inline(always)]
+    #[inline]
     fn rook_moves_for_occupation(&self, sq: Square, occ: Square) -> Square {
         assert!(sq != 0);
         let moves = constants::ROOK_MOVES[sq.index()];
         constants::ROOK_MMASK[(occ.pext(moves) + constants::ROOK_MMASK_OFFSETS[sq.index()]) as usize]
     }
-    #[inline(always)]
+    #[inline]
     fn rook_moves(&self, sq: Square) -> Square {
         self.rook_moves_for_occupation(sq, self.board.occupation)
     }
     // Compute the bishop moves from a given square using the lookup table and PEXT/PDEP boards
     // Computes the possible moves from the least significant bit in the Square
-    #[inline(always)]
+    #[inline]
     fn bishop_moves_for_occupation(&self, sq: Square, occ: Square) -> Square {
         assert!(sq != 0);
         let moves = constants::BISHOP_MOVES[sq.index()];
         constants::BISHOP_MMASK[(occ.pext(moves) + constants::BISHOP_MMASK_OFFSETS[sq.index()]) as usize]
     }
-    #[inline(always)]
+    #[inline]
     fn bishop_moves(&self, sq: Square) -> Square {
         self.bishop_moves_for_occupation(sq, self.board.occupation)
     }
     // Compute the king moves from a given square using the lookup table
-    #[inline(always)]
+    #[inline]
     fn king_moves(&self, sq: Square) -> Square {
         assert!(sq != 0);
         constants::NEIGHBOURS[sq.index()]
     }
-    #[inline(always)]
+    #[inline]
     fn pawn_moves(&self, sq: Square, c: Color) -> Square {
         match c {
             Color::WHITE => {
-                if self.board.occupation & sq.go_n() != 0 {return 0;}
-                //How that happened, we have no clue..
-                if sq.is_at_north_border() {0}
+                if self.board.occupation & sq.go_n() != 0 {0}
                 else if sq > (1 << 7) && sq < (1 << 16) && self.board.occupation & (sq << 16) == 0 {
                     (sq << 8) | (sq << 16)
                 }
@@ -1039,7 +1040,6 @@ impl Position {
             },
             Color::BLACK => {
                 if self.board.occupation & sq.go_s() != 0 {0}
-                else if sq.is_at_south_border() {0}
                 else if sq < (1<<56) && sq > (1 << 47) && self.board.occupation & (sq >> 16) == 0 {
                     (sq >> 8) | (sq >> 16)
                 }
@@ -1047,7 +1047,7 @@ impl Position {
             }
         }
     }
-    #[inline(always)]
+    #[inline]
     fn pawn_attacks(&self, sq: Square, c: Color) -> Square {
         let mut attacked = 0;
         if c == Color::WHITE {
@@ -1068,7 +1068,7 @@ impl Position {
         }
         attacked
     }
-    #[inline(always)]
+    #[inline]
     pub fn generate_attack_table(&mut self) {
         let opp = self.to_move.other();
         let king_pos = self.board[(self.to_move, Piece::KING)];
@@ -1147,8 +1147,8 @@ impl Position {
     }
     //Calculate possible moves of a piece on a given square, using the provide move gen closure
     //
-    #[inline(always)]
-    fn get_piece_moves(&self, move_getter: impl Fn(Square) -> Square, moves: &mut Vec<Move>, p: Piece) {
+    #[inline]
+    fn get_piece_moves(&self, move_getter: impl Fn(Square) -> Square, moves: &mut MoveList, p: Piece) {
         for pos in self.board[(self.to_move, p)].iter() {
             let mut pmoves = move_getter(pos);
             pmoves &= pmoves ^ self.board[(self.to_move, Piece::ANY)];
@@ -1169,8 +1169,8 @@ impl Position {
             }
         }
     }
-    #[inline(always)]
-    fn handle_en_passant(&mut self, moves: &mut Vec<Move>, check_mask: Square) {
+    #[inline]
+    fn handle_en_passant(&mut self, moves: &mut MoveList, check_mask: Square) {
         match self.move_history.last() {
             Some(m) => {
                 if m.piece == Piece::PAWN {
@@ -1266,8 +1266,8 @@ impl Position {
             _ => {}
         }
     }
-    #[inline(always)]
-    fn handle_castling(&self, moves: &mut Vec<Move>) {
+    #[inline]
+    fn handle_castling(&self, moves: &mut MoveList) {
         if self.king_attackers.count_ones() != 0 {return;}
         match self.to_move {
             Color::WHITE => {
@@ -1326,8 +1326,8 @@ impl Position {
             },
         }
     }
-    #[inline(always)]
-    fn get_pawn_moves(&self, moves: &mut Vec<Move>, check_mask: Square) {
+    #[inline]
+    fn get_pawn_moves(&self, moves: &mut MoveList, check_mask: Square) {
             let pawns = self.board[(self.to_move, Piece::PAWN)];
             for pawn in pawns.iter() {
                 let mut pmoves = (self.pawn_moves(pawn, self.to_move) |
@@ -1395,7 +1395,7 @@ impl Position {
                 }
             }
     }
-    pub fn get_opponent_moves(&mut self) -> Vec<Move> {
+    pub fn get_opponent_moves(&mut self) -> MoveList {
         self.to_move = self.to_move.other();
         self.attacked_squares = 0;
         let moves = self.get_moves();
@@ -1403,9 +1403,9 @@ impl Position {
         self.attacked_squares = 0;
         moves
     }
-    pub fn get_moves(&mut self) -> Vec<Move> {
+    pub fn get_moves(&mut self) -> MoveList {
         //We expect about 35 moves in the average position
-        let mut moves = Vec::with_capacity(50);
+        let mut moves = MoveList::new();
         if *self.rule_50_counts.last().unwrap_or_else(|| panic!()) == 100
             || self.board.occupation.count_ones() == 2 {
             return moves;
@@ -1645,7 +1645,7 @@ impl Position {
     }
     //TODO: Should this _really_ be here? But where else to put it?
     //Helper for SEE
-    #[inline(always)]
+    #[inline]
     fn least_valuable_attacker(&self, mut attackers: Square, c: Color) -> Option<(Square, Piece)> {
         attackers = attackers & self.board[(c, Piece::ANY)];
         attackers.iter().map(|a| match self.board.piece_at(a) {

@@ -52,42 +52,42 @@ pub struct MainThread {
 }
 
 impl Thread for MainThread {
-    #[inline(always)]
+    #[inline]
     fn pos_mut(&mut self) -> &mut Position {&mut self.pos}
-    #[inline(always)]
+    #[inline]
     fn pos(&self) -> &Position {&self.pos}
-    #[inline(always)]
+    #[inline]
     fn nodes(&self) -> &u64 {&self.nodes}
-    #[inline(always)]
+    #[inline]
     fn nodes_mut(&mut self) -> &mut u64 {&mut self.nodes}
-    #[inline(always)]
+    #[inline]
     fn tt(&self) -> &TranspositionTable {&self.tt}
-    #[inline(always)]
+    #[inline]
     fn tt_mut(&mut self) -> &mut TranspositionTable {&mut self.tt}
-    #[inline(always)]
+    #[inline]
     fn is_helper(&self) -> bool {false}
-    #[inline(always)]
+    #[inline]
     fn stop_flag(&self) -> &Arc<RwLock<bool>> {&self.stop_flag}
-    #[inline(always)]
+    #[inline]
     fn threads(&self) -> usize {self.threads}
-    #[inline(always)]
+    #[inline]
     fn set_bestmove(&mut self, m: Option<Move>) {
         self.bestmove = m;
     }
-    #[inline(always)]
+    #[inline]
     fn do_move(&mut self, m: Move) {
         self.pos.do_move(m);
     }
-    #[inline(always)]
+    #[inline]
     fn undo_move(&mut self) {
         self.pos.undo_move();
     }
-    #[inline(always)]
+    #[inline]
     fn evaluate(&mut self) -> Eval {
         evaluate(self.pos_mut())
     }
 
-    #[inline(always)]
+    #[inline]
     fn register_killer(&mut self, ply: u8, m: Move) {
         if self.killers.len() <= ply as usize {
             self.killers.resize(ply as usize+1, ([None,None],[0,0]));
@@ -104,7 +104,7 @@ impl Thread for MainThread {
             self.killers[ply as usize].1[1] = 1;
         }
     }
-    #[inline(always)]
+    #[inline]
     fn get_killers(&self, ply: u8) -> &[Option<Move>; 2] {
         if self.killers.len() <= ply as usize {
             &[None, None]
@@ -112,7 +112,7 @@ impl Thread for MainThread {
             &self.killers[ply as usize].0
         }
     }
-    #[inline(always)]
+    #[inline]
     fn invalidate_killers(&mut self, ply: u8) {
         if self.killers.len() > ply as usize + 1 {
             self.killers[ply as usize + 1].1 = [0,0];
@@ -132,7 +132,7 @@ impl MainThread {
                killers: Vec<([Option<Move>; 2], [u8; 2])>) -> MainThread {
         MainThread {pos,nodes,threads,tt,stop_flag,search_info,sender,bestmove,killers}
     }
-    #[inline(always)]
+    #[inline]
     pub fn bestmove(&self) -> Option<Move> {
         self.bestmove
     }
@@ -185,35 +185,35 @@ impl HelperThread {
 }
 
 impl Thread for HelperThread {
-    #[inline(always)]
+    #[inline]
     fn pos_mut(&mut self) -> &mut Position {&mut self.pos}
-    #[inline(always)]
+    #[inline]
     fn pos(&self) -> &Position {&self.pos}
-    #[inline(always)]
+    #[inline]
     fn nodes(&self) -> &u64 {&self.nodes}
-    #[inline(always)]
+    #[inline]
     fn nodes_mut(&mut self) -> &mut u64 {&mut self.nodes}
-    #[inline(always)]
+    #[inline]
     fn tt(&self) -> &TranspositionTable {&self.tt}
-    #[inline(always)]
+    #[inline]
     fn tt_mut(&mut self) -> &mut TranspositionTable {&mut self.tt}
-    #[inline(always)]
+    #[inline]
     fn is_helper(&self) -> bool {true}
-    #[inline(always)]
+    #[inline]
     fn stop_flag(&self) -> &Arc<RwLock<bool>> {&self.stop_flag}
-    #[inline(always)]
+    #[inline]
     fn do_move(&mut self, m: Move) {
         self.pos.do_move(m);
     }
-    #[inline(always)]
+    #[inline]
     fn undo_move(&mut self) {
         self.pos.undo_move();
     }
-    #[inline(always)]
+    #[inline]
     fn evaluate(&mut self) -> Eval {
         evaluate(self.pos_mut())
     }
-    #[inline(always)]
+    #[inline]
     fn register_killer(&mut self, ply: u8, m: Move) {
         if self.killers.len() <= ply as usize {
             self.killers.resize(ply as usize+1, ([None,None],[0,0]));
@@ -230,7 +230,7 @@ impl Thread for HelperThread {
             self.killers[ply as usize].1[1] = 1;
         }
     }
-    #[inline(always)]
+    #[inline]
     fn get_killers(&self, ply: u8) -> &[Option<Move>; 2] {
         if self.killers.len() <= ply as usize {
             &[None, None]
@@ -238,7 +238,7 @@ impl Thread for HelperThread {
             &self.killers[ply as usize].0
         }
     }
-    #[inline(always)]
+    #[inline]
     fn invalidate_killers(&mut self, ply: u8) {
         if self.killers.len() > ply as usize + 1 {
             self.killers[ply as usize + 1].1 = [0,0];
