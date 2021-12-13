@@ -320,7 +320,7 @@ fn evaluate_king_safety(pos: &Position, moves_them: &MoveList, phase: i32) -> i3
     let mut safety = 0;
     let king_pos = pos.board[(pos.color(), Piece::KING)];
     let king_neighbours = Board::get_neighbours(king_pos);
-    let king_next_neighbours = Board::get_neighbours(king_pos);
+    let king_next_neighbours = Board::get_next_neighbours(king_pos);
     for m in moves_them {
         if m.to.square() & king_neighbours != 0 {
             safety -= DISTANCE_ONE_MULTIPLIER * (m.piece.value() / 100);
