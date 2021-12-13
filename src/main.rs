@@ -7,6 +7,7 @@ mod thread;
 mod evaluate;
 mod eval;
 mod piecetables;
+mod nnue;
 
 use crate::{
     engine::Engine,

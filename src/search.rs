@@ -68,14 +68,11 @@ impl SearchManager {
         self.stop_flag = Arc::new(RwLock::new(false));
         let mut root_search_info = MainThread::new(
             self.pos.clone(),
-            0,
             self.threads,
             self.tt.clone(),
             self.stop_flag.clone(),
             self.search_info.clone(),
             out_channel,
-            None,
-            Vec::new(),
             );
         std::thread::spawn(move || search(&mut root_search_info, depth, Eval::MIN, Eval::MAX))
     }
@@ -110,10 +107,8 @@ fn search(thread: &mut MainThread, depth: u8, mut alpha: Eval, mut beta: Eval) {
                 for i in 1..thread.threads() {
                     let mut helper_thread = HelperThread::new(
                         thread.pos().clone(),
-                        0,
                         thread.tt().clone(),
                         helper_stop_flag.clone(),
-                        Vec::new(),
                     );
                     helper_handles.push(std::thread::spawn(move || search_helper(&mut helper_thread, d.saturating_add(i as u8 / 2), alpha, beta)));
                 }
@@ -382,7 +377,7 @@ fn search_step(thread: &mut impl Thread,
                                      movescore.neg_down());
         }
 
-        thread.undo_move();
+        thread.undo_move(moves[i]);
 
         //Abort search if the helper gets a stop signal
         if thread.stop_flag().read().unwrap().eq(&true) {return Eval::MIN;};
@@ -488,7 +483,7 @@ fn quiesce(thread: &mut impl Thread, mut alpha: Eval, beta: Eval, delta: i32, qp
         thread.do_move(m);
         //The deeper we are the more valuable captures need to be
         let score = -quiesce(thread, -beta, -alpha, delta-20, qply+1);
-        thread.undo_move();
+        thread.undo_move(m);
 
         if score >= beta {
             return score.to_lowerbound();

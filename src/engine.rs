@@ -131,6 +131,8 @@ impl Engine {
         let hash_size = match config.get_option("Hash").unwrap() { OptionValue::SPIN(n) => n}; //, _ => 1 };
         search.set_threads(threads as usize);
         search.set_hash_size(hash_size as usize);
+        let path = std::path::Path::new("/home/jannik/Code/kf/model.nnue");
+        crate::nnue::NNUEState::load_weights(&path);
         Engine {
             search,
             config,

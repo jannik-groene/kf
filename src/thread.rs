@@ -9,6 +9,7 @@ use crate::{
     evaluate::evaluate,
     eval::Eval,
     engine::EngineIO,
+    nnue::NNUEState,
 };
 
 
@@ -31,7 +32,7 @@ pub trait Thread {
     fn set_bestmove(&mut self, _m: Option<Move>) {}
 
     fn do_move(&mut self, m: Move);
-    fn undo_move(&mut self);
+    fn undo_move(&mut self, m: Move);
 
     fn evaluate(&mut self) -> Eval;
 
@@ -51,6 +52,7 @@ pub struct MainThread {
     sender: Sender<EngineIO>,
     bestmove: Option<Move>,
     killers: Vec<([Option<Move>; 2], [u8; 2])>,
+    nnue: NNUEState,
 }
 
 impl Thread for MainThread {
@@ -79,14 +81,17 @@ impl Thread for MainThread {
     #[inline]
     fn do_move(&mut self, m: Move) {
         self.pos.do_move(m);
+        self.nnue.do_move(m, &self.pos);
     }
     #[inline]
-    fn undo_move(&mut self) {
+    fn undo_move(&mut self, m: Move) {
+        self.nnue.undo_move(m, &self.pos);
         self.pos.undo_move();
     }
     #[inline]
     fn evaluate(&mut self) -> Eval {
-        evaluate(self.pos_mut())
+        Eval::exact_from_cents(self.nnue.evaluate_position(&self.pos))
+        //evaluate(self.pos_mut())
     }
 
     #[inline]
@@ -124,15 +129,22 @@ impl Thread for MainThread {
 
 impl MainThread {
     pub fn new(pos: Position,
-               nodes: u64,
                threads: usize,
                tt: TranspositionTable,
                stop_flag: Arc<RwLock<bool>>,
                search_info: SearchInfo,
-               sender: Sender<EngineIO>,
-               bestmove: Option<Move>,
-               killers: Vec<([Option<Move>; 2], [u8; 2])>) -> MainThread {
-        MainThread {pos,nodes,threads,tt,stop_flag,search_info,sender,bestmove,killers}
+               sender: Sender<EngineIO>) -> MainThread {
+        let nnue = NNUEState::new(&pos);
+        MainThread {pos,
+                    nodes: 0,
+                    threads,
+                    tt,
+                    stop_flag,
+                    search_info,
+                    sender,
+                    bestmove: None,
+                    killers: Vec::new(),
+                    nnue}
     }
     #[inline]
     pub fn bestmove(&self) -> Option<Move> {
@@ -174,15 +186,20 @@ pub struct HelperThread {
     tt: TranspositionTable,
     stop_flag: Arc<RwLock<bool>>,
     killers: Vec<([Option<Move>; 2], [u8; 2])>,
+    nnue: NNUEState,
 }
 
 impl HelperThread {
     pub fn new(pos: Position,
-               nodes: u64,
                tt: TranspositionTable,
-               stop_flag: Arc<RwLock<bool>>,
-               killers: Vec<([Option<Move>; 2], [u8; 2])>) -> HelperThread {
-        HelperThread {pos, nodes, tt, stop_flag, killers}
+               stop_flag: Arc<RwLock<bool>>) -> HelperThread {
+        let nnue = NNUEState::new(&pos);
+        HelperThread {pos,
+                      nodes: 0,
+                      tt,
+                      stop_flag,
+                      killers: Vec::new(),
+                      nnue}
     }
 }
 
@@ -206,9 +223,11 @@ impl Thread for HelperThread {
     #[inline]
     fn do_move(&mut self, m: Move) {
         self.pos.do_move(m);
+        self.nnue.do_move(m, &self.pos);
     }
     #[inline]
-    fn undo_move(&mut self) {
+    fn undo_move(&mut self, m: Move) {
+        self.nnue.undo_move(m, &self.pos);
         self.pos.undo_move();
     }
     #[inline]
