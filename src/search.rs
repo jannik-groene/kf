@@ -377,7 +377,7 @@ fn search_step(thread: &mut impl Thread,
                                      movescore.neg_down());
         }
 
-        thread.undo_move(moves[i]);
+        thread.undo_move();
 
         //Abort search if the helper gets a stop signal
         if thread.stop_flag().read().unwrap().eq(&true) {return Eval::MIN;};
@@ -483,7 +483,7 @@ fn quiesce(thread: &mut impl Thread, mut alpha: Eval, beta: Eval, delta: i32, qp
         thread.do_move(m);
         //The deeper we are the more valuable captures need to be
         let score = -quiesce(thread, -beta, -alpha, delta-20, qply+1);
-        thread.undo_move(m);
+        thread.undo_move();
 
         if score >= beta {
             return score.to_lowerbound();

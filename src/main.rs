@@ -1,3 +1,4 @@
+#![feature(portable_simd)]
 mod engine;
 mod uci;
 mod chess;

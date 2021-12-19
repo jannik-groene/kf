@@ -32,7 +32,7 @@ pub trait Thread {
     fn set_bestmove(&mut self, _m: Option<Move>) {}
 
     fn do_move(&mut self, m: Move);
-    fn undo_move(&mut self, m: Move);
+    fn undo_move(&mut self);
 
     fn evaluate(&mut self) -> Eval;
 
@@ -84,13 +84,13 @@ impl Thread for MainThread {
         self.nnue.do_move(m, &self.pos);
     }
     #[inline]
-    fn undo_move(&mut self, m: Move) {
-        self.nnue.undo_move(m, &self.pos);
+    fn undo_move(&mut self) {
+        self.nnue.undo_move();
         self.pos.undo_move();
     }
     #[inline]
     fn evaluate(&mut self) -> Eval {
-        Eval::exact_from_cents(self.nnue.evaluate_position(&self.pos))
+        Eval::exact_from_cents(self.nnue.evaluate_position(self.pos(), self.pos.color()))
         //evaluate(self.pos_mut())
     }
 
@@ -222,13 +222,13 @@ impl Thread for HelperThread {
     fn stop_flag(&self) -> &Arc<RwLock<bool>> {&self.stop_flag}
     #[inline]
     fn do_move(&mut self, m: Move) {
-        self.pos.do_move(m);
         self.nnue.do_move(m, &self.pos);
+        self.pos.do_move(m);
     }
     #[inline]
-    fn undo_move(&mut self, m: Move) {
-        self.nnue.undo_move(m, &self.pos);
+    fn undo_move(&mut self) {
         self.pos.undo_move();
+        self.nnue.undo_move();
     }
     #[inline]
     fn evaluate(&mut self) -> Eval {

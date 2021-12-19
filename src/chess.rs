@@ -396,6 +396,9 @@ impl Board {
     pub fn get_next_neighbours(s: Square) -> Square {
         constants::NEXT_NEIGHBOURS[s.index()]
     }
+    pub fn iter(&self) -> BoardIterator<'_> {
+        BoardIterator {occ: self.occupation, board: &self}
+    }
 }
 
 pub fn square_to_string(sq: Square) -> String{
@@ -448,6 +451,31 @@ impl std::ops::Index<(Color, Piece)> for Board {
 impl std::ops::IndexMut<(Color, Piece)> for Board {
     fn index_mut(&mut self, i: (Color, Piece)) -> &mut Square {
         &mut self.positions[i.0 as usize][i.1 as usize]
+    }
+}
+
+pub struct BoardIterator<'a> {
+    occ: u64,
+    board: &'a Board,
+}
+
+impl Iterator for BoardIterator<'_> {
+    type Item = (Piece, Color, usize);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.occ == 0 {
+            None
+        } else {
+            let sq = self.occ & !(self.occ - 1);
+            self.occ ^= sq;
+            let p = self.board.piece_at(sq).unwrap();
+            let c = if self.board[(Color::WHITE, Piece::ANY)] & sq != 0 {
+                Color::WHITE
+            } else {
+                Color::BLACK
+            };
+            Some((p,c,sq.index()))
+        }
     }
 }
 
