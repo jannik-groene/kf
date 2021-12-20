@@ -324,7 +324,7 @@ fn search_step(thread: &mut impl Thread,
         let mut lmr = ((depth_left as f64).sqrt() * (i as f64).sqrt() / 9.) as u8;
 
         //We do not reduce to zero moves left
-        lmr = lmr.clamp(0, depth_left - 1);
+        lmr = lmr.clamp(0, depth_left.saturating_sub(1));
 
         thread.do_move(moves[i]);
 
