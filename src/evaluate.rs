@@ -123,10 +123,8 @@ fn evaluate_pawns(pos: &mut Position, phase: i32) -> i32 {
             if neighbours == 0 {
                 res -= 15;
             }
-        } else {
-            if neighbours == 0 {
+        } else if neighbours == 0 {
                 res -= 25;
-            }
         }
 
         //3. Check for backward pawn

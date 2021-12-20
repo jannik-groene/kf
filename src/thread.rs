@@ -167,7 +167,7 @@ impl MainThread {
             if index >= depth {break;}
             pos.do_move(next_move.unwrap());
         }
-        drop(write!(handle, "\n"));
+        drop(writeln!(handle));
     }
     pub fn send_info(&self, io: EngineIO) {
         drop(self.sender.send(io));

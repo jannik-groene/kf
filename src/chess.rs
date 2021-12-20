@@ -149,7 +149,7 @@ impl Board {
     pub fn forward(sq: Square, color: Color) -> Square {
         match color {
             Color::WHITE => u64::MAX << ((sq.index() / 8) * 8 + 8),
-            Color::BLACK => u64::MAX >> (8 - sq.index() / 8) * 8,
+            Color::BLACK => u64::MAX >> ((8 - sq.index() / 8) * 8),
         }
     }
     #[inline]
@@ -1306,18 +1306,17 @@ impl Position {
                 const WHITE_QUEEN_CASTLE_CHECK_MASK: Square = 0b00001100;
                 const WHITE_QUEEN_CASTLE_MATERIAL_MASK: Square = 0b00001110;
                 //Check for kingside castling.
-                if self.castling_legal.last().unwrap()[0][0] {
-                    if (self.attacked_squares | self.board.occupation) & WHITE_KING_CASTLE_MASK == 0 {
+                if self.castling_legal.last().unwrap()[0][0]
+                    && (self.attacked_squares | self.board.occupation) & WHITE_KING_CASTLE_MASK == 0 {
                         moves.push(Move {
                             from: 4,
                             to:   6,
                             piece: Piece::KING,
                             typ: MoveType::CASTLE,
                         });
-                    }
                 }
-                if self.castling_legal.last().unwrap()[0][1] {
-                    if self.attacked_squares & WHITE_QUEEN_CASTLE_CHECK_MASK == 0 &&
+                if self.castling_legal.last().unwrap()[0][1]
+                    && self.attacked_squares & WHITE_QUEEN_CASTLE_CHECK_MASK == 0 &&
                         self.board.occupation & WHITE_QUEEN_CASTLE_MATERIAL_MASK == 0{
                         moves.push(Move {
                             from: 4,
@@ -1325,7 +1324,6 @@ impl Position {
                             piece: Piece::KING,
                             typ: MoveType::CASTLE,
                         });
-                    }
                 }
             },
             Color::BLACK => {
@@ -1333,26 +1331,24 @@ impl Position {
                 const BLACK_QUEEN_CASTLE_CHECK_MASK: Square = 0b00001100 << 56;
                 const BLACK_QUEEN_CASTLE_MATERIAL_MASK: Square = 0b00001110 << 56;
                 //Check for kingside castling.
-                if self.castling_legal.last().unwrap()[1][0] {
-                    if (self.attacked_squares | self.board.occupation) & BLACK_KING_CASTLE_MASK == 0 {
+                if self.castling_legal.last().unwrap()[1][0]
+                    && (self.attacked_squares | self.board.occupation) & BLACK_KING_CASTLE_MASK == 0 {
                         moves.push(Move {
                             from: 60,
                             to:   62,
                             piece: Piece::KING,
                             typ: MoveType::CASTLE,
                         });
-                    }
                 }
-                if self.castling_legal.last().unwrap()[1][1] {
-                    if self.attacked_squares & BLACK_QUEEN_CASTLE_CHECK_MASK == 0 &&
-                        self.board.occupation & BLACK_QUEEN_CASTLE_MATERIAL_MASK == 0 {
+                if self.castling_legal.last().unwrap()[1][1]
+                    && self.attacked_squares & BLACK_QUEEN_CASTLE_CHECK_MASK == 0
+                    && self.board.occupation & BLACK_QUEEN_CASTLE_MATERIAL_MASK == 0 {
                         moves.push(Move {
                             from: 60,
                             to:   58,
                             piece: Piece::KING,
                             typ: MoveType::CASTLE,
                         });
-                    }
                 }
             },
         }

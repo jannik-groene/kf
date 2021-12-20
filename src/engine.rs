@@ -81,7 +81,7 @@ impl EngineConfig {
                     print!(" var {}", v);
                 }
             }
-            print!("\n");
+            println!();
         }
     }
     fn get_option(&self, id: &str) -> Option<OptionValue> {
