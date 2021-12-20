@@ -2,6 +2,7 @@ mod model;
 mod features;
 mod halfkav2;
 mod layers;
+mod intrinsics;
 
 use crate::chess::{SquareIndex, SquareIndexMethods, Move, Position, Piece, Color};
 use features::{EnumerateFeatures, MoveFeatures};

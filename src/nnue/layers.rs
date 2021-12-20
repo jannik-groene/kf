@@ -33,6 +33,26 @@ impl<const INPUTS: usize, const OUTPUTS: usize> LinearLayer<INPUTS, OUTPUTS> {
     }
 }
 
+#[inline]
+pub fn affine_transform<const INPUTS: usize, const OUTPUTS: usize>(ll: &LinearLayer<INPUTS, OUTPUTS>, inputs: &[i8; INPUTS]) -> [i32; OUTPUTS] {
+    let mut outputs = ll.biases;
+    #[cfg(target_arch="x86_64")]
+    {
+        if is_x86_feature_detected!("avx2") {
+            if INPUTS % 32 == 0 && OUTPUTS % 4 == 0 {
+                    return unsafe {crate::nnue::intrinsics::affine_transform(ll, inputs)};
+            }
+        }
+    }
+    for i in 0..OUTPUTS {
+        for j in 0..INPUTS {
+            outputs[i] +=  ll.weights[i][j] as i32 * inputs[j] as i32;
+        }
+    }
+    outputs
+
+}
+
 #[derive(Clone, Copy)]
 pub struct AccumulatorPerspective<const SIZE: usize, const PSQT: usize> {
     pub state: [i16; SIZE],

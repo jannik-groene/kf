@@ -19,13 +19,13 @@ macro_rules! make_model {
                     fs::File,
                 };
                 use crate::nnue::{
-                    layers::{FeatureTransformer, LinearLayer, Accumulator},
+                    layers::{FeatureTransformer, LinearLayer, Accumulator, affine_transform},
                     features::Feature,
                 };
 
                 //function to calculate the input padding produced by nnue-pytorch
                 const fn input_padding(layer_size: usize) -> usize {
-                    if layer_size % 32 != 0 {
+                    if layer_size % 32 != 0 && layer_size != 1 {
                         32 - (layer_size % 32)
                     } else {
                         0
@@ -61,6 +61,7 @@ macro_rules! make_model {
 
                 lazy_static! [
                     static ref MODEL: Arc<RwLock<ModelType>> = {
+                        assert!($accumulator_size % 32 == 0);
                         Arc::new(RwLock::new(ModelType::new()))
                     };
                 ];
@@ -148,18 +149,6 @@ macro_rules! make_model {
                     }
                 }
 
-                #[inline]
-                fn affine_trafo<const INPUTS: usize, const OUTPUTS: usize>(ll: &LinearLayer<INPUTS,OUTPUTS>,
-                                                                           inputs: &[i8; INPUTS]) -> [i32; OUTPUTS] {
-                    let mut outputs = ll.biases;
-                    for i in 0..OUTPUTS {
-                        for j in 0..INPUTS {
-                            outputs[i] += inputs[j] as i32 * ll.weights[i][j] as i32;
-                        }
-                    }
-                    outputs
-                }
-
                 #[allow(dead_code)]
                 pub fn evaluate_state(accumulator : &Accumulator<$accumulator_size,$buckets>,
                                       bucket      : usize                                   ,
@@ -170,7 +159,7 @@ macro_rules! make_model {
                     let state = accumulator;
                     $(
                         let input = state.clip(perspective);
-                        let state = affine_trafo(&data.layerstacks[bucket].$layer_name, &input);
+                        let state = affine_transform(&data.layerstacks[bucket].$layer_name, &input);
                     )*
                     (state[0] + psqt) / 16
                 }
@@ -291,6 +280,7 @@ mod tests {
         let eval2 = sf_half_ka_v2::evaluate_state(&accumulator,bucket as usize,pos.color().other() as usize);
         println!("Eval {:.2}", eval as f64 / 208.);
         println!("Eval {:.2}", eval2 as f64 / 208.);
+        panic!()
     }
     #[test]
     fn load_bytes() -> std::io::Result<()> {
