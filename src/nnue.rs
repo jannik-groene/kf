@@ -1,13 +1,11 @@
-mod model;
-mod features;
 mod halfkav2;
-mod layers;
-mod intrinsics;
 
 use crate::chess::{SquareIndex, SquareIndexMethods, Move, Position, Piece, Color};
-use features::{EnumerateFeatures, MoveFeatures};
-use layers::Accumulator;
-use crate::make_model;
+use nnue::{
+    make_model,
+    layers::Accumulator,
+    features::{EnumerateFeatures, MoveFeatures, Perspective},
+};
 
 make_model!{sf_half_ka_v2, {64*64*11}, 512, 8,
             (l1, 1024, 16),
@@ -23,8 +21,8 @@ pub struct NNUEState {
 impl NNUEState {
     pub fn new(pos: &Position) -> NNUEState {
         let mut acc = Accumulator::new();
-        sf_half_ka_v2::refresh_accumulator(&mut acc, pos.features(Color::WHITE), 0);
-        sf_half_ka_v2::refresh_accumulator(&mut acc, pos.features(Color::BLACK), 1);
+        sf_half_ka_v2::refresh_accumulator(&mut acc, pos.features(Perspective::WHITE), 0);
+        sf_half_ka_v2::refresh_accumulator(&mut acc, pos.features(Perspective::BLACK), 1);
         NNUEState { states: vec![acc]}
     }
 
@@ -40,12 +38,12 @@ impl NNUEState {
             let our_piece = pos.get_board()[(c, Piece::ANY)] & m.to.square() != 0;
 
             //select updated features
-            let (added, removed) = m.changed_features(c, kp, our_piece);
+            let (added, removed) = m.changed_features(c.into(), kp, our_piece);
             sf_half_ka_v2::update_accumulator(acc, acc_new, added, removed, c as usize)
         }
         //if the king has moved we need to update all weights in the position
         else {
-            sf_half_ka_v2::refresh_accumulator(acc_new, pos.features(c), c as usize)
+            sf_half_ka_v2::refresh_accumulator(acc_new, pos.features(c.into()), c as usize)
         }
     }
 

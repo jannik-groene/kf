@@ -438,5 +438,4 @@ fn bug_hunt() {
     println!("eval: {}", evaluate(&mut pos));
     let mut pos2 = Position::from_fen(String::from("r6r/pp2nkbp/2nR2p1/4p3/4P3/4Q1PP/1PPKNPB1/q6R b - - 2 17")).unwrap();
     println!("eval: {}", evaluate(&mut pos2));
-    panic!()
 }

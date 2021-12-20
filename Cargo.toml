@@ -8,6 +8,9 @@ edition = "2021"
 name = "kf_internals"
 bench = true
 
+[profile.dev]
+opt-level = 3
+
 [profile.release]
 debug = true
 opt-level = 3
@@ -17,11 +20,16 @@ codegen-units = 1
 [profile.test]
 opt-level = 3
 
+[profile.bench]
+opt-level = 3
+debug = true
+
 [dependencies]
 bitintr = { version = "0.3.0" }
 rand = "*"
 arrayvec = { version = "0.7.2" }
 lazy_static = "1.4.0"
+nnue = {path="../nnue"}
 
 [dev-dependencies]
 criterion = "0.3"

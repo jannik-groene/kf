@@ -1,9 +1,6 @@
 use arrayvec::ArrayVec;
-
-use crate::{
-    nnue::features::{Feature, EnumerateFeatures, MoveFeatures},
-    chess::{Move, MoveType, Position, SquareMethods, SquareIndex, SquareIndexMethods, Piece, Color},
-};
+use nnue::features::{Feature, EnumerateFeatures, MoveFeatures, Perspective};
+use crate::chess::{Move, MoveType, Position, SquareMethods, SquareIndex, SquareIndexMethods, Piece, Color};
 
 
 pub struct HalfKAv2Feature {
@@ -33,9 +30,9 @@ impl Feature for HalfKAv2Feature {
 
 impl MoveFeatures<HalfKAv2Feature> for Move {
     #[inline]
-    fn changed_features(&self, perspective: Color, mut ksq: SquareIndex, our_piece: bool)
+    fn changed_features(&self, perspective: Perspective, mut ksq: SquareIndex, our_piece: bool)
                                                         -> (Vec<HalfKAv2Feature>, Vec<HalfKAv2Feature>) {
-        let flip = if perspective == Color::WHITE {0} else {56};
+        let flip = if perspective == Perspective::WHITE {0} else {56};
         let f = self.from ^ flip;
         let t = self.to ^ flip;
         ksq = ksq ^ flip;
@@ -83,10 +80,11 @@ impl MoveFeatures<HalfKAv2Feature> for Move {
 
 impl EnumerateFeatures<HalfKAv2Feature> for Position {
     #[inline]
-    fn features(&self, c: Color) -> ArrayVec<HalfKAv2Feature, 32> {
+    fn features(&self, p: Perspective) -> ArrayVec<HalfKAv2Feature, 32> {
         let mut features = ArrayVec::new();
-        let flip = if c == Color::WHITE {0} else {56};
-        let ksq = SquareIndex::from_square(self.board[(c, Piece::KING)]);
+        let flip = if p == Perspective::WHITE {0} else {56};
+        let ksq = SquareIndex::from_square(self.board[(p.into(), Piece::KING)]);
+        let c: Color = p.into();
         for (p,c_p,sq) in self.board.iter() {
             features.push(HalfKAv2Feature::new(ksq ^ flip, p, sq as u8 ^ flip, c == c_p));
         }
@@ -94,3 +92,20 @@ impl EnumerateFeatures<HalfKAv2Feature> for Position {
     }
 }
 
+impl Into<Color> for Perspective {
+    fn into(self) -> Color {
+        match self {
+            Perspective::WHITE => Color::WHITE,
+            Perspective::BLACK => Color::BLACK,
+        }
+    }
+}
+
+impl Into<Perspective> for Color {
+    fn into(self) -> Perspective {
+        match self {
+            Color::WHITE => Perspective::WHITE,
+            Color::BLACK => Perspective::BLACK,
+        }
+    }
+}
