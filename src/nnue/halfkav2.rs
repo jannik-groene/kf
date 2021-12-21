@@ -85,8 +85,15 @@ impl EnumerateFeatures<HalfKAv2Feature> for Position {
         let flip = if p == Perspective::WHITE {0} else {56};
         let ksq = SquareIndex::from_square(self.board[(p.into(), Piece::KING)]);
         let c: Color = p.into();
-        for (p,c_p,sq) in self.board.iter() {
-            features.push(HalfKAv2Feature::new(ksq ^ flip, p, sq as u8 ^ flip, c == c_p));
+        let pieces = [Piece::PAWN, Piece::KNIGHT, Piece::BISHOP, Piece::ROOK, Piece::QUEEN, Piece::KING];
+        //generate piece indices in order, for faster computations
+        for p in pieces {
+            for sq in self.board[(c,p)].iter() {
+                features.push(HalfKAv2Feature::new(ksq ^ flip, p, SquareIndex::from_square(sq) ^ flip, true));
+            }
+            for sq in self.board[(c.other(),p)].iter() {
+                features.push(HalfKAv2Feature::new(ksq ^ flip, p, SquareIndex::from_square(sq) ^ flip, false));
+            }
         }
         features
     }
