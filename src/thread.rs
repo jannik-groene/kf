@@ -6,7 +6,6 @@ use crate::{
     chess::{Position, Move},
     tt::TranspositionTable,
     search::SearchInfo,
-    evaluate::evaluate,
     eval::Eval,
     engine::EngineIO,
     nnue::NNUEState,
@@ -33,6 +32,9 @@ pub trait Thread {
 
     fn do_move(&mut self, m: Move);
     fn undo_move(&mut self);
+
+    fn do_null_move(&mut self);
+    fn undo_null_move(&mut self);
 
     fn evaluate(&mut self) -> Eval;
 
@@ -82,6 +84,7 @@ impl Thread for MainThread {
     fn do_move(&mut self, m: Move) {
         self.pos.do_move(m);
         self.nnue.do_move(m, &self.pos);
+        self.nodes += 1;
     }
     #[inline]
     fn undo_move(&mut self) {
@@ -89,9 +92,17 @@ impl Thread for MainThread {
         self.pos.undo_move();
     }
     #[inline]
+    fn do_null_move(&mut self) {
+        self.pos.do_null_move();
+        self.nodes += 1;
+    }
+    #[inline]
+    fn undo_null_move(&mut self) {
+        self.pos.undo_null_move();
+    }
+    #[inline]
     fn evaluate(&mut self) -> Eval {
         Eval::exact_from_cents(self.nnue.evaluate_position(self.pos(), self.pos.color()))
-        //evaluate(self.pos_mut())
     }
 
     #[inline]
@@ -224,6 +235,7 @@ impl Thread for HelperThread {
     fn do_move(&mut self, m: Move) {
         self.nnue.do_move(m, &self.pos);
         self.pos.do_move(m);
+        self.nodes += 1;
     }
     #[inline]
     fn undo_move(&mut self) {
@@ -231,8 +243,17 @@ impl Thread for HelperThread {
         self.nnue.undo_move();
     }
     #[inline]
+    fn do_null_move(&mut self) {
+        self.pos.do_null_move();
+        self.nodes += 1;
+    }
+    #[inline]
+    fn undo_null_move(&mut self) {
+        self.pos.undo_null_move();
+    }
+    #[inline]
     fn evaluate(&mut self) -> Eval {
-        evaluate(self.pos_mut())
+        Eval::exact_from_cents(self.nnue.evaluate_position(self.pos(), self.pos.color()))
     }
     #[inline]
     fn register_killer(&mut self, ply: u8, m: Move) {

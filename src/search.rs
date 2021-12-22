@@ -198,8 +198,6 @@ fn search_step(thread: &mut impl Thread,
                mut alpha: Eval,
                beta: Eval) -> Eval {
 
-    *thread.nodes_mut() += 1;
-
     //check for obviously drawn positions
     if is_material_draw(thread.pos()) {
         return Eval::DRAW;
@@ -290,7 +288,7 @@ fn search_step(thread: &mut impl Thread,
             && !thread.pos_mut().in_check() && moves.len() > 2 && ply > 2
             && !matches!(alpha.value(), Value::MATE(_))
             && !matches!(beta.value(), Value::MATE(_)) {
-        thread.pos_mut().do_null_move();
+        thread.do_null_move();
         let null_score = -search_step(thread,
                                       depth,
                                       ply+1,
@@ -300,7 +298,7 @@ fn search_step(thread: &mut impl Thread,
                                       zw,
                                       beta.neg_down(),
                                       alpha.neg_down());
-        thread.pos_mut().undo_null_move();
+        thread.undo_null_move();
         if null_score >= beta {
             return null_score.to_lowerbound();
         }
@@ -428,10 +426,6 @@ fn search_step(thread: &mut impl Thread,
 }
 
 fn quiesce(thread: &mut impl Thread, mut alpha: Eval, beta: Eval, delta: i32, qply: u8) -> Eval {
-
-    if qply > 0 {
-        *thread.nodes_mut() += 1;
-    }
 
     //check for obviously drawn positions
     if is_material_draw(thread.pos()) {
