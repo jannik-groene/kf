@@ -7,10 +7,7 @@ use nnue::{
     features::{EnumerateFeatures, MoveFeatures, Perspective},
 };
 
-make_model!{sf_half_ka_v2, {64*64*11}, 512, 8,
-            (l1, 1024, 16),
-            (l2,   16, 32),
-            (l3,   32,  1)}
+make_model!{sf_half_ka_v2, {64*64*11} => 1024 => 16 => 32 => 1, 8}
 
 #[derive(Clone)]
 pub struct NNUEState {
@@ -66,100 +63,27 @@ impl NNUEState {
     }
 }
 
-//#[cfg(test)]
-//mod tests {
-//    use rand::{seq::SliceRandom, thread_rng};
-//    use super::NNUEState;
-//    use crate::chess::{Position, Move, MoveType, Piece};
-//
-//    fn do_and_undo(pos: &mut Position, nnue: &mut NNUEState, count: usize) {
-//        if count == 0 {return;}
-//        //let eval = nnue.evaluate_position(pos.color());
-//        let moves = pos.get_moves();
-//        let m = match moves.choose(&mut thread_rng()) {
-//            Some(m) => m,
-//            None => return,
-//        };
-//        pos.do_move(*m);
-//        nnue.do_move(*m, &pos);
-//        do_and_undo(pos, nnue, count-1);
-//        pos.undo_move();
-//        nnue.undo_move(*m, &pos);
-//        //let eval2 = nnue.evaluate_position(pos.color());
-//        //if eval != eval2 {println!("evals {}, {}, {}, {:?}, {:?}, {}", eval, eval2, *m, m.piece, m.typ, count)};
-//        //assert!(eval2 == eval);
-//    }
-//
-//    #[test]
-//    fn load_model() {
-//        let now = std::time::Instant::now();
-//        let path = std::path::Path::new("/home/jannik/Code/kf_training/model.nnue");
-//        super::load_weights(&path);
-//        println!("loaded!, {}", now.elapsed().as_millis());
-//        let pos = Position::new();
-//        let mut nnue = NNUEState::new(&pos);
-//        let now_init = std::time::Instant::now();
-//        println!("initialized!, {}", now_init.elapsed().as_nanos());
-//        println!("{}", nnue.evaluate_position(pos.color()));
-//        let pos = Position::from_fen(String::from("8/4k3/p3b1p1/3n2R1/1P5P/5K2/3B4/8 b - - 6 65")).unwrap();
-//        let now_init = std::time::Instant::now();
-//        nnue.initialize_state(&pos);
-//        println!("initialized!, {}", now_init.elapsed().as_nanos());
-//        println!("{}", nnue.evaluate_position(pos.color()));
-//        let mut pos = Position::new();
-//        nnue.initialize_state(&pos);
-//        let now_loop = std::time::Instant::now();
-//        for _i in 0..10000 {
-//            do_and_undo(&mut pos, &mut nnue, 20);
-//        }
-//        println!("Took {} ms", now_loop.elapsed().as_millis());
-//        panic!()
-//    }
-//    #[test]
-//    fn test_evals() {
-//        let mut pos = Position::new();
-//        let path = std::path::Path::new("/home/jannik/Code/kf_training/model.nnue");
-//        super::load_weights(&path);
-//        let mut nnue = NNUEState::new(&pos);
-//        let eval = nnue.evaluate_position(pos.color());
-//        pos.do_null_move();
-//        assert!(eval == nnue.evaluate_position(pos.color()));
-//        let test_fens = [
-//            String::from("3k4/8/8/8/P6P/8/8/3K4 w - - 0 1"), //winning
-//            String::from("3k4/8/8/8/P6P/8/8/3K4 b - - 0 1"), //losing
-//            String::from("rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPPKPPP/RNBQ1BNR b kq - 0 1"), //bongcloud
-//            String::from("rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPPKPPP/RNBQ1BNR w kq - 0 1"), //bongcloud
-//            String::from("r1bqkb1r/ppp2ppp/2n2n2/3pp3/8/NP4PN/P1PPPP1P/R1BQKB1R w KQkq - 0 1"), //losing
-//            String::from("r1bqkb1r/ppp2ppp/2n2n2/3pp3/8/NP4PN/P1PPPP1P/R1BQKB1R b KQkq - 0 1"), //winning
-//            String::from("r1bqkb1r/ppp2ppp/2n2n2/3pp1K1/8/NP4PN/P1PPPP1P/R1BQ1B1R b kq - 0 1"), //winning
-//        ];
-//        for fen in test_fens {
-//            pos = Position::from_fen(fen).unwrap();
-//            nnue.initialize_state(&pos);
-//            println!("eval {}", nnue.evaluate_position(pos.color()));
-//        }
-//        panic!()
-//    }
-//    #[test]
-//    fn simple_move() {
-//        let path = std::path::Path::new("/home/jannik/Code/kf_training/model.nnue");
-//        super::load_weights(&path);
-//        let mut pos = Position::new();
-//        let mut nnue = NNUEState::new(&pos);
-//        let m1 = Move{from: 12, to: 20, piece: Piece::PAWN, typ: MoveType::MOVE};
-//        let m2 = Move{from: 52, to: 44, piece: Piece::PAWN, typ: MoveType::MOVE};
-//        let m3 = Move{from:  4, to: 12, piece: Piece::KING, typ: MoveType::MOVE};
-//        nnue.initialize_state(&pos);
-//        pos.do_move(m1);
-//        nnue.do_move(m1, &pos);
-//        pos.do_move(m2);
-//        nnue.do_move(m2, &pos);
-//        pos.do_move(m3);
-//        nnue.do_move(m3, &pos);
-//        pos.undo_move();
-//        nnue.undo_move(m3, &pos);
-//        pos.undo_move();
-//        nnue.undo_move(m2, &pos);
-//        let nnue2 = NNUEState::new(&pos);
-//    }
-//}
+#[cfg(test)]
+mod tests {
+    use crate::chess::Position;
+    use nnue::{
+        layers::Accumulator,
+        features::{EnumerateFeatures, Perspective},
+        make_model,
+    };
+
+    make_model!{sf_half_ka_v2, {64*64*11} => 1024 => 16 => 32 => 1, 8}
+
+    #[test]
+    fn evaluate_position() {
+        let pos = Position::new();
+        sf_half_ka_v2::load_model(&std::path::Path::new("/home/jannik/Downloads/Stockfish/src/nn-33c9d39e5eb6.nnue")).unwrap();
+        let mut acc = Accumulator::new();
+        let fw = pos.features(Perspective::WHITE);
+        let fb = pos.features(Perspective::BLACK);
+        sf_half_ka_v2::refresh_accumulator(&mut acc, fw, 0);
+        sf_half_ka_v2::refresh_accumulator(&mut acc, fb, 1);
+        let eval = sf_half_ka_v2::evaluate_state(&acc, 7, 0);
+        assert_eq!(35, eval);
+    }
+}
