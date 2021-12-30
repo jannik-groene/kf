@@ -3,16 +3,17 @@ mod halfkav2;
 use crate::chess::{SquareIndex, SquareIndexMethods, Move, Position, Piece, Color};
 use nnue::{
     make_model,
-    layers::Accumulator,
     features::{EnumerateFeatures, MoveFeatures, Perspective},
 };
 
-make_model!{sf_half_ka_v2, {64*64*11} => 1024 => 16 => 32 => 1, 8}
+make_model!{sf_half_ka_v2, 45056 => 1024 => 16 => 32 => 1, 8}
+
+use sf_half_ka_v2::Accumulator;
 
 #[derive(Clone)]
 pub struct NNUEState {
     //state of the first hidden layer
-    states: Vec<Accumulator<512,8>>,
+    states: Vec<Accumulator>,
 }
 
 impl NNUEState {
@@ -24,8 +25,8 @@ impl NNUEState {
     }
 
     //Input is the up-to-date position, after the move is done (or undone).
-    pub fn update_color_state(&self, acc: &Accumulator<512,8>, acc_new: &mut Accumulator<512,8>,
-                                                             pos: &Position, m: Move, c: Color) {
+    pub fn update_color_state(&self, acc: &Accumulator, acc_new: &mut Accumulator,
+                                                        pos: &Position, m: Move, c: Color) {
         //if the King has not moved the update is simple
         if m.piece != Piece::KING
                 || pos.get_board()[(c.other(), Piece::KING)] & (m.from.square() | m.to.square()) != 0 {
@@ -67,18 +68,17 @@ impl NNUEState {
 mod tests {
     use crate::chess::Position;
     use nnue::{
-        layers::Accumulator,
         features::{EnumerateFeatures, Perspective},
         make_model,
     };
 
-    make_model!{sf_half_ka_v2, {64*64*11} => 1024 => 16 => 32 => 1, 8}
+    make_model!(sf_half_ka_v2, 45056 => 1024 => 16 => 32 => 1, 8);
 
     #[test]
     fn evaluate_position() {
         let pos = Position::new();
-        sf_half_ka_v2::load_model(&std::path::Path::new("/home/jannik/Downloads/Stockfish/src/nn-33c9d39e5eb6.nnue")).unwrap();
-        let mut acc = Accumulator::new();
+        sf_half_ka_v2::load_model(std::path::Path::new("/home/jannik/Downloads/Stockfish/src/nn-33c9d39e5eb6.nnue")).unwrap();
+        let mut acc = sf_half_ka_v2::Accumulator::new();
         let fw = pos.features(Perspective::WHITE);
         let fb = pos.features(Perspective::BLACK);
         sf_half_ka_v2::refresh_accumulator(&mut acc, fw, 0);
