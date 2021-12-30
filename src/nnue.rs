@@ -77,7 +77,7 @@ mod tests {
     #[test]
     fn evaluate_position() {
         let pos = Position::new();
-        sf_half_ka_v2::load_model(std::path::Path::new("/home/jannik/Downloads/Stockfish/src/nn-33c9d39e5eb6.nnue")).unwrap();
+        sf_half_ka_v2::load_model(std::path::Path::new("nn-33c9d39e5eb6.nnue")).unwrap();
         let mut acc = sf_half_ka_v2::Accumulator::new();
         let fw = pos.features(Perspective::WHITE);
         let fb = pos.features(Perspective::BLACK);

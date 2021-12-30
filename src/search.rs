@@ -40,6 +40,7 @@ pub struct SearchManager {
     tt: TranspositionTable,
     stop_flag: Arc<RwLock<bool>>,
     search_info: SearchInfo,
+    use_nnue: bool,
 }
 
 impl SearchManager {
@@ -50,6 +51,7 @@ impl SearchManager {
             tt: TranspositionTable::new(2),
             stop_flag: Arc::new(RwLock::new(false)),
             search_info: SearchInfo::new(0),
+            use_nnue: false,
         }
     }
     pub fn set_hash_size(&mut self, size: usize) {
@@ -59,8 +61,10 @@ impl SearchManager {
         self.threads = threads;
     }
     pub fn set_position(&mut self, pos: Position) {
-        //self.nnue.initialize_state(&pos);
         self.pos = pos;
+    }
+    pub fn set_use_nnue(&mut self, use_nnue: bool) {
+        self.use_nnue = use_nnue;
     }
     pub fn search(&mut self, out_channel: Sender<EngineIO>, target_depth: Option<u8>, search_id: u64) -> std::thread::JoinHandle<()> {
         let depth = target_depth.unwrap_or(u8::MAX);
@@ -73,6 +77,7 @@ impl SearchManager {
             self.stop_flag.clone(),
             self.search_info.clone(),
             out_channel,
+            self.use_nnue,
             );
         std::thread::spawn(move || search(&mut root_search_info, depth, Eval::MIN, Eval::MAX))
     }
@@ -109,6 +114,7 @@ fn search(thread: &mut MainThread, depth: u8, mut alpha: Eval, mut beta: Eval) {
                         thread.pos().clone(),
                         thread.tt().clone(),
                         helper_stop_flag.clone(),
+                        thread.uses_nnue(),
                     );
                     helper_handles.push(std::thread::spawn(move || search_helper(&mut helper_thread, d.saturating_add(i as u8 / 2), alpha, beta)));
                 }

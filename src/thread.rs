@@ -9,6 +9,7 @@ use crate::{
     eval::Eval,
     engine::EngineIO,
     nnue::NNUEState,
+    evaluate::evaluate,
 };
 
 
@@ -54,6 +55,7 @@ pub struct MainThread {
     sender: Sender<EngineIO>,
     bestmove: Option<Move>,
     killers: Vec<([Option<Move>; 2], [u8; 2])>,
+    use_nnue: bool,
     nnue: NNUEState,
 }
 
@@ -83,13 +85,17 @@ impl Thread for MainThread {
     #[inline]
     fn do_move(&mut self, m: Move) {
         self.pos.do_move(m);
-        self.nnue.do_move(m, &self.pos);
+        if self.use_nnue {
+            self.nnue.do_move(m, &self.pos);
+        }
         self.nodes += 1;
     }
     #[inline]
     fn undo_move(&mut self) {
-        self.nnue.undo_move();
         self.pos.undo_move();
+        if self.use_nnue {
+            self.nnue.undo_move();
+        }
     }
     #[inline]
     fn do_null_move(&mut self) {
@@ -102,7 +108,11 @@ impl Thread for MainThread {
     }
     #[inline]
     fn evaluate(&mut self) -> Eval {
-        Eval::exact_from_cents(self.nnue.evaluate_position(self.pos(), self.pos.color()))
+        if self.use_nnue {
+            Eval::exact_from_cents(self.nnue.evaluate_position(self.pos(), self.pos.color()))
+        } else {
+            evaluate(self.pos_mut())
+        }
     }
 
     #[inline]
@@ -144,7 +154,8 @@ impl MainThread {
                tt: TranspositionTable,
                stop_flag: Arc<RwLock<bool>>,
                search_info: SearchInfo,
-               sender: Sender<EngineIO>) -> MainThread {
+               sender: Sender<EngineIO>,
+               use_nnue: bool) -> MainThread {
         let nnue = NNUEState::new(&pos);
         MainThread {pos,
                     nodes: 0,
@@ -155,7 +166,8 @@ impl MainThread {
                     sender,
                     bestmove: None,
                     killers: Vec::new(),
-                    nnue}
+                    nnue,
+                    use_nnue}
     }
     #[inline]
     pub fn bestmove(&self) -> Option<Move> {
@@ -189,6 +201,9 @@ impl MainThread {
     pub fn search_info_mut(&mut self) -> &mut SearchInfo {
         &mut self.search_info
     }
+    pub fn uses_nnue(&self) -> bool {
+        self.use_nnue
+    }
 }
 
 pub struct HelperThread {
@@ -198,19 +213,22 @@ pub struct HelperThread {
     stop_flag: Arc<RwLock<bool>>,
     killers: Vec<([Option<Move>; 2], [u8; 2])>,
     nnue: NNUEState,
+    use_nnue: bool,
 }
 
 impl HelperThread {
     pub fn new(pos: Position,
                tt: TranspositionTable,
-               stop_flag: Arc<RwLock<bool>>) -> HelperThread {
+               stop_flag: Arc<RwLock<bool>>,
+               use_nnue: bool) -> HelperThread {
         let nnue = NNUEState::new(&pos);
         HelperThread {pos,
                       nodes: 0,
                       tt,
                       stop_flag,
                       killers: Vec::new(),
-                      nnue}
+                      nnue,
+                      use_nnue}
     }
 }
 
@@ -233,14 +251,18 @@ impl Thread for HelperThread {
     fn stop_flag(&self) -> &Arc<RwLock<bool>> {&self.stop_flag}
     #[inline]
     fn do_move(&mut self, m: Move) {
-        self.nnue.do_move(m, &self.pos);
+        if self.use_nnue {
+            self.nnue.do_move(m, &self.pos);
+        }
         self.pos.do_move(m);
         self.nodes += 1;
     }
     #[inline]
     fn undo_move(&mut self) {
         self.pos.undo_move();
-        self.nnue.undo_move();
+        if self.use_nnue {
+            self.nnue.undo_move();
+        }
     }
     #[inline]
     fn do_null_move(&mut self) {
@@ -253,7 +275,11 @@ impl Thread for HelperThread {
     }
     #[inline]
     fn evaluate(&mut self) -> Eval {
-        Eval::exact_from_cents(self.nnue.evaluate_position(self.pos(), self.pos.color()))
+        if self.use_nnue {
+            Eval::exact_from_cents(self.nnue.evaluate_position(self.pos(), self.pos.color()))
+        } else {
+            evaluate(self.pos_mut())
+        }
     }
     #[inline]
     fn register_killer(&mut self, ply: u8, m: Move) {
