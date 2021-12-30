@@ -94,7 +94,7 @@ impl SearchManager {
         self.tt.reset();
     }
     pub fn root_position(&self) -> Position {
-        return self.pos.clone();
+        self.pos.clone()
     }
 }
 
@@ -122,7 +122,7 @@ fn search(thread: &mut MainThread, depth: u8, mut alpha: Eval, mut beta: Eval) {
             let eval = search_step(thread, d, 0, 0, 0, 0, false, alpha, beta);
             if thread.stop_flag().read().unwrap().eq(&true) {
                 *helper_stop_flag.write().unwrap() = true;
-                drop(thread.send_info(EngineIO::SEARCHENDED(thread.search_info().id)));
+                thread.send_info(EngineIO::SEARCHENDED(thread.search_info().id));
                 return;
             }
             if d > 2 {
@@ -165,7 +165,7 @@ fn search(thread: &mut MainThread, depth: u8, mut alpha: Eval, mut beta: Eval) {
             }
         }
     }
-    drop(thread.send_info(EngineIO::SEARCHENDED(thread.search_info().id)));
+    thread.send_info(EngineIO::SEARCHENDED(thread.search_info().id));
 }
 
 fn search_helper(helper: &mut HelperThread, depth: u8, alpha: Eval, beta: Eval) -> u64 {
@@ -174,15 +174,10 @@ fn search_helper(helper: &mut HelperThread, depth: u8, alpha: Eval, beta: Eval) 
 }
 
 fn is_tactical(pos: &Position, m: Move) -> bool {
-    if pos.gives_check(&m) {
-        return true;
-    }
-    match m.typ {
-        MoveType::CAPTURE(_)
-            | MoveType::PROMOTION(_)
-            | MoveType::PROMOTIONCAPTURE(_) => true,
-        _ => false,
-    }
+    matches!(m.typ, MoveType::CAPTURE(_)
+                    | MoveType::PROMOTION(_)
+                    | MoveType::PROMOTIONCAPTURE(_))
+        || pos.gives_check(&m)
 }
 
 //Parameters:
@@ -224,9 +219,9 @@ fn search_step(thread: &mut impl Thread,
 
     let mut ttmove = None;
 
-    if hash_entry.is_some() && hash_entry.unwrap().mov().is_some() {
+    if let Some(entry) = hash_entry {
 
-        ttmove = hash_entry.unwrap().mov();
+        ttmove = entry.mov();
 
         //make sure we do not return a repetition from tt, allowing a threefold
         thread.pos_mut().do_move(ttmove.unwrap());
@@ -234,22 +229,22 @@ fn search_step(thread: &mut impl Thread,
         thread.pos_mut().undo_move();
 
         //see if we have a TT-hit
-        if hash_entry.unwrap().depth() >= (depth+extension).saturating_sub(ply) && !threefold && zw {
-            match hash_entry.unwrap().eval().bound() {
+        if entry.depth() >= (depth+extension).saturating_sub(ply) && !threefold && zw {
+            match entry.eval().bound() {
                 Bound::EXACT => {
                     if ply == 0 {
                         thread.set_bestmove(ttmove);
                     }
-                    return hash_entry.unwrap().eval();
+                    return entry.eval();
                 },
                 Bound::LOWERBOUND => {
-                    if hash_entry.unwrap().eval() >= beta {
-                        return hash_entry.unwrap().eval();
+                    if entry.eval() >= beta {
+                        return entry.eval();
                     }
                 },
                 Bound::UPPERBOUND => {
-                    if hash_entry.unwrap().eval() < alpha {
-                        return hash_entry.unwrap().eval();
+                    if entry.eval() < alpha {
+                        return entry.eval();
                     }
                 }
             }
@@ -259,9 +254,9 @@ fn search_step(thread: &mut impl Thread,
     //Check if this is a terminal position
     let mut moves = thread.pos_mut().get_moves();
 
-    if moves.len() == 0 && thread.pos_mut().in_check() {
+    if moves.is_empty() && thread.pos_mut().in_check() {
         return Eval::MATE_NOW;
-    } else if moves.len() == 0 {
+    } else if moves.is_empty() {
         return Eval::STALEMATE;
     }
 
@@ -441,7 +436,7 @@ fn quiesce(thread: &mut impl Thread, mut alpha: Eval, beta: Eval, delta: i32, qp
     let mut cand_moves = thread.pos_mut().get_moves();
 
     //check for terminal position
-    if cand_moves.len() == 0 && thread.pos_mut().in_check() {
+    if cand_moves.is_empty() && thread.pos_mut().in_check() {
         return Eval::MATE_NOW;
     }
 
@@ -463,7 +458,7 @@ fn quiesce(thread: &mut impl Thread, mut alpha: Eval, beta: Eval, delta: i32, qp
                                                         MoveType::PROMOTIONCAPTURE((_,_)) => true,
                                                         MoveType::ENPASSANT => static_eval+delta+100 > alpha,
                                                         _ => false}).collect();
-        if cand_moves.len() == 0 {
+        if cand_moves.is_empty() {
             return static_eval;
         }
         cand_moves.sort_by_key(|m| match m.typ {

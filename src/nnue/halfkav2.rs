@@ -35,7 +35,7 @@ impl MoveFeatures<HalfKAv2Feature> for Move {
         let flip = if perspective == Perspective::WHITE {0} else {56};
         let f = self.from ^ flip;
         let t = self.to ^ flip;
-        ksq = ksq ^ flip;
+        ksq ^= flip;
 
         //select updated features
         match self.typ {

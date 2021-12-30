@@ -128,8 +128,8 @@ impl Thread for MainThread {
             self.killers[ply as usize].0[1] = Some(m);
             self.killers[ply as usize].1[1] = 1;
         } else {
-            self.killers[ply as usize].0[1] = Some(m);
-            self.killers[ply as usize].1[1] = 1;
+            self.killers[ply as usize].0[0] = Some(m);
+            self.killers[ply as usize].1[0] = 1;
         }
     }
     #[inline]
@@ -294,8 +294,8 @@ impl Thread for HelperThread {
             self.killers[ply as usize].0[1] = Some(m);
             self.killers[ply as usize].1[1] = 1;
         } else {
-            self.killers[ply as usize].0[1] = Some(m);
-            self.killers[ply as usize].1[1] = 1;
+            self.killers[ply as usize].0[0] = Some(m);
+            self.killers[ply as usize].1[0] = 1;
         }
     }
     #[inline]

@@ -101,20 +101,26 @@ fn get_zobrist_table(p: Piece, c: Color) -> &'static[u64] {
     }
 }
 
+impl Default for Board {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Board {
     pub const BLACK_SQUARES: Square = 0b1010101001010101101010100101010110101010010101011010101001010101;
     pub const WHITE_SQUARES: Square = u64::MAX ^ Board::BLACK_SQUARES;
     const FILE: Square = 0b0000000100000001000000010000000100000001000000010000000100000001;
     #[inline]
     pub fn file(f: File) -> Square {
-        return Board::FILE << f as u64;
+        Board::FILE << f as u64
     }
     #[allow(dead_code)]
     pub const RANK: Square = 0b11111111;
     #[allow(dead_code)]
     #[inline]
     pub fn rank(r: Rank) -> Square {
-        return Board::RANK << r as u64;
+        Board::RANK << r as u64
     }
     #[inline]
     pub fn get_file(sq: Square) -> File {
@@ -127,7 +133,7 @@ impl Board {
             5 => File::F,
             6 => File::G,
             7 => File::H,
-            _ => panic!("How???")
+            _ => unreachable!(),
         }
     }
     #[allow(dead_code)]
@@ -226,7 +232,7 @@ impl Board {
             MoveType::MOVE => {
                 self[(color, m.piece)] ^= to;
                 zobrist ^= get_zobrist_table(m.piece, color)[to.index()];
-                if m.piece == Piece::PAWN && (from < 1 << 16 || from > 1 << 47) && (to > 1 << 23 || to < 1 << 40) {
+                if m.piece == Piece::PAWN && !(16..=47).contains(&m.from) && (24..=32).contains(&m.to) {
                     zobrist ^= constants::ZOBRIST_ENPASSANT_NUMBERS[to.index() % 8];
                 }
             },
@@ -397,7 +403,7 @@ impl Board {
         constants::NEXT_NEIGHBOURS[s.index()]
     }
     pub fn iter(&self) -> BoardIterator<'_> {
-        BoardIterator {occ: self.occupation, board: &self}
+        BoardIterator {occ: self.occupation, board: self}
     }
 }
 
@@ -674,10 +680,10 @@ pub struct Move {
 impl Move {
     pub fn from_str(s: &str, pos: &Position) -> Move {
         let mut chars = s.chars();
-        let mut from = chars.next().unwrap() as u8 - 'a' as u8;
-        from += 8*(chars.next().unwrap() as u8 - '1' as u8);
-        let mut to = chars.next().unwrap() as u8 - 'a' as u8;
-        to += 8*(chars.next().unwrap() as u8 - '1' as u8);
+        let mut from = chars.next().unwrap() as u8 - b'a';
+        from += 8*(chars.next().unwrap() as u8 - b'1');
+        let mut to = chars.next().unwrap() as u8 - b'a';
+        to += 8*(chars.next().unwrap() as u8 - b'1');
         let piece = pos.board.piece_at(from.square()).unwrap();
         let prom = match chars.next() {
             Some('q') => Some(Piece::QUEEN),
@@ -826,6 +832,12 @@ pub struct Position {
     history: Vec<u64>, //zobrist hashes of all positions reached BEFORE the current
 }
 
+impl Default for Position {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Position {
     pub fn new() -> Position {
         let board = Board::new();
@@ -847,15 +859,14 @@ impl Position {
         }
     }
     pub fn get_board(&self) -> &Board {
-        return &self.board;
+        &self.board
     }
     pub fn from_fen(fen: String) -> Option<Position> {
         //First set up the pieces
         let mut fen_parts = fen.split_whitespace();
-        let b = Board::from_fen(fen_parts.next().unwrap());
-        if b.is_none() {return None;}
+        let b = Board::from_fen(fen_parts.next().unwrap())?;
         let mut pos = Position {
-            board: b.unwrap(),
+            board: b,
             move_history: Vec::with_capacity(20),
             to_move: Color::WHITE,
             castling_legal: Vec::with_capacity(20),
@@ -1009,12 +1020,12 @@ impl Position {
             },
             None => return None,
         }
-        if pos.move_history.len() > 0 {
+        if !pos.move_history.is_empty() {
             pos.zobrist ^= constants::ZOBRIST_ENPASSANT_NUMBERS[pos.move_history.last().unwrap().from.index() % 8];
         }
         match fen_parts.next() {
             Some(p) => {
-                match u8::from_str_radix(p,10) {
+                match p.parse::<u8>() {
                     Ok(n) => pos.rule_50_counts.push(n),
                     Err(_) => return None,
                 }
@@ -1202,99 +1213,90 @@ impl Position {
     }
     #[inline]
     fn handle_en_passant(&mut self, moves: &mut MoveList, check_mask: Square) {
-        match self.move_history.last() {
-            Some(m) => {
-                if m.piece == Piece::PAWN {
-                    match self.to_move {
-                        Color::WHITE => {
-                            if m.from > 47 && m.to < 40 &&
-                                (m.from.go_s().square() & check_mask != 0 || m.to.square() == check_mask) {
-                                let mut cands = 0;
-                                if !m.from.is_at_west_border() {
-                                    cands |= m.to.go_w().square();
-                                }
-                                if !m.from.is_at_east_border() {
-                                    cands |= m.to.go_e().square();
-                                }
-                                cands &= self.board[(Color::WHITE, Piece::PAWN)];
-                                for cand in cands.iter() {
-                                    let kpos = self.board[(self.to_move, Piece::KING)];
-                                    let pin_ray = constants::RAYS[cand.index()][kpos.index()];
-                                    //Check if we expose the king by taking en passant
-                                    //See if our pawn is pinned
-                                    if cand & self.pinned_pieces != 0 && m.from.go_s().square() & pin_ray == 0 {
-                                        continue;
-                                    //See if the pawn we take is pinned, we can only do so, if our
-                                    //en passant pawn blocks
-                                    } else if m.to.square() & self.pinned_pieces != 0 && constants::RAYS[m.to.index()][kpos.index()] & m.from.square() == 0 {
-                                        continue;
-                                    //Check for a double pin by a rook or queen.
-                                    } else if m.to.square() & pin_ray != 0 {
-                                        self.board.occupation ^= m.to.square() | cand;
-                                        let k_ray = pin_ray & self.rook_moves(kpos);
-                                        self.board.occupation ^= m.to.square() | cand;
-                                        if k_ray & self.board[(self.to_move.other(), Piece::ROOK)] != 0 {
-                                            continue;
-                                        } else if k_ray & self.board[(self.to_move.other(), Piece::QUEEN)] != 0 {
-                                            continue;
-                                        }
-                                    }
-                                    moves.push(Move {
-                                        from: SquareIndex::from_square(cand),
-                                        to: m.from.go_s(),
-                                        piece: Piece::PAWN,
-                                        typ: MoveType::ENPASSANT,
-                                    });
-                                }
+        if let Some(m) = self.move_history.last() {
+            if m.piece == Piece::PAWN {
+                match self.to_move {
+                    Color::WHITE => {
+                        if m.from > 47 && m.to < 40 &&
+                            (m.from.go_s().square() & check_mask != 0 || m.to.square() == check_mask) {
+                            let mut cands = 0;
+                            if !m.from.is_at_west_border() {
+                                cands |= m.to.go_w().square();
                             }
-                        },
-                        Color::BLACK => {
-                            if m.from < 16 && m.to > 23 &&
-                                (m.from.go_n().square() & check_mask != 0 || m.to.square() == check_mask) {
-                                let mut cands = 0;
-                                if !m.from.is_at_west_border() {
-                                    cands |= m.to.go_w().square();
-                                }
-                                if !m.from.is_at_east_border() {
-                                    cands |= m.to.go_e().square();
-                                }
-                                cands &= self.board[(Color::BLACK, Piece::PAWN)];
-                                for cand in cands.iter() {
-                                    let kpos = self.board[(self.to_move, Piece::KING)];
-                                    let pin_ray = constants::RAYS[cand.index()][kpos.index()];
-                                    //Check if we expose the king by taking en passant
-                                    //See if our pawn is pinned
-                                    if cand & self.pinned_pieces != 0 && m.from.go_n().square() & pin_ray == 0 {
+                            if !m.from.is_at_east_border() {
+                                cands |= m.to.go_e().square();
+                            }
+                            cands &= self.board[(Color::WHITE, Piece::PAWN)];
+                            for cand in cands.iter() {
+                                let kpos = self.board[(self.to_move, Piece::KING)];
+                                let pin_ray = constants::RAYS[cand.index()][kpos.index()];
+                                //Check if we expose the king by taking en passant
+                                //See if our pawn is pinned
+                                if (cand & self.pinned_pieces != 0 && m.from.go_s().square() & pin_ray == 0) ||
+                                    (m.to.square() & self.pinned_pieces != 0
+                                     && constants::RAYS[m.to.index()][kpos.index()] & m.from.square() == 0) {
+                                    continue;
+                                //Check for a double pin by a rook or queen.
+                                } else if m.to.square() & pin_ray != 0 {
+                                    self.board.occupation ^= m.to.square() | cand;
+                                    let k_ray = pin_ray & self.rook_moves(kpos);
+                                    self.board.occupation ^= m.to.square() | cand;
+                                    if k_ray & self.board[(self.to_move.other(), Piece::ROOK)] != 0
+                                    || k_ray & self.board[(self.to_move.other(), Piece::QUEEN)] != 0 {
                                         continue;
-                                    //See if the pawn we take is pinned, we can only do so, if our
-                                    //en passant pawn blocks
-                                    } else if m.to.square() & self.pinned_pieces != 0 && constants::RAYS[m.to.index()][kpos.index()] & m.from.square() == 0 {
-                                        continue;
-                                    //Check for a double pin by a rook or queen.
-                                    } else if m.to.square() & pin_ray != 0 {
-                                        self.board.occupation ^= m.to.square() | cand;
-                                        let k_ray = pin_ray & self.rook_moves(kpos);
-                                        self.board.occupation ^= m.to.square() | cand;
-                                        if k_ray & self.board[(self.to_move.other(), Piece::ROOK)] != 0 {
-                                            continue;
-                                        } else if k_ray & self.board[(self.to_move.other(), Piece::QUEEN)] != 0 {
-                                            continue;
-                                        }
                                     }
-                                    moves.push(Move {
-                                        from: SquareIndex::from_square(cand),
-                                        to: m.from.go_n(),
-                                        piece: Piece::PAWN,
-                                        typ: MoveType::ENPASSANT,
-                                    });
                                 }
+                                moves.push(Move {
+                                    from: SquareIndex::from_square(cand),
+                                    to: m.from.go_s(),
+                                    piece: Piece::PAWN,
+                                    typ: MoveType::ENPASSANT,
+                                });
+                            }
+                        }
+                    },
+                    Color::BLACK => {
+                        if m.from < 16 && m.to > 23 &&
+                            (m.from.go_n().square() & check_mask != 0 || m.to.square() == check_mask) {
+                            let mut cands = 0;
+                            if !m.from.is_at_west_border() {
+                                cands |= m.to.go_w().square();
+                            }
+                            if !m.from.is_at_east_border() {
+                                cands |= m.to.go_e().square();
+                            }
+                            cands &= self.board[(Color::BLACK, Piece::PAWN)];
+                            for cand in cands.iter() {
+                                let kpos = self.board[(self.to_move, Piece::KING)];
+                                let pin_ray = constants::RAYS[cand.index()][kpos.index()];
+                                //Check if we expose the king by taking en passant
+                                //See if our pawn is pinned
+                                if (cand & self.pinned_pieces != 0 && m.from.go_n().square() & pin_ray == 0)
+                                    || (m.to.square() & self.pinned_pieces != 0
+                                        && constants::RAYS[m.to.index()][kpos.index()] & m.from.square() == 0) {
+                                    continue;
+                                //Check for a double pin by a rook or queen.
+                                } else if m.to.square() & pin_ray != 0 {
+                                    self.board.occupation ^= m.to.square() | cand;
+                                    let k_ray = pin_ray & self.rook_moves(kpos);
+                                    self.board.occupation ^= m.to.square() | cand;
+                                    if k_ray & self.board[(self.to_move.other(), Piece::ROOK)] != 0 ||
+                                       k_ray & self.board[(self.to_move.other(), Piece::QUEEN)] != 0 {
+                                        continue;
+                                    }
+                                }
+                                moves.push(Move {
+                                    from: SquareIndex::from_square(cand),
+                                    to: m.from.go_n(),
+                                    piece: Piece::PAWN,
+                                    typ: MoveType::ENPASSANT,
+                                });
+                            }
 
-                            }
                         }
                     }
                 }
             }
-            _ => {}
         }
     }
     #[inline]
@@ -1512,7 +1514,7 @@ impl Position {
         //Commit zobrist hash to history stack
         self.history.push(self.zobrist);
         //Unset the Zobrist en passant flag, if necessary
-        if self.move_history.len() > 0 {
+        if !self.move_history.is_empty() {
             let m = self.move_history.last().unwrap();
             if m.piece == Piece::PAWN && (m.from < 16 || m.from > 47) && (m.to > 23 || m.to < 40) {
                 self.zobrist ^= constants::ZOBRIST_ENPASSANT_NUMBERS[m.to.index() % 8];
@@ -1590,7 +1592,7 @@ impl Position {
         //switch Zobrist color flag.
         self.zobrist ^= constants::ZOBRIST_BLACK_NUMBER;
         //Set the Zobrist en passant flag, if necessary
-        if self.move_history.len() > 0 {
+        if !self.move_history.is_empty() {
             let m = self.move_history.last().unwrap();
             if m.piece == Piece::PAWN && (m.from < 16 || m.from > 47) && (m.to > 23 || m.to < 40) {
                 self.zobrist ^= constants::ZOBRIST_ENPASSANT_NUMBERS[m.to.index() % 8];
@@ -1630,11 +1632,11 @@ impl Position {
         self.piece_count(c, Piece::PAWN) + 3*(self.piece_count(c, Piece::BISHOP)+self.piece_count(c,Piece::KNIGHT)) + 5*self.piece_count(c, Piece::ROOK)+9*self.piece_count(c, Piece::QUEEN)
     }
     pub fn material_balance(&self) -> i32 {
-        return self.material_count(self.to_move) - self.material_count(self.to_move.other());
+        self.material_count(self.to_move) - self.material_count(self.to_move.other())
     }
     #[allow(dead_code)]
     pub fn is_attacked(&self, sq: Square) -> bool {
-        return self.attacked_squares & sq != 0;
+        self.attacked_squares & sq != 0
     }
     #[allow(dead_code)]
     pub fn piece_attacks(&self, p: Piece, c: Color, from: Square, target: Square) -> bool {
@@ -1650,10 +1652,7 @@ impl Position {
     }
     #[allow(dead_code)]
     pub fn get_last_move(&self) -> Option<Move> {
-        match self.move_history.last() {
-            Some(m) => Some(*m),
-            None => None,
-        }
+        self.move_history.last().copied()
     }
     pub fn zobrist_hash(&self) -> u64 {
         self.zobrist
@@ -1682,11 +1681,8 @@ impl Position {
     //Helper for SEE
     #[inline]
     fn least_valuable_attacker(&self, mut attackers: Square, c: Color) -> Option<(Square, Piece)> {
-        attackers = attackers & self.board[(c, Piece::ANY)];
-        attackers.iter().map(|a| match self.board.piece_at(a) {
-                                            Some(p) => Some((a,p)),
-                                            None => None,
-                        })
+        attackers &= self.board[(c, Piece::ANY)];
+        attackers.iter().map(|a| self.board.piece_at(a).map(|p| (a,p)))
                         .filter(|x| x.is_some())
                         .min_by_key(|x| x.unwrap().1.value()).flatten()
     }
@@ -1700,9 +1696,10 @@ impl Position {
         let target = m.to.square();
         let mut color = self.to_move;
         let mut occupation = self.board.occupation;
+        //We initialize pawn and knight attacks, since they do not depend on the occupation.
         let mut attackers = (self.pawn_attacks(target, Color::WHITE) & self.board[(Color::BLACK, Piece::PAWN)])
-            | (self.pawn_attacks(target, Color::WHITE) & self.board[(Color::BLACK, Piece::PAWN)]);
-        attackers |= self.knight_moves(target) & (self.board[(Color::BLACK, Piece::KNIGHT)] | self.board[(Color::BLACK, Piece::KNIGHT)]);
+            | (self.pawn_attacks(target, Color::BLACK) & self.board[(Color::WHITE, Piece::PAWN)]);
+        attackers |= self.knight_moves(target) & (self.board[(Color::WHITE, Piece::KNIGHT)] | self.board[(Color::BLACK, Piece::KNIGHT)]);
         attackers |= m.from.square();
         //We guess that most exchanges will feature less than ten pieces, which seems a safe
         //assumption

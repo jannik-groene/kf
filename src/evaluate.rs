@@ -25,13 +25,8 @@ pub fn has_major_pieces(pos: &Position) -> bool {
 }
 
 pub fn is_material_draw(pos: &Position) -> bool {
-    if pos.board.occupation.count_ones() == 2 {
-        true
-    } else if pos.board.occupation.count_ones() == 3 && has_minor_pieces(pos) {
-        true
-    } else {
-        false
-    }
+    pos.board.occupation.count_ones() == 2
+        || (pos.board.occupation.count_ones() == 3 && has_minor_pieces(pos))
 }
 
 fn piece_table_value(p: Piece, c: Color, s: impl SquareMethods, phase: i32) -> i32 {
@@ -115,18 +110,13 @@ fn evaluate_pawns(pos: &mut Position, phase: i32) -> i32 {
         res_late  -= (pawns_us_on_file.count_ones() as i32 - 1) * 20;
 
         //2. Check if the pawn is isolated
-        if pawn.is_at_east_border() {
-            if neighbours == 0 {
+        if neighbours == 0 {
+            if pawn.is_at_east_border() || pawn.is_at_west_border() {
                 res -= 15;
-            }
-        } else if pawn.is_at_west_border() {
-            if neighbours == 0 {
-                res -= 15;
-            }
-        } else if neighbours == 0 {
+            } else {
                 res -= 25;
+            }
         }
-
         //3. Check for backward pawn
         if in_front & guarded_them != 0 && (behind | advance) & guarded_us == 0 {
             res -= 20;
@@ -416,8 +406,8 @@ pub fn evaluate(pos: &mut Position) -> Eval {
 pub fn order_moves(movs: &mut MoveList, pos: &Position,
                    hash_move: Option<Move>, killers: &[Option<Move>; 2]) {
     movs.sort_unstable_by_key(|m| match m.typ { MoveType::CAPTURE(_) => -pos.see(*m), _ => 200 } - if killers[0].map_or(false, |k| k == *m) || killers[1].map_or(false, |k| k == *m) {0} else {1});
-    if hash_move.is_some() {
-        movs.sort_by_key(|m| if *m == hash_move.unwrap() {0} else {1});
+    if let Some(mov) = hash_move  {
+        movs.sort_by_key(|m| if *m == mov {0} else {1});
     }
 }
 

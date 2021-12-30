@@ -54,17 +54,17 @@ impl Eval {
     }
 
     #[inline(always)]
-    pub fn to_exact(&self) -> Eval {
+    pub fn to_exact(self) -> Eval {
         Eval {bound: Bound::EXACT, value: self.value}
     }
 
     #[inline(always)]
-    pub fn to_lowerbound(&self) -> Eval {
+    pub fn to_lowerbound(self) -> Eval {
         Eval {bound: Bound::LOWERBOUND, value: self.value}
     }
 
     #[inline(always)]
-    pub fn to_upperbound(&self) -> Eval {
+    pub fn to_upperbound(self) -> Eval {
         Eval {bound: Bound::UPPERBOUND, value: self.value}
     }
 
@@ -152,19 +152,13 @@ impl Eval {
 
 impl Display for Eval {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match write!(f,"score ") {
-            Err(e) => {return std::fmt::Result::Err(e);},
-            _ => {},
-        }
-        match {match self.value {
+        write!(f,"score ")?;
+        match self.value {
             Value::CENTIS(c) => write!(f, "cp {}", c),
             Value::INFTY => write!(f, "cp 100000000"),
             Value::NEGINFTY => write!(f, "cp -100000000"),
             Value::MATE(m) =>write!(f, "mate {}", (2*(m%2)-1)*(m+1)/2),
-            }} {
-            Err(e) => {return std::fmt::Result::Err(e);},
-            _ => {},
-        }
+        }?;
         match self.bound {
             Bound::LOWERBOUND => write!(f," lowerbound"),
             Bound::UPPERBOUND => write!(f," upperbound"),
@@ -215,7 +209,7 @@ impl PartialOrd for Eval {
                     //5 plys
                     if m % 2 == 1 && m2 % 2 == 1 { Some(m2.cmp(&m)) }
                     else if m % 2 == 1 && m2 % 2 == 0 { Some(std::cmp::Ordering::Greater) }
-                    else if m % 2 == 1 && m2 % 2 == 1 { Some(std::cmp::Ordering::Less) }
+                    else if m % 2 == 0 && m2 % 2 == 1 { Some(std::cmp::Ordering::Less) }
                     //If we get mated, a long time off is best!
                     else { Some(m.cmp(&m2)) }
                 }
