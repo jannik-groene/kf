@@ -98,6 +98,38 @@ impl SearchManager {
     }
 }
 
+#[derive(Copy, Clone)]
+struct Depth {
+    pub target: i16,
+    pub current: i16,
+    pub reduction: i16,
+    pub extension: i16,
+}
+
+impl Depth {
+    fn new(target: i16) -> Self {
+        Self {target, current: 0, reduction: 0, extension: 0}
+    }
+
+    fn remaining(&self) -> i16 {
+        self.target + self.extension - self.current - self.reduction
+    }
+
+    fn reduce(mut self, reduction: i16) -> Self {
+        self.reduction += reduction;
+        self
+    }
+
+    fn extend(mut self, extension: i16) -> Self{
+        self.extension += extension;
+        self
+    }
+
+    fn next(mut self) -> Self {
+        self.current += 1;
+        self
+    }
+}
 
 fn search(thread: &mut MainThread, depth: u8, mut alpha: Eval, mut beta: Eval) {
     let now = Instant::now();
@@ -119,10 +151,10 @@ fn search(thread: &mut MainThread, depth: u8, mut alpha: Eval, mut beta: Eval) {
                     helper_handles.push(std::thread::spawn(move || search_helper(&mut helper_thread, d.saturating_add(i as u8 / 2), alpha, beta)));
                 }
             }
-            let eval = search_step(thread, d, 0, 0, 0, 0, false, alpha, beta);
+            let eval = search_step(thread, Depth::new(d as i16), 0, false, alpha, beta);
             if thread.stop_flag().read().unwrap().eq(&true) {
                 *helper_stop_flag.write().unwrap() = true;
-                thread.send_info(EngineIO::SEARCHENDED(thread.search_info().id));
+                thread.send_info(EngineIO::SearchEnded(thread.search_info().id));
                 return;
             }
             if d > 2 {
@@ -142,22 +174,22 @@ fn search(thread: &mut MainThread, depth: u8, mut alpha: Eval, mut beta: Eval) {
             println!("info nodes {} nps {}", thread.nodes(), 1000* *thread.nodes() as u128 /now.elapsed().as_millis().clamp(1,u128::MAX));
             //We reached the target depth and stopped, so we update the external values
             match eval.bound() {
-                Bound::EXACT => {
+                Bound::Exact => {
                     println!("info {} depth {} time {}", eval, d, now.elapsed().as_millis());
                     thread.print_pv(d);
                     thread.search_info_mut().eval = eval;
                     thread.search_info_mut().bestmove = thread.bestmove();
-                    thread.send_info(EngineIO::SEARCHUPDATE(thread.search_info().clone()));
+                    thread.send_info(EngineIO::SearchUpdate(thread.search_info().clone()));
                     alpha = eval.aspiration_lower(0);
                     beta = eval.aspiration_higher(0);
                     break;
                 },
-                Bound::LOWERBOUND => {
+                Bound::Lower => {
                     println!("info {} depth {} time {}", eval, d, now.elapsed().as_millis());
                     fail_highs += 1;
                     beta = eval.aspiration_higher(fail_highs);
                 }
-                Bound::UPPERBOUND => {
+                Bound::Upper => {
                     println!("info {} depth {} time {}", eval, d, now.elapsed().as_millis());
                     fail_lows += 1;
                     alpha = eval.aspiration_lower(fail_lows);
@@ -165,18 +197,18 @@ fn search(thread: &mut MainThread, depth: u8, mut alpha: Eval, mut beta: Eval) {
             }
         }
     }
-    thread.send_info(EngineIO::SEARCHENDED(thread.search_info().id));
+    thread.send_info(EngineIO::SearchEnded(thread.search_info().id));
 }
 
 fn search_helper(helper: &mut HelperThread, depth: u8, alpha: Eval, beta: Eval) -> u64 {
-    search_step(helper, depth, 0, 0, 0, 0, false, alpha, beta);
+    search_step(helper, Depth::new(depth as i16), 0, false, alpha, beta);
     *helper.nodes()
 }
 
 fn is_tactical(pos: &Position, m: Move) -> bool {
-    matches!(m.typ, MoveType::CAPTURE(_)
-                    | MoveType::PROMOTION(_)
-                    | MoveType::PROMOTIONCAPTURE(_))
+    matches!(m.typ, MoveType::Capture(_)
+                    | MoveType::Promotion(_)
+                    | MoveType::PromotionCapture(_))
         || pos.gives_check(&m)
 }
 
@@ -190,10 +222,7 @@ fn is_tactical(pos: &Position, m: Move) -> bool {
 // alpha: the alpha value of the current ab search
 // beta: the beta of the current ab search
 fn search_step(thread: &mut impl Thread,
-               depth: u8,
-               ply: u8,
-               depth_reduction: u8,
-               mut extension: u8,
+               mut depth: Depth,
                null_moves: u8,
                zw: bool,
                mut alpha: Eval,
@@ -210,7 +239,7 @@ fn search_step(thread: &mut impl Thread,
     }
 
     //If we cannot beat the score, just return immediately
-    if alpha.value() == Value::MATE(1) {
+    if alpha.value() == Value::Mate(1) {
         return Eval::mate_in(1).to_upperbound();
     }
 
@@ -229,20 +258,20 @@ fn search_step(thread: &mut impl Thread,
         thread.pos_mut().undo_move();
 
         //see if we have a TT-hit
-        if entry.depth() >= (depth+extension).saturating_sub(ply) && !threefold && zw {
+        if entry.depth() as i16 >= depth.remaining() && !threefold && zw {
             match entry.eval().bound() {
-                Bound::EXACT => {
-                    if ply == 0 {
+                Bound::Exact => {
+                    if depth.current == 0 {
                         thread.set_bestmove(ttmove);
                     }
                     return entry.eval();
                 },
-                Bound::LOWERBOUND => {
+                Bound::Lower => {
                     if entry.eval() >= beta {
                         return entry.eval();
                     }
                 },
-                Bound::UPPERBOUND => {
+                Bound::Upper => {
                     if entry.eval() < alpha {
                         return entry.eval();
                     }
@@ -261,21 +290,21 @@ fn search_step(thread: &mut impl Thread,
     }
 
     //Calculate the depth we are still to search.
-    let depth_left: u8 = depth.saturating_add(extension).saturating_sub(depth_reduction).saturating_sub(ply);
+    let depth_left: u8 = depth.remaining().clamp(0, 255) as u8;
 
     //We extend the normal search if we are  in check, else go into quiescence
     if depth_left == 0 && !thread.pos_mut().in_check() {
-        return quiesce(thread, alpha, beta, 200 - 20 * depth_reduction as i32, 0);
+        return quiesce(thread, alpha, beta, 200 - 20 * depth.reduction as i32, 0);
     }
     //Futility pruning
-    else if depth > 3 && depth_left == 1 {
+    else if depth.target > 3 && depth_left == 1 {
         let eval = thread.evaluate();
         if eval + 300 < alpha {
             return quiesce(thread, alpha, beta, 100, 0);
         }
     }
     //Extended futility pruning
-    else if depth > 3 && depth_left == 2 {
+    else if depth.target > 3 && depth_left == 2 {
         let eval = thread.evaluate();
         if eval + 500 < alpha {
             return quiesce(thread, alpha, beta, 100, 0);
@@ -284,17 +313,14 @@ fn search_step(thread: &mut impl Thread,
 
     //Try a null move to find a beta cutoff; search the first three plys fully.
     //Should maybe avoid in late game?
-    if null_moves < std::cmp::max(depth / 6 + 1, 2)
+    if null_moves < std::cmp::max(depth.target as u8 / 6 + 1, 2)
             && (has_minor_pieces(thread.pos()) || has_major_pieces(thread.pos()))
-            && !thread.pos_mut().in_check() && moves.len() > 2 && ply > 2
-            && !matches!(alpha.value(), Value::MATE(_))
-            && !matches!(beta.value(), Value::MATE(_)) {
+            && !thread.pos_mut().in_check() && moves.len() > 2 && depth.current > 2
+            && !matches!(alpha.value(), Value::Mate(_))
+            && !matches!(beta.value(), Value::Mate(_)) {
         thread.do_null_move();
         let null_score = -search_step(thread,
-                                      depth,
-                                      ply+1,
-                                      depth_reduction + 3,
-                                      0,
+                                      depth.reduce(3).next(),
                                       null_moves + 1,
                                       zw,
                                       beta.neg_down(),
@@ -306,7 +332,7 @@ fn search_step(thread: &mut impl Thread,
     }
 
     //Move ordering
-    order_moves(&mut moves, thread.pos(), ttmove, thread.get_killers(ply));
+    order_moves(&mut moves, thread.pos(), ttmove, thread.get_killers(depth.current as u8));
 
     //Set up paramaters
     let mut score = Eval::MIN;
@@ -314,25 +340,19 @@ fn search_step(thread: &mut impl Thread,
     let mut bestmove = None;
 
     if moves.len() == 1 {
-        extension += 1;
+        depth = depth.extend(1);
     }
 
     for i in 0..moves.len() {
 
         //lmr reduction depth
-        let mut lmr = ((depth_left as f64).sqrt() * (i as f64).sqrt() / 9.) as u8;
-
-        //We do not reduce to zero moves left
-        lmr = lmr.clamp(0, depth_left.saturating_sub(1));
+        let lmr = ((depth_left as f64).sqrt() * (i as f64).sqrt() / 9.) as i16;
 
         thread.do_move(moves[i]);
 
         let mut movescore = if i == 0 && !zw {
                                 -search_step(thread,
-                                             depth,
-                                             ply+1,
-                                             0, //depth reduction is always zero PV nodes
-                                             extension,
+                                             depth.next(),
                                              null_moves,
                                              false,
                                              beta.neg_down(),
@@ -342,10 +362,7 @@ fn search_step(thread: &mut impl Thread,
                                          && !thread.pos_mut().in_check()
                                          && !is_tactical(thread.pos(), moves[i]) {
                                 -search_step(thread,
-                                             depth,
-                                             ply+1,
-                                             depth_reduction+lmr,
-                                             extension,
+                                             depth.reduce(lmr).next(),
                                              null_moves,
                                              true,
                                              beta.neg_down(),
@@ -353,10 +370,7 @@ fn search_step(thread: &mut impl Thread,
                             //search late nodes in PV-nodes as zero windows
                             } else {
                                 -search_step(thread,
-                                             depth,
-                                             ply+1,
-                                             depth_reduction+lmr/3,
-                                             extension,
+                                             depth.reduce(lmr/3).next(),
                                              null_moves,
                                              true,
                                              alpha.zero_window().neg_down(),
@@ -366,10 +380,7 @@ fn search_step(thread: &mut impl Thread,
         //Research if we failed high in a PV node
         if i != 0 && movescore > alpha && movescore < beta {
             movescore = -search_step(thread,
-                                     depth,
-                                     ply+1,
-                                     0,
-                                     extension,
+                                     depth.next(),
                                      null_moves,
                                      false,
                                      beta.neg_down(),
@@ -385,10 +396,10 @@ fn search_step(thread: &mut impl Thread,
         if movescore >= beta {
             let zh = thread.pos().zobrist_hash();
             thread.tt_mut().set(zh, TTEntry::new(movescore.to_lowerbound(), depth_left, zh, moves[i]));
-            if !matches!(moves[i].typ, MoveType::CAPTURE(_)) && ttmove != Some(moves[i]) {
-                thread.register_killer(ply, moves[i]);
+            if !matches!(moves[i].typ, MoveType::Capture(_)) && ttmove != Some(moves[i]) {
+                thread.register_killer(depth.current as u8, moves[i]);
             }
-            thread.invalidate_killers(ply);
+            thread.invalidate_killers(depth.current as u8);
             return movescore.to_lowerbound();
         }
 
@@ -409,12 +420,12 @@ fn search_step(thread: &mut impl Thread,
     assert!(bestmove.is_some());
     assert!(Eval::MIN < score && score < Eval::MAX);
 
-    if ply == 0 {
+    if depth.current == 0 {
         thread.set_bestmove(bestmove);
     }
 
     //reset the killer move counts for ply+1
-    thread.invalidate_killers(ply);
+    thread.invalidate_killers(depth.current as u8);
 
     let zh = thread.pos().zobrist_hash();
     if fail_low {
@@ -453,18 +464,18 @@ fn quiesce(thread: &mut impl Thread, mut alpha: Eval, beta: Eval, delta: i32, qp
         }
 
         cand_moves = cand_moves.iter().copied().filter(|m| match m.typ {
-                                                        MoveType::CAPTURE(_) => static_eval + thread.pos().see(*m)+delta > alpha && thread.pos().see(*m) > 0,
-                                                        MoveType::PROMOTION(_) |
-                                                        MoveType::PROMOTIONCAPTURE((_,_)) => true,
-                                                        MoveType::ENPASSANT => static_eval+delta+100 > alpha,
+                                                        MoveType::Capture(_) => static_eval + thread.pos().see(*m)+delta > alpha && thread.pos().see(*m) > 0,
+                                                        MoveType::Promotion(_) |
+                                                        MoveType::PromotionCapture((_,_)) => true,
+                                                        MoveType::Enpassant => static_eval+delta+100 > alpha,
                                                         _ => false}).collect();
         if cand_moves.is_empty() {
             return static_eval;
         }
         cand_moves.sort_by_key(|m| match m.typ {
-                                    MoveType::CAPTURE(_) => thread.pos().see(*m),
-                                    MoveType::PROMOTION(p) => p.value()-Piece::PAWN.value(),
-                                    MoveType::PROMOTIONCAPTURE((p_prom,p_cap)) => p_prom.value()+p_cap.value()-Piece::PAWN.value(),
+                                    MoveType::Capture(_) => thread.pos().see(*m),
+                                    MoveType::Promotion(p) => p.value()-Piece::Pawn.value(),
+                                    MoveType::PromotionCapture((p_prom,p_cap)) => p_prom.value()+p_cap.value()-Piece::Pawn.value(),
                                     _ => 0,
                                 });
     }

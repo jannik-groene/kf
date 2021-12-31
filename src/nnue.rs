@@ -28,12 +28,12 @@ impl NNUEState {
     pub fn update_color_state(&self, acc: &Accumulator, acc_new: &mut Accumulator,
                                                         pos: &Position, m: Move, c: Color) {
         //if the King has not moved the update is simple
-        if m.piece != Piece::KING
-                || pos.get_board()[(c.other(), Piece::KING)] & (m.from.square() | m.to.square()) != 0 {
+        if m.piece != Piece::King
+                || pos.get_board()[(c.other(), Piece::King)] & (m.from.square() | m.to.square()) != 0 {
 
-            let kp = SquareIndex::from_square(pos.get_board()[(c, Piece::KING)]);
+            let kp = SquareIndex::from_square(pos.get_board()[(c, Piece::King)]);
 
-            let our_piece = pos.get_board()[(c, Piece::ANY)] & m.to.square() != 0;
+            let our_piece = pos.get_board()[(c, Piece::Any)] & m.to.square() != 0;
 
             //select updated features
             let (added, removed) = m.changed_features(c.into(), kp, our_piece);
@@ -48,8 +48,8 @@ impl NNUEState {
     //Apply a move to the first hidden layer (linear layer) state
     pub fn do_move(&mut self, m: Move, pos: &Position) {
         let mut acc = Accumulator::new();
-        self.update_color_state(self.states.last().unwrap(), &mut acc, pos, m, Color::WHITE);
-        self.update_color_state(self.states.last().unwrap(), &mut acc, pos, m, Color::BLACK);
+        self.update_color_state(self.states.last().unwrap(), &mut acc, pos, m, Color::White);
+        self.update_color_state(self.states.last().unwrap(), &mut acc, pos, m, Color::Black);
         self.states.push(acc);
     }
 

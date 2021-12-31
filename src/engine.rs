@@ -8,21 +8,21 @@ use crate::{
 
 #[derive(Clone,PartialEq)]
 enum OptionValue {
-    CHECK(bool),
-    SPIN(i64),
+    Check(bool),
+    Spin(i64),
 //    COMBO(String),
 //    BUTTON,
-    STRING(String),
+    String(String),
 }
 
 impl Display for OptionValue {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Self::CHECK(b) => write!(f, "{}", b),
-            Self::SPIN(n) => write!(f, "{}", n),
+            Self::Check(b) => write!(f, "{}", b),
+            Self::Spin(n) => write!(f, "{}", n),
 //            Self::COMBO(s) => write!(f, "{}", s),
 //            Self::BUTTON => write!(f, ""),
-            Self::STRING(s) => write!(f, "{}", s),
+            Self::String(s) => write!(f, "{}", s),
         }
     }
 }
@@ -43,26 +43,26 @@ pub struct EngineConfig {
 impl EngineConfig {
     fn new() -> EngineConfig {
         let options = vec![ ConfigOption {id: "Hash".to_string(),
-                                          value: OptionValue::SPIN(128),
-                                          default: Some(OptionValue::SPIN(128)),
-                                          min: Some(OptionValue::SPIN(0)),
-                                          max: Some(OptionValue::SPIN(8192)),
+                                          value: OptionValue::Spin(128),
+                                          default: Some(OptionValue::Spin(128)),
+                                          min: Some(OptionValue::Spin(0)),
+                                          max: Some(OptionValue::Spin(8192)),
                                           vars: None},
                             ConfigOption {id: "Threads".to_string(),
-                                          value: OptionValue::SPIN(4),
-                                          default: Some(OptionValue::SPIN(4)),
-                                          min: Some(OptionValue::SPIN(1)),
-                                          max: Some(OptionValue::SPIN(8)),
+                                          value: OptionValue::Spin(4),
+                                          default: Some(OptionValue::Spin(4)),
+                                          min: Some(OptionValue::Spin(1)),
+                                          max: Some(OptionValue::Spin(8)),
                                           vars: None},
                             ConfigOption {id: "UseNNUE".to_string(),
-                                          value: OptionValue::CHECK(false),
-                                          default: Some(OptionValue::CHECK(false)),
+                                          value: OptionValue::Check(false),
+                                          default: Some(OptionValue::Check(false)),
                                           min: None,
                                           max: None,
                                           vars: None},
                             ConfigOption {id: "NNUEPath".to_string(),
-                                          value: OptionValue::STRING("nn-33c9d39e5eb6.nnue".to_string()),
-                                          default: Some(OptionValue::STRING("nn-33c9d39e5eb6.nnue".to_string())),
+                                          value: OptionValue::String("nn-33c9d39e5eb6.nnue".to_string()),
+                                          default: Some(OptionValue::String("nn-33c9d39e5eb6.nnue".to_string())),
                                           min: None,
                                           max: None,
                                           vars: None}
@@ -73,11 +73,11 @@ impl EngineConfig {
         for option in self.options.iter() {
             print!("option name {} type ", option.id);
             match option.value {
-                OptionValue::SPIN(_) => print!("spin"),
-                OptionValue::CHECK(_) => print!("check"),
+                OptionValue::Spin(_) => print!("spin"),
+                OptionValue::Check(_) => print!("check"),
 //                OptionValue::COMBO(_) => print!("combo"),
 //                OptionValue::BUTTON => print!("button"),
-                OptionValue::STRING(_) => print!("string"),
+                OptionValue::String(_) => print!("string"),
             }
             if option.default.is_some() {
                 print!(" default {}", option.default.as_ref().unwrap());
@@ -104,20 +104,20 @@ impl EngineConfig {
         let option = self.options.iter_mut().find(|o| o.id == id);
         if option.is_none() {return;}
         match &mut option.unwrap().value {
-            OptionValue::SPIN(n) => {
+            OptionValue::Spin(n) => {
                 let val = value.parse::<i64>();
                 if let Ok(k) = val {
                     *n = k;
                 }
             },
-            OptionValue::CHECK(b) => {
+            OptionValue::Check(b) => {
                 if value == "true" {
                     *b = true;
                 } else if value == "false" {
                     *b = false;
                 }
             },
-            OptionValue::STRING(s) => {
+            OptionValue::String(s) => {
                 *s = value.to_string()
             },
         }
@@ -134,24 +134,24 @@ pub struct Engine {
 
 #[derive(Clone)]
 pub enum EngineIO {
-    UCIINPUT(String),
-    SEARCHUPDATE(SearchInfo),
-    SEARCHENDED(u64),
-    TIMERENDED(u64),
+    UciInput(String),
+    SearchUpdate(SearchInfo),
+    SearchEnded(u64),
+    TimerEnded(u64),
 }
 
 impl Engine {
     pub fn new() -> Engine {
         let config = EngineConfig::new();
         let mut search = SearchManager::new();
-        let threads = match config.get_option("Threads").unwrap() { OptionValue::SPIN(n) => n, _ => 1 };
-        let hash_size = match config.get_option("Hash").unwrap() { OptionValue::SPIN(n) => n, _ => 1 };
-        let use_nnue = match config.get_option("UseNNUE").unwrap() { OptionValue::CHECK(b) => b, _ => false };
+        let threads = match config.get_option("Threads").unwrap() { OptionValue::Spin(n) => n, _ => 1 };
+        let hash_size = match config.get_option("Hash").unwrap() { OptionValue::Spin(n) => n, _ => 1 };
+        let use_nnue = match config.get_option("UseNNUE").unwrap() { OptionValue::Check(b) => b, _ => false };
         search.set_threads(threads as usize);
         search.set_hash_size(hash_size as usize);
         search.set_use_nnue(use_nnue);
         if use_nnue {
-            let nnue_path = match config.get_option("NNUEPath").unwrap() { OptionValue::STRING(s) => s, _ => "".to_string() };
+            let nnue_path = match config.get_option("NNUEPath").unwrap() { OptionValue::String(s) => s, _ => "".to_string() };
             let path = std::path::Path::new(&nnue_path);
             crate::nnue::load_model(path).unwrap();
         }
@@ -192,23 +192,23 @@ impl Engine {
     }
     pub fn apply_options(&mut self) {
         let threads = match self.config.get_option("Threads").unwrap() {
-            OptionValue::SPIN(n) => n,
+            OptionValue::Spin(n) => n,
             _ => unreachable!(),
         };
         self.search.set_threads(threads as usize);
         let hash_size = match self.config.get_option("Hash").unwrap() {
-            OptionValue::SPIN(n) => n,
+            OptionValue::Spin(n) => n,
             _ => unreachable!(),
         };
         self.search.set_hash_size(hash_size as usize);
         let use_nnue = match self.config.get_option("UseNNUE").unwrap() {
-            OptionValue::CHECK(b) => b,
+            OptionValue::Check(b) => b,
             _ => unreachable!(),
         };
         self.search.set_use_nnue(use_nnue);
         if use_nnue {
             let nnue_path = match self.config.get_option("NNUEPath").unwrap() {
-                OptionValue::STRING(s) => s,
+                OptionValue::String(s) => s,
                 _ => unreachable!(),
             };
             let path = std::path::Path::new(&nnue_path);
@@ -260,5 +260,5 @@ fn get_and_set_options() {
     let mut e = Engine::new();
     e.print_config();
     e.config.set_option("Threads", "8");
-    assert!(e.config.get_option("Threads").unwrap() == OptionValue::SPIN(8));
+    assert!(e.config.get_option("Threads").unwrap() == OptionValue::Spin(8));
 }

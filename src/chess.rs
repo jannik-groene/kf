@@ -37,18 +37,18 @@ pub struct Board {
 //translate a fen symbol (kqbnrpKQBNRP) into a (Color, Piece) pair
 fn fen_to_type(c: char) -> Option<(Color, Piece)> {
     match c {
-        'k' => Some((Color::BLACK, Piece::KING)),
-        'q' => Some((Color::BLACK, Piece::QUEEN)),
-        'r' => Some((Color::BLACK, Piece::ROOK)),
-        'n' => Some((Color::BLACK, Piece::KNIGHT)),
-        'b' => Some((Color::BLACK, Piece::BISHOP)),
-        'p' => Some((Color::BLACK, Piece::PAWN)),
-        'K' => Some((Color::WHITE, Piece::KING)),
-        'Q' => Some((Color::WHITE, Piece::QUEEN)),
-        'R' => Some((Color::WHITE, Piece::ROOK)),
-        'B' => Some((Color::WHITE, Piece::BISHOP)),
-        'N' => Some((Color::WHITE, Piece::KNIGHT)),
-        'P' => Some((Color::WHITE, Piece::PAWN)),
+        'k' => Some((Color::Black, Piece::King)),
+        'q' => Some((Color::Black, Piece::Queen)),
+        'r' => Some((Color::Black, Piece::Rook)),
+        'n' => Some((Color::Black, Piece::Knight)),
+        'b' => Some((Color::Black, Piece::Bishop)),
+        'p' => Some((Color::Black, Piece::Pawn)),
+        'K' => Some((Color::White, Piece::King)),
+        'Q' => Some((Color::White, Piece::Queen)),
+        'R' => Some((Color::White, Piece::Rook)),
+        'B' => Some((Color::White, Piece::Bishop)),
+        'N' => Some((Color::White, Piece::Knight)),
+        'P' => Some((Color::White, Piece::Pawn)),
         _ => None,
     }
 }
@@ -67,36 +67,36 @@ pub enum File {
 
 #[derive(Copy,Clone,Debug,PartialEq)]
 pub enum Rank {
-    FIRST,
-    SECOND,
-    THIRD,
-    FOURTH,
-    FIFTH,
-    SIXTH,
-    SEVENTH,
-    EIGHTH,
+    First,
+    Second,
+    Third,
+    Fourth,
+    Fifth,
+    Sixth,
+    Seventh,
+    Eighth,
 }
 
 #[inline]
 fn get_zobrist_table(p: Piece, c: Color) -> &'static[u64] {
     match c {
-        Color::WHITE => match p {
-            Piece::KING => &constants::ZOBRIST_WHITE_KING_NUMBERS,
-            Piece::QUEEN => &constants::ZOBRIST_WHITE_QUEEN_NUMBERS,
-            Piece::BISHOP => &constants::ZOBRIST_WHITE_BISHOP_NUMBERS,
-            Piece::KNIGHT => &constants::ZOBRIST_WHITE_KNIGHT_NUMBERS,
-            Piece::ROOK => &constants::ZOBRIST_WHITE_ROOK_NUMBERS,
-            Piece::PAWN => &constants::ZOBRIST_WHITE_PAWN_NUMBERS,
-            Piece::ANY => panic!("Invalid Piece")
+        Color::White => match p {
+            Piece::King => &constants::ZOBRIST_WHITE_KING_NUMBERS,
+            Piece::Queen => &constants::ZOBRIST_WHITE_QUEEN_NUMBERS,
+            Piece::Bishop => &constants::ZOBRIST_WHITE_BISHOP_NUMBERS,
+            Piece::Knight => &constants::ZOBRIST_WHITE_KNIGHT_NUMBERS,
+            Piece::Rook => &constants::ZOBRIST_WHITE_ROOK_NUMBERS,
+            Piece::Pawn => &constants::ZOBRIST_WHITE_PAWN_NUMBERS,
+            Piece::Any => panic!("Invalid Piece")
         },
-        Color::BLACK => match p {
-            Piece::KING => &constants::ZOBRIST_BLACK_KING_NUMBERS,
-            Piece::QUEEN => &constants::ZOBRIST_BLACK_QUEEN_NUMBERS,
-            Piece::BISHOP => &constants::ZOBRIST_BLACK_BISHOP_NUMBERS,
-            Piece::KNIGHT => &constants::ZOBRIST_BLACK_KNIGHT_NUMBERS,
-            Piece::ROOK => &constants::ZOBRIST_BLACK_ROOK_NUMBERS,
-            Piece::PAWN => &constants::ZOBRIST_BLACK_PAWN_NUMBERS,
-            Piece::ANY => panic!("Invalid Piece")
+        Color::Black => match p {
+            Piece::King => &constants::ZOBRIST_BLACK_KING_NUMBERS,
+            Piece::Queen => &constants::ZOBRIST_BLACK_QUEEN_NUMBERS,
+            Piece::Bishop => &constants::ZOBRIST_BLACK_BISHOP_NUMBERS,
+            Piece::Knight => &constants::ZOBRIST_BLACK_KNIGHT_NUMBERS,
+            Piece::Rook => &constants::ZOBRIST_BLACK_ROOK_NUMBERS,
+            Piece::Pawn => &constants::ZOBRIST_BLACK_PAWN_NUMBERS,
+            Piece::Any => panic!("Invalid Piece")
         }
     }
 }
@@ -140,38 +140,38 @@ impl Board {
     #[inline]
     pub fn get_rank(sq: Square) -> Rank {
         match sq.trailing_zeros() / 8 {
-            0 => Rank::FIRST,
-            1 => Rank::SECOND,
-            2 => Rank::THIRD,
-            3 => Rank::FOURTH,
-            4 => Rank::FIFTH,
-            5 => Rank::SIXTH,
-            6 => Rank::SEVENTH,
-            7 => Rank::EIGHTH,
+            0 => Rank::First,
+            1 => Rank::Second,
+            2 => Rank::Third,
+            3 => Rank::Fourth,
+            4 => Rank::Fifth,
+            5 => Rank::Sixth,
+            6 => Rank::Seventh,
+            7 => Rank::Eighth,
             _ => panic!("Invalid square.")
         }
     }
     #[inline]
     pub fn forward(sq: Square, color: Color) -> Square {
         match color {
-            Color::WHITE => u64::MAX << ((sq.index() / 8) * 8 + 8),
-            Color::BLACK => u64::MAX >> ((8 - sq.index() / 8) * 8),
+            Color::White => u64::MAX << ((sq.index() / 8) * 8 + 8),
+            Color::Black => u64::MAX >> ((8 - sq.index() / 8) * 8),
         }
     }
     #[inline]
     pub fn piece_at(&self, sq: Square) -> Option<Piece> {
-        if (self[(Color::WHITE, Piece::PAWN)] | self[(Color::BLACK, Piece::PAWN)]) & sq != 0 {
-            Some(Piece::PAWN)
-        } else if (self[(Color::WHITE, Piece::BISHOP)] | self[(Color::BLACK, Piece::BISHOP)]) & sq != 0 {
-            Some(Piece::BISHOP)
-        } else if (self[(Color::WHITE, Piece::KNIGHT)] | self[(Color::BLACK, Piece::KNIGHT)]) & sq != 0 {
-            Some(Piece::KNIGHT)
-        } else if (self[(Color::WHITE, Piece::ROOK)] | self[(Color::BLACK, Piece::ROOK)]) & sq != 0 {
-            Some(Piece::ROOK)
-        } else if (self[(Color::WHITE, Piece::QUEEN)] | self[(Color::BLACK, Piece::QUEEN)]) & sq != 0 {
-            Some(Piece::QUEEN)
-        } else if (self[(Color::WHITE, Piece::KING)] | self[(Color::BLACK, Piece::KING)]) & sq != 0 {
-            Some(Piece::KING)
+        if (self[(Color::White, Piece::Pawn)] | self[(Color::Black, Piece::Pawn)]) & sq != 0 {
+            Some(Piece::Pawn)
+        } else if (self[(Color::White, Piece::Bishop)] | self[(Color::Black, Piece::Bishop)]) & sq != 0 {
+            Some(Piece::Bishop)
+        } else if (self[(Color::White, Piece::Knight)] | self[(Color::Black, Piece::Knight)]) & sq != 0 {
+            Some(Piece::Knight)
+        } else if (self[(Color::White, Piece::Rook)] | self[(Color::Black, Piece::Rook)]) & sq != 0 {
+            Some(Piece::Rook)
+        } else if (self[(Color::White, Piece::Queen)] | self[(Color::Black, Piece::Queen)]) & sq != 0 {
+            Some(Piece::Queen)
+        } else if (self[(Color::White, Piece::King)] | self[(Color::Black, Piece::King)]) & sq != 0 {
+            Some(Piece::King)
         } else {
             None
         }
@@ -204,7 +204,7 @@ impl Board {
                     match typ {
                         Some(t) => {
                             board[t] |= 1 << (x + 8*y);
-                            board[(t.0, Piece::ANY)] |= 1 << (x + 8*y);
+                            board[(t.0, Piece::Any)] |= 1 << (x + 8*y);
                             board.occupation |= 1 << (x + 8*y);
                         },
                         None => return None,
@@ -224,174 +224,174 @@ impl Board {
         let from = m.from.square();
         let to = m.to.square();
         self[(color, m.piece)] ^= from;
-        self[(color, Piece::ANY)] ^= from;
+        self[(color, Piece::Any)] ^= from;
         self.occupation ^= from;
         self.occupation ^= to;
-        self[(color, Piece::ANY)] ^= to;
+        self[(color, Piece::Any)] ^= to;
         match m.typ {
-            MoveType::MOVE => {
+            MoveType::Normal => {
                 self[(color, m.piece)] ^= to;
                 zobrist ^= get_zobrist_table(m.piece, color)[to.index()];
-                if m.piece == Piece::PAWN && !(16..=47).contains(&m.from) && (24..=32).contains(&m.to) {
+                if m.piece == Piece::Pawn && !(16..=47).contains(&m.from) && (24..=32).contains(&m.to) {
                     zobrist ^= constants::ZOBRIST_ENPASSANT_NUMBERS[to.index() % 8];
                 }
             },
-            MoveType::CAPTURE(p) => {
+            MoveType::Capture(p) => {
                 self[(color.other(),p)] ^= to;
-                self[(color.other(), Piece::ANY)] ^= to;
+                self[(color.other(), Piece::Any)] ^= to;
                 self[(color, m.piece)] ^= to;
                 self.occupation ^= to;
                 zobrist ^= get_zobrist_table(m.piece, color)[to.index()];
                 zobrist ^= get_zobrist_table(p, color.other())[to.index()];
             },
-            MoveType::PROMOTION(p) => {
+            MoveType::Promotion(p) => {
                 self[(color, p)] ^= to;
                 zobrist ^= get_zobrist_table(p, color)[to.index()];
             },
-            MoveType::PROMOTIONCAPTURE((p_prom,p_cap)) => {
+            MoveType::PromotionCapture((p_prom,p_cap)) => {
                 self[(color.other(),p_cap)] ^= to;
-                self[(color.other(), Piece::ANY)] ^= to;
+                self[(color.other(), Piece::Any)] ^= to;
                 self[(color, p_prom)] ^= to;
                 self.occupation ^= to;
                 zobrist ^= get_zobrist_table(p_prom, color)[to.index()];
                 zobrist ^= get_zobrist_table(p_cap, color.other())[to.index()];
             },
-            MoveType::ENPASSANT => {
+            MoveType::Enpassant => {
                 let cap_square = match color {
-                    Color::WHITE =>  {
+                    Color::White =>  {
                         to.go_s()
                     }
-                    Color::BLACK => {
+                    Color::Black => {
                         to.go_n()
                     }
                 };
-                self[(color.other(),Piece::PAWN)] ^= cap_square;
-                self[(color.other(),Piece::ANY)] ^= cap_square;
+                self[(color.other(),Piece::Pawn)] ^= cap_square;
+                self[(color.other(),Piece::Any)] ^= cap_square;
                 self.occupation ^= cap_square;
                 self[(color, m.piece)] ^= to;
-                zobrist ^= get_zobrist_table(Piece::PAWN, color)[to.index()];
-                zobrist ^= get_zobrist_table(Piece::PAWN, color.other())[cap_square.index()];
+                zobrist ^= get_zobrist_table(Piece::Pawn, color)[to.index()];
+                zobrist ^= get_zobrist_table(Piece::Pawn, color.other())[cap_square.index()];
             },
-            MoveType::CASTLE => {
+            MoveType::Castle => {
                 self[(color, m.piece)] ^= to;
-                zobrist ^= get_zobrist_table(Piece::KING, color)[to.index()];
+                zobrist ^= get_zobrist_table(Piece::King, color)[to.index()];
                 match color {
-                    Color::WHITE => {
+                    Color::White => {
                         if to == 1 << 2 {
-                            self[(color, Piece::ROOK)] ^= 1+(1<<3);
-                            self[(color, Piece::ANY)] ^= 1+(1<<3);
+                            self[(color, Piece::Rook)] ^= 1+(1<<3);
+                            self[(color, Piece::Any)] ^= 1+(1<<3);
                             self.occupation ^= 1+(1<<3);
-                            zobrist ^= get_zobrist_table(Piece::ROOK, Color::WHITE)[0] ^ get_zobrist_table(Piece::ROOK, Color::WHITE)[3];
+                            zobrist ^= get_zobrist_table(Piece::Rook, Color::White)[0] ^ get_zobrist_table(Piece::Rook, Color::White)[3];
                         } else if to == 1 << 6 {
-                            self[(color, Piece::ROOK)] ^= (1<<7)+(1<<5);
-                            self[(color, Piece::ANY)] ^= (1<<7)+(1<<5);
+                            self[(color, Piece::Rook)] ^= (1<<7)+(1<<5);
+                            self[(color, Piece::Any)] ^= (1<<7)+(1<<5);
                             self.occupation ^= (1<<7)+(1<<5);
-                            zobrist ^= get_zobrist_table(Piece::ROOK, Color::WHITE)[5] ^ get_zobrist_table(Piece::ROOK, Color::WHITE)[7];
+                            zobrist ^= get_zobrist_table(Piece::Rook, Color::White)[5] ^ get_zobrist_table(Piece::Rook, Color::White)[7];
                         }
                     }
-                    Color::BLACK => {
+                    Color::Black => {
                         if to == 1 << 58 {
-                            self[(color, Piece::ROOK)] ^= (1<<56)+(1<<59);
-                            self[(color, Piece::ANY)] ^= (1<<56)+(1<<59);
+                            self[(color, Piece::Rook)] ^= (1<<56)+(1<<59);
+                            self[(color, Piece::Any)] ^= (1<<56)+(1<<59);
                             self.occupation ^= (1<<56)+(1<<59);
-                            zobrist ^= get_zobrist_table(Piece::ROOK, Color::BLACK)[56] ^ get_zobrist_table(Piece::ROOK, Color::BLACK)[59];
+                            zobrist ^= get_zobrist_table(Piece::Rook, Color::Black)[56] ^ get_zobrist_table(Piece::Rook, Color::Black)[59];
                         } else if to == 1 << 62 {
-                            self[(color, Piece::ROOK)] ^= (1<<63)+(1<<61);
-                            self[(color, Piece::ANY)] ^= (1<<63)+(1<<61);
+                            self[(color, Piece::Rook)] ^= (1<<63)+(1<<61);
+                            self[(color, Piece::Any)] ^= (1<<63)+(1<<61);
                             self.occupation ^= (1<<63)+(1<<61);
-                            zobrist ^= get_zobrist_table(Piece::ROOK, Color::BLACK)[61] ^ get_zobrist_table(Piece::ROOK, Color::BLACK)[63];
+                            zobrist ^= get_zobrist_table(Piece::Rook, Color::Black)[61] ^ get_zobrist_table(Piece::Rook, Color::Black)[63];
                         }
                     }
                 }
             },
-            MoveType::NULL => panic!("Illegal Move"),
+            MoveType::Null => panic!("Illegal Move"),
         }
         zobrist
     }
     #[inline]
     pub fn do_move(&mut self, m: Move) -> u64 {
-        let color = if self[(Color::WHITE, m.piece)] & m.from.square() != 0 {
-            Color::WHITE
+        let color = if self[(Color::White, m.piece)] & m.from.square() != 0 {
+            Color::White
         } else {
-            Color:: BLACK
+            Color::Black
         };
         self.do_move_for_color(m,color)
     }
     #[inline]
     pub fn undo_move(&mut self, m: Move) -> u64 {
-        let color = if self[(Color::WHITE, Piece::ANY)] & m.to.square() != 0 {
-            Color::WHITE
+        let color = if self[(Color::White, Piece::Any)] & m.to.square() != 0 {
+            Color::White
         } else {
-            Color:: BLACK
+            Color::Black
         };
         self.do_move_for_color(m,color)
     }
     fn determine_move_type(&self, from: Square, to: Square, piece: Piece, promote: Option<Piece>) -> MoveType {
         match piece {
-            Piece::KING => {
-                if piece == Piece::KING && from == 1 << 4 && (to == 1<<6 || to == 1<<2) {
-                    return MoveType::CASTLE;
+            Piece::King => {
+                if piece == Piece::King && from == 1 << 4 && (to == 1<<6 || to == 1<<2) {
+                    return MoveType::Castle;
                 }
-                if piece == Piece::KING && from == 1 << 60 && (to == 1<<62 || to == 1<<58) {
-                    return MoveType::CASTLE;
+                if piece == Piece::King && from == 1 << 60 && (to == 1<<62 || to == 1<<58) {
+                    return MoveType::Castle;
                 }
 
             },
-            Piece::PAWN => {
+            Piece::Pawn => {
                 if self.occupation & to == 0 && Self::get_file(to) != Self::get_file(from) {
-                    return MoveType::ENPASSANT;
+                    return MoveType::Enpassant;
                 } else if promote.is_some() {
                     if self.occupation & to != 0 {
-                        return MoveType::PROMOTIONCAPTURE((promote.unwrap(), self.piece_at(to).unwrap()));
+                        return MoveType::PromotionCapture((promote.unwrap(), self.piece_at(to).unwrap()));
                     } else {
-                        return MoveType::PROMOTION(promote.unwrap());
+                        return MoveType::Promotion(promote.unwrap());
                     }
                 }
             },
             _ => {},
         }
         if self.occupation & to != 0 {
-            MoveType::CAPTURE(self.piece_at(to).unwrap())
+            MoveType::Capture(self.piece_at(to).unwrap())
         } else {
-            MoveType::MOVE
+            MoveType::Normal
         }
     }
     fn get_zobrist(&self) -> u64 {
         let mut zobrist = 0;
-        for p in self[(Color::WHITE, Piece::KING)].iter() {
+        for p in self[(Color::White, Piece::King)].iter() {
             zobrist ^= constants::ZOBRIST_WHITE_KING_NUMBERS[p.index()];
         }
-        for p in self[(Color::WHITE, Piece::QUEEN)].iter() {
+        for p in self[(Color::White, Piece::Queen)].iter() {
             zobrist ^= constants::ZOBRIST_WHITE_QUEEN_NUMBERS[p.index()];
         }
-        for p in self[(Color::WHITE, Piece::BISHOP)].iter() {
+        for p in self[(Color::White, Piece::Bishop)].iter() {
             zobrist ^= constants::ZOBRIST_WHITE_BISHOP_NUMBERS[p.index()];
         }
-        for p in self[(Color::WHITE, Piece::KNIGHT)].iter() {
+        for p in self[(Color::White, Piece::Knight)].iter() {
             zobrist ^= constants::ZOBRIST_WHITE_KNIGHT_NUMBERS[p.index()];
         }
-        for p in self[(Color::WHITE, Piece::ROOK)].iter() {
+        for p in self[(Color::White, Piece::Rook)].iter() {
             zobrist ^= constants::ZOBRIST_WHITE_ROOK_NUMBERS[p.index()];
         }
-        for p in self[(Color::WHITE, Piece::PAWN)].iter() {
+        for p in self[(Color::White, Piece::Pawn)].iter() {
             zobrist ^= constants::ZOBRIST_WHITE_PAWN_NUMBERS[p.index()];
         }
-        for p in self[(Color::BLACK, Piece::KING)].iter() {
+        for p in self[(Color::Black, Piece::King)].iter() {
             zobrist ^= constants::ZOBRIST_BLACK_KING_NUMBERS[p.index()];
         }
-        for p in self[(Color::BLACK, Piece::QUEEN)].iter() {
+        for p in self[(Color::Black, Piece::Queen)].iter() {
             zobrist ^= constants::ZOBRIST_BLACK_QUEEN_NUMBERS[p.index()];
         }
-        for p in self[(Color::BLACK, Piece::BISHOP)].iter() {
+        for p in self[(Color::Black, Piece::Bishop)].iter() {
             zobrist ^= constants::ZOBRIST_BLACK_BISHOP_NUMBERS[p.index()];
         }
-        for p in self[(Color::BLACK, Piece::KNIGHT)].iter() {
+        for p in self[(Color::Black, Piece::Knight)].iter() {
             zobrist ^= constants::ZOBRIST_BLACK_KNIGHT_NUMBERS[p.index()];
         }
-        for p in self[(Color::BLACK, Piece::ROOK)].iter() {
+        for p in self[(Color::Black, Piece::Rook)].iter() {
             zobrist ^= constants::ZOBRIST_BLACK_ROOK_NUMBERS[p.index()];
         }
-        for p in self[(Color::BLACK, Piece::PAWN)].iter() {
+        for p in self[(Color::Black, Piece::Pawn)].iter() {
             zobrist ^= constants::ZOBRIST_BLACK_PAWN_NUMBERS[p.index()];
         }
         zobrist
@@ -402,6 +402,7 @@ impl Board {
     pub fn get_next_neighbours(s: Square) -> Square {
         constants::NEXT_NEIGHBOURS[s.index()]
     }
+    #[allow(dead_code)]
     pub fn iter(&self) -> BoardIterator<'_> {
         BoardIterator {occ: self.occupation, board: self}
     }
@@ -424,18 +425,18 @@ fn write_piece_to_position(c: char, pos: Square, cboard: &mut [[char;8];8]) {
 impl fmt::Display for Board {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut board: [[char; 8]; 8] = [['.'; 8]; 8];
-        write_piece_to_position('K', self[(Color::WHITE, Piece::KING)], &mut board);
-        write_piece_to_position('Q', self[(Color::WHITE, Piece::QUEEN)], &mut board);
-        write_piece_to_position('R', self[(Color::WHITE, Piece::ROOK)], &mut board);
-        write_piece_to_position('B', self[(Color::WHITE, Piece::BISHOP)], &mut board);
-        write_piece_to_position('N', self[(Color::WHITE, Piece::KNIGHT)], &mut board);
-        write_piece_to_position('P', self[(Color::WHITE, Piece::PAWN)], &mut board);
-        write_piece_to_position('k', self[(Color::BLACK, Piece::KING)], &mut board);
-        write_piece_to_position('q', self[(Color::BLACK, Piece::QUEEN)], &mut board);
-        write_piece_to_position('r', self[(Color::BLACK, Piece::ROOK)], &mut board);
-        write_piece_to_position('b', self[(Color::BLACK, Piece::BISHOP)], &mut board);
-        write_piece_to_position('n', self[(Color::BLACK, Piece::KNIGHT)], &mut board);
-        write_piece_to_position('p', self[(Color::BLACK, Piece::PAWN)], &mut board);
+        write_piece_to_position('K', self[(Color::White, Piece::King)], &mut board);
+        write_piece_to_position('Q', self[(Color::White, Piece::Queen)], &mut board);
+        write_piece_to_position('R', self[(Color::White, Piece::Rook)], &mut board);
+        write_piece_to_position('B', self[(Color::White, Piece::Bishop)], &mut board);
+        write_piece_to_position('N', self[(Color::White, Piece::Knight)], &mut board);
+        write_piece_to_position('P', self[(Color::White, Piece::Pawn)], &mut board);
+        write_piece_to_position('k', self[(Color::Black, Piece::King)], &mut board);
+        write_piece_to_position('q', self[(Color::Black, Piece::Queen)], &mut board);
+        write_piece_to_position('r', self[(Color::Black, Piece::Rook)], &mut board);
+        write_piece_to_position('b', self[(Color::Black, Piece::Bishop)], &mut board);
+        write_piece_to_position('n', self[(Color::Black, Piece::Knight)], &mut board);
+        write_piece_to_position('p', self[(Color::Black, Piece::Pawn)], &mut board);
         let line: String = board.iter()
                                     .map(|&l| -> String{l.iter()
                                                          .map(|c| -> String {String::from(*c) + " "})
@@ -475,10 +476,10 @@ impl Iterator for BoardIterator<'_> {
             let sq = self.occ & !(self.occ - 1);
             self.occ ^= sq;
             let p = self.board.piece_at(sq).unwrap();
-            let c = if self.board[(Color::WHITE, Piece::ANY)] & sq != 0 {
-                Color::WHITE
+            let c = if self.board[(Color::White, Piece::Any)] & sq != 0 {
+                Color::White
             } else {
-                Color::BLACK
+                Color::Black
             };
             Some((p,c,sq.index()))
         }
@@ -531,10 +532,10 @@ pub trait SquareMethods {
     fn go_ne(self) -> Self;
     fn go_sw(self) -> Self;
     fn go_se(self) -> Self;
-    fn is_at_west_border(self) -> bool;
-    fn is_at_east_border(self) -> bool;
-    fn is_at_north_border(self) -> bool;
-    fn is_at_south_border(self) -> bool;
+    fn is_at_west_border(&self) -> bool;
+    fn is_at_east_border(&self) -> bool;
+    fn is_at_north_border(&self) -> bool;
+    fn is_at_south_border(&self) -> bool;
     fn iter(self) -> SquareIterator;
     fn index(self) -> usize;
 }
@@ -573,20 +574,20 @@ impl SquareMethods for Square {
         self >> 9
     }
     #[inline]
-    fn is_at_west_border(self) -> bool {
-        self & WEST_BORDER != 0
+    fn is_at_west_border(&self) -> bool {
+        *self & WEST_BORDER != 0
     }
     #[inline]
-    fn is_at_east_border(self) -> bool {
-        self & EAST_BORDER != 0
+    fn is_at_east_border(&self) -> bool {
+        *self & EAST_BORDER != 0
     }
     #[inline]
-    fn is_at_north_border(self) -> bool {
-        self > 1 << 55
+    fn is_at_north_border(&self) -> bool {
+        *self > 1 << 55
     }
     #[inline]
-    fn is_at_south_border(self) -> bool {
-        self < 1 << 8
+    fn is_at_south_border(&self) -> bool {
+        *self < 1 << 8
     }
     #[inline]
     fn iter(self) -> SquareIterator {
@@ -631,20 +632,20 @@ impl SquareMethods for SquareIndex {
         self - 9
     }
     #[inline]
-    fn is_at_west_border(self) -> bool {
-        self % 8 == 0
+    fn is_at_west_border(&self) -> bool {
+        *self % 8 == 0
     }
     #[inline]
-    fn is_at_east_border(self) -> bool {
-        self % 8 == 7
+    fn is_at_east_border(&self) -> bool {
+        *self % 8 == 7
     }
     #[inline]
-    fn is_at_north_border(self) -> bool {
-        self > 55
+    fn is_at_north_border(&self) -> bool {
+        *self > 55
     }
     #[inline]
-    fn is_at_south_border(self) -> bool {
-        self < 8
+    fn is_at_south_border(&self) -> bool {
+        *self < 8
     }
     #[inline]
     fn iter(self) -> SquareIterator {
@@ -660,13 +661,13 @@ const WEST_BORDER: Square = 0x0101010101010101;
 
 #[derive(PartialEq,Clone,Copy,Debug)]
 pub enum MoveType {
-    MOVE,
-    CAPTURE(Piece),
-    PROMOTION(Piece),
-    PROMOTIONCAPTURE((Piece,Piece)),
-    ENPASSANT,
-    CASTLE,
-    NULL,
+    Normal,
+    Capture(Piece),
+    Promotion(Piece),
+    PromotionCapture((Piece,Piece)),
+    Enpassant,
+    Castle,
+    Null,
 }
 
 #[derive(PartialEq,Clone,Copy)]
@@ -686,10 +687,10 @@ impl Move {
         to += 8*(chars.next().unwrap() as u8 - b'1');
         let piece = pos.board.piece_at(from.square()).unwrap();
         let prom = match chars.next() {
-            Some('q') => Some(Piece::QUEEN),
-            Some('r') => Some(Piece::ROOK),
-            Some('b') => Some(Piece::BISHOP),
-            Some('n') => Some(Piece::KNIGHT),
+            Some('q') => Some(Piece::Queen),
+            Some('r') => Some(Piece::Rook),
+            Some('b') => Some(Piece::Bishop),
+            Some('n') => Some(Piece::Knight),
             _ => None,
         };
         Move {
@@ -702,13 +703,13 @@ impl Move {
     pub fn compress(&self) -> CompressedMove {
         let mut piece_and_type = self.piece as u16;
         piece_and_type |= match self.typ {
-            MoveType::MOVE => 0,
-            MoveType::CAPTURE(p) => ((p as u16) << 3) | (1 << 9),
-            MoveType::PROMOTION(p) => ((p as u16) << 3) | (2 << 9),
-            MoveType::PROMOTIONCAPTURE((p,q)) => ((p as u16) << 3) | ((q as u16) << 6) | (3 << 9),
-            MoveType::CASTLE => 4 << 9,
-            MoveType::ENPASSANT => 5 << 9,
-            MoveType::NULL => panic!("Cannot compress null move."),
+            MoveType::Normal => 0,
+            MoveType::Capture(p) => ((p as u16) << 3) | (1 << 9),
+            MoveType::Promotion(p) => ((p as u16) << 3) | (2 << 9),
+            MoveType::PromotionCapture((p,q)) => ((p as u16) << 3) | ((q as u16) << 6) | (3 << 9),
+            MoveType::Castle => 4 << 9,
+            MoveType::Enpassant => 5 << 9,
+            MoveType::Null => panic!("Cannot compress null move."),
         };
         CompressedMove {
             piece_and_type,
@@ -729,12 +730,12 @@ impl CompressedMove {
     pub fn decompress(&self) -> Option<Move> {
         let piece = u16_to_piece(self.piece_and_type & 0b111);
         let typ = match self.piece_and_type >> 9 {
-            0 => MoveType::MOVE,
-            1 => MoveType::CAPTURE(u16_to_piece((self.piece_and_type >> 3) & 0b111)),
-            2 => MoveType::PROMOTION(u16_to_piece((self.piece_and_type >> 3) & 0b111)),
-            3 => MoveType::PROMOTIONCAPTURE((u16_to_piece((self.piece_and_type >> 3) & 0b111), u16_to_piece((self.piece_and_type >> 6) & 0b111))),
-            4 => MoveType::CASTLE,
-            5 => MoveType::ENPASSANT,
+            0 => MoveType::Normal,
+            1 => MoveType::Capture(u16_to_piece((self.piece_and_type >> 3) & 0b111)),
+            2 => MoveType::Promotion(u16_to_piece((self.piece_and_type >> 3) & 0b111)),
+            3 => MoveType::PromotionCapture((u16_to_piece((self.piece_and_type >> 3) & 0b111), u16_to_piece((self.piece_and_type >> 6) & 0b111))),
+            4 => MoveType::Castle,
+            5 => MoveType::Enpassant,
             _ => return None,
         };
         Some(Move {from: self.from, to: self.to, piece, typ,})
@@ -745,14 +746,14 @@ pub type MoveList = arrayvec::ArrayVec<Move,256>;
 
 fn display_promotion(m: &Move) -> String {
     match m.typ {
-        MoveType::PROMOTION(Piece::QUEEN) => "q".to_string(),
-        MoveType::PROMOTION(Piece::ROOK) => "r".to_string(),
-        MoveType::PROMOTION(Piece::BISHOP) => "b".to_string(),
-        MoveType::PROMOTION(Piece::KNIGHT) => "n".to_string(),
-        MoveType::PROMOTIONCAPTURE((Piece::QUEEN,_)) => "q".to_string(),
-        MoveType::PROMOTIONCAPTURE((Piece::ROOK,_)) => "r".to_string(),
-        MoveType::PROMOTIONCAPTURE((Piece::BISHOP,_)) => "b".to_string(),
-        MoveType::PROMOTIONCAPTURE((Piece::KNIGHT,_)) => "n".to_string(),
+        MoveType::Promotion(Piece::Queen) => "q".to_string(),
+        MoveType::Promotion(Piece::Rook) => "r".to_string(),
+        MoveType::Promotion(Piece::Bishop) => "b".to_string(),
+        MoveType::Promotion(Piece::Knight) => "n".to_string(),
+        MoveType::PromotionCapture((Piece::Queen,_)) => "q".to_string(),
+        MoveType::PromotionCapture((Piece::Rook,_)) => "r".to_string(),
+        MoveType::PromotionCapture((Piece::Bishop,_)) => "b".to_string(),
+        MoveType::PromotionCapture((Piece::Knight,_)) => "n".to_string(),
         _ => "".to_string()
     }
 }
@@ -765,52 +766,52 @@ impl fmt::Display for Move {
 
 fn u16_to_piece(p: u16) -> Piece {
      match p {
-        0 => Piece::KING,
-        1 => Piece::QUEEN,
-        2 => Piece::BISHOP,
-        3 => Piece::KNIGHT,
-        4 => Piece::ROOK,
-        5 => Piece::PAWN,
+        0 => Piece::King,
+        1 => Piece::Queen,
+        2 => Piece::Bishop,
+        3 => Piece::Knight,
+        4 => Piece::Rook,
+        5 => Piece::Pawn,
         _ => panic!("Tried to decompress invalid move."),
     }
 }
 
 #[derive(PartialEq,Clone,Copy,Debug)]
 pub enum Piece {
-    KING,
-    QUEEN,
-    BISHOP,
-    KNIGHT,
-    ROOK,
-    PAWN,
-    ANY
+    King,
+    Queen,
+    Bishop,
+    Knight,
+    Rook,
+    Pawn,
+    Any
 }
 
 impl Piece {
     pub fn value(self) -> i32 {
         match self {
-            Self::PAWN => 100,
-            Self::BISHOP => 300,
-            Self::KNIGHT => 300,
-            Self::ROOK => 500,
-            Self::QUEEN => 900,
-            Self::KING => 10000,
-            Self::ANY => 0,
+            Self::Pawn => 100,
+            Self::Bishop => 300,
+            Self::Knight => 300,
+            Self::Rook => 500,
+            Self::Queen => 900,
+            Self::King => 10000,
+            Self::Any => 0,
         }
     }
 }
 
 #[derive(PartialEq,Clone,Copy,Debug)]
 pub enum Color {
-    WHITE,
-    BLACK,
+    White,
+    Black,
 }
 
 impl Color {
     pub fn other(self) -> Color {
         match self {
-            Self::BLACK => Self::WHITE,
-            Self::WHITE => Self::BLACK,
+            Self::Black => Self::White,
+            Self::White => Self::Black,
         }
     }
 }
@@ -848,7 +849,7 @@ impl Position {
         Position {
             board,
             move_history: Vec::with_capacity(20),
-            to_move: Color::WHITE,
+            to_move: Color::White,
             castling_legal: vec![[[true, true], [true, true]]],
             rule_50_counts: vec![0],
             attacked_squares: 0,
@@ -868,7 +869,7 @@ impl Position {
         let mut pos = Position {
             board: b,
             move_history: Vec::with_capacity(20),
-            to_move: Color::WHITE,
+            to_move: Color::White,
             castling_legal: Vec::with_capacity(20),
             rule_50_counts: Vec::with_capacity(20),
             attacked_squares: 0,
@@ -881,10 +882,10 @@ impl Position {
         //Enter who is to move
         match fen_parts.next() {
             Some(p) => {
-                if p == "w" {pos.to_move = Color::WHITE;}
+                if p == "w" {pos.to_move = Color::White;}
                 else if p == "b" {
                     pos.zobrist ^= constants::ZOBRIST_BLACK_NUMBER;
-                    pos.to_move = Color::BLACK;
+                    pos.to_move = Color::Black;
                 }
                 else {return None;}
             },
@@ -922,98 +923,98 @@ impl Position {
                     "a3" => pos.move_history.push(Move {
                         from: 8,
                         to: 24,
-                        piece: Piece::PAWN,
-                        typ: MoveType::ENPASSANT,
+                        piece: Piece::Pawn,
+                        typ: MoveType::Enpassant,
                     }),
                     "b3" => pos.move_history.push(Move {
                         from: 9,
                         to: 25,
-                        piece: Piece::PAWN,
-                        typ: MoveType::ENPASSANT,
+                        piece: Piece::Pawn,
+                        typ: MoveType::Enpassant,
                     }),
                     "c3" => pos.move_history.push(Move {
                         from: 10,
                         to: 26,
-                        piece: Piece::PAWN,
-                        typ: MoveType::ENPASSANT,
+                        piece: Piece::Pawn,
+                        typ: MoveType::Enpassant,
                     }),
                     "d3" => pos.move_history.push(Move {
                         from: 11,
                         to: 27,
-                        piece: Piece::PAWN,
-                        typ: MoveType::ENPASSANT,
+                        piece: Piece::Pawn,
+                        typ: MoveType::Enpassant,
                     }),
                     "e3" => pos.move_history.push(Move {
                         from: 12,
                         to: 28,
-                        piece: Piece::PAWN,
-                        typ: MoveType::ENPASSANT,
+                        piece: Piece::Pawn,
+                        typ: MoveType::Enpassant,
                     }),
                     "f3" => pos.move_history.push(Move {
                         from: 13,
                         to: 29,
-                        piece: Piece::PAWN,
-                        typ: MoveType::ENPASSANT,
+                        piece: Piece::Pawn,
+                        typ: MoveType::Enpassant,
                     }),
                     "g3" => pos.move_history.push(Move {
                         from: 14,
                         to: 30,
-                        piece: Piece::PAWN,
-                        typ: MoveType::ENPASSANT,
+                        piece: Piece::Pawn,
+                        typ: MoveType::Enpassant,
                     }),
                     "h3" => pos.move_history.push(Move {
                         from: 15,
                         to: 31,
-                        piece: Piece::PAWN,
-                        typ: MoveType::ENPASSANT,
+                        piece: Piece::Pawn,
+                        typ: MoveType::Enpassant,
                     }),
                     "a6" => pos.move_history.push(Move {
                         from: 48,
                         to: 32,
-                        piece: Piece::PAWN,
-                        typ: MoveType::ENPASSANT,
+                        piece: Piece::Pawn,
+                        typ: MoveType::Enpassant,
                     }),
                     "b6" => pos.move_history.push(Move {
                         from: 49,
                         to: 33,
-                        piece: Piece::PAWN,
-                        typ: MoveType::ENPASSANT,
+                        piece: Piece::Pawn,
+                        typ: MoveType::Enpassant,
                     }),
                     "c6" => pos.move_history.push(Move {
                         from: 50,
                         to: 34,
-                        piece: Piece::PAWN,
-                        typ: MoveType::ENPASSANT,
+                        piece: Piece::Pawn,
+                        typ: MoveType::Enpassant,
                     }),
                     "d6" => pos.move_history.push(Move {
                         from: 51,
                         to: 35,
-                        piece: Piece::PAWN,
-                        typ: MoveType::ENPASSANT,
+                        piece: Piece::Pawn,
+                        typ: MoveType::Enpassant,
                     }),
                     "e6" => pos.move_history.push(Move {
                         from: 52,
                         to: 36,
-                        piece: Piece::PAWN,
-                        typ: MoveType::ENPASSANT,
+                        piece: Piece::Pawn,
+                        typ: MoveType::Enpassant,
                     }),
                     "f6" => pos.move_history.push(Move {
                         from: 53,
                         to: 37,
-                        piece: Piece::PAWN,
-                        typ: MoveType::ENPASSANT,
+                        piece: Piece::Pawn,
+                        typ: MoveType::Enpassant,
                     }),
                     "g6" => pos.move_history.push(Move {
                         from: 54,
                         to: 38,
-                        piece: Piece::PAWN,
-                        typ: MoveType::ENPASSANT,
+                        piece: Piece::Pawn,
+                        typ: MoveType::Enpassant,
                     }),
                     "h6" => pos.move_history.push(Move {
                         from: 55,
                         to: 39,
-                        piece: Piece::PAWN,
-                        typ: MoveType::ENPASSANT,
+                        piece: Piece::Pawn,
+                        typ: MoveType::Enpassant,
                     }),
                     _ => return None,
                 }
@@ -1073,14 +1074,14 @@ impl Position {
     #[inline]
     fn pawn_moves(&self, sq: Square, c: Color) -> Square {
         match c {
-            Color::WHITE => {
+            Color::White => {
                 if self.board.occupation & sq.go_n() != 0 {0}
                 else if sq > (1 << 7) && sq < (1 << 16) && self.board.occupation & (sq << 16) == 0 {
                     (sq << 8) | (sq << 16)
                 }
                 else {sq << 8}
             },
-            Color::BLACK => {
+            Color::Black => {
                 if self.board.occupation & sq.go_s() != 0 {0}
                 else if sq < (1<<56) && sq > (1 << 47) && self.board.occupation & (sq >> 16) == 0 {
                     (sq >> 8) | (sq >> 16)
@@ -1092,7 +1093,7 @@ impl Position {
     #[inline]
     fn pawn_attacks(&self, sq: Square, c: Color) -> Square {
         let mut attacked = 0;
-        if c == Color::WHITE {
+        if c == Color::White {
             if !sq.is_at_north_border() && !sq.is_at_west_border() {
                 attacked |= sq.go_nw();
             }
@@ -1100,7 +1101,7 @@ impl Position {
                 attacked |= sq.go_ne();
             }
         }
-        if c == Color::BLACK {
+        if c == Color::Black {
             if !sq.is_at_south_border() && !sq.is_at_west_border() {
                 attacked |= sq.go_sw();
             }
@@ -1113,14 +1114,14 @@ impl Position {
     #[inline]
     pub fn generate_attack_table(&mut self) {
         let opp = self.to_move.other();
-        let king_pos = self.board[(self.to_move, Piece::KING)];
+        let king_pos = self.board[(self.to_move, Piece::King)];
         self.board.occupation ^= king_pos;
         //make sure we cause no collisions..
         self.attacked_squares = 0;
         self.pinned_pieces = 0;
         self.king_attackers = 0;
         //calculate squares attacked by each pawn
-        let pawns = self.board[(opp, Piece::PAWN)];
+        let pawns = self.board[(opp, Piece::Pawn)];
         for pawn in pawns.iter() {
             let attacked = self.pawn_attacks(pawn, opp);
             if attacked & king_pos != 0 {
@@ -1129,7 +1130,7 @@ impl Position {
             self.attacked_squares |= attacked;
         }
         //calculate squares attacked by knights
-        let knights = self.board[(opp, Piece::KNIGHT)];
+        let knights = self.board[(opp, Piece::Knight)];
         for knight in knights.iter() {
             let attacked = self.knight_moves(knight);
             if attacked & king_pos != 0 {
@@ -1138,10 +1139,10 @@ impl Position {
             self.attacked_squares |= attacked;
         }
         //calculate squares attacked by king
-        self.attacked_squares |= self.king_moves(self.board[(opp, Piece::KING)]);
+        self.attacked_squares |= self.king_moves(self.board[(opp, Piece::King)]);
         //calculate squares attacked by rooks
         let rook_moves_from_king = self.rook_moves(king_pos);
-        let rooks = self.board[(opp, Piece::ROOK)];
+        let rooks = self.board[(opp, Piece::Rook)];
         for rook in rooks.iter() {
             let attacked = self.rook_moves(rook);
             if attacked & king_pos != 0 {
@@ -1155,7 +1156,7 @@ impl Position {
         }
         //calculate squares attacked by bishops
         let bish_moves_from_king = self.bishop_moves(king_pos);
-        let bishops = self.board[(opp, Piece::BISHOP)];
+        let bishops = self.board[(opp, Piece::Bishop)];
         for bishop in bishops.iter() {
             let attacked = self.bishop_moves(bishop);
             if attacked & king_pos != 0 {
@@ -1167,7 +1168,7 @@ impl Position {
                                                             [bishop.index()];
             self.attacked_squares |= attacked;
         }
-        let queens = self.board[(opp, Piece::QUEEN)];
+        let queens = self.board[(opp, Piece::Queen)];
         //calculate squares attacked by queens
         for queen in queens.iter() {
             let attacked_r = self.rook_moves(queen);
@@ -1193,9 +1194,9 @@ impl Position {
     fn get_piece_moves(&self, move_getter: impl Fn(Square) -> Square, moves: &mut MoveList, p: Piece) {
         for pos in self.board[(self.to_move, p)].iter() {
             let mut pmoves = move_getter(pos);
-            pmoves &= pmoves ^ self.board[(self.to_move, Piece::ANY)];
+            pmoves &= pmoves ^ self.board[(self.to_move, Piece::Any)];
             if pos & self.pinned_pieces != 0 {
-                pmoves &= constants::RAYS[pos.index()][self.board[(self.to_move, Piece::KING)].index()];
+                pmoves &= constants::RAYS[pos.index()][self.board[(self.to_move, Piece::King)].index()];
             }
             for m in pmoves.iter() {
                 moves.push(Move{
@@ -1203,9 +1204,9 @@ impl Position {
                     to: SquareIndex::from_square(m),
                     piece: p,
                     typ: if self.board.occupation & m == 0 {
-                        MoveType::MOVE
+                        MoveType::Normal
                     } else {
-                        MoveType::CAPTURE(self.board.piece_at(m).unwrap())
+                        MoveType::Capture(self.board.piece_at(m).unwrap())
                     },
                 });
             }
@@ -1214,9 +1215,9 @@ impl Position {
     #[inline]
     fn handle_en_passant(&mut self, moves: &mut MoveList, check_mask: Square) {
         if let Some(m) = self.move_history.last() {
-            if m.piece == Piece::PAWN {
+            if m.piece == Piece::Pawn {
                 match self.to_move {
-                    Color::WHITE => {
+                    Color::White => {
                         if m.from > 47 && m.to < 40 &&
                             (m.from.go_s().square() & check_mask != 0 || m.to.square() == check_mask) {
                             let mut cands = 0;
@@ -1226,9 +1227,9 @@ impl Position {
                             if !m.from.is_at_east_border() {
                                 cands |= m.to.go_e().square();
                             }
-                            cands &= self.board[(Color::WHITE, Piece::PAWN)];
+                            cands &= self.board[(Color::White, Piece::Pawn)];
                             for cand in cands.iter() {
-                                let kpos = self.board[(self.to_move, Piece::KING)];
+                                let kpos = self.board[(self.to_move, Piece::King)];
                                 let pin_ray = constants::RAYS[cand.index()][kpos.index()];
                                 //Check if we expose the king by taking en passant
                                 //See if our pawn is pinned
@@ -1241,21 +1242,21 @@ impl Position {
                                     self.board.occupation ^= m.to.square() | cand;
                                     let k_ray = pin_ray & self.rook_moves(kpos);
                                     self.board.occupation ^= m.to.square() | cand;
-                                    if k_ray & self.board[(self.to_move.other(), Piece::ROOK)] != 0
-                                    || k_ray & self.board[(self.to_move.other(), Piece::QUEEN)] != 0 {
+                                    if k_ray & self.board[(self.to_move.other(), Piece::Rook)] != 0
+                                    || k_ray & self.board[(self.to_move.other(), Piece::Queen)] != 0 {
                                         continue;
                                     }
                                 }
                                 moves.push(Move {
                                     from: SquareIndex::from_square(cand),
                                     to: m.from.go_s(),
-                                    piece: Piece::PAWN,
-                                    typ: MoveType::ENPASSANT,
+                                    piece: Piece::Pawn,
+                                    typ: MoveType::Enpassant,
                                 });
                             }
                         }
                     },
-                    Color::BLACK => {
+                    Color::Black => {
                         if m.from < 16 && m.to > 23 &&
                             (m.from.go_n().square() & check_mask != 0 || m.to.square() == check_mask) {
                             let mut cands = 0;
@@ -1265,9 +1266,9 @@ impl Position {
                             if !m.from.is_at_east_border() {
                                 cands |= m.to.go_e().square();
                             }
-                            cands &= self.board[(Color::BLACK, Piece::PAWN)];
+                            cands &= self.board[(Color::Black, Piece::Pawn)];
                             for cand in cands.iter() {
-                                let kpos = self.board[(self.to_move, Piece::KING)];
+                                let kpos = self.board[(self.to_move, Piece::King)];
                                 let pin_ray = constants::RAYS[cand.index()][kpos.index()];
                                 //Check if we expose the king by taking en passant
                                 //See if our pawn is pinned
@@ -1280,16 +1281,16 @@ impl Position {
                                     self.board.occupation ^= m.to.square() | cand;
                                     let k_ray = pin_ray & self.rook_moves(kpos);
                                     self.board.occupation ^= m.to.square() | cand;
-                                    if k_ray & self.board[(self.to_move.other(), Piece::ROOK)] != 0 ||
-                                       k_ray & self.board[(self.to_move.other(), Piece::QUEEN)] != 0 {
+                                    if k_ray & self.board[(self.to_move.other(), Piece::Rook)] != 0 ||
+                                       k_ray & self.board[(self.to_move.other(), Piece::Queen)] != 0 {
                                         continue;
                                     }
                                 }
                                 moves.push(Move {
                                     from: SquareIndex::from_square(cand),
                                     to: m.from.go_n(),
-                                    piece: Piece::PAWN,
-                                    typ: MoveType::ENPASSANT,
+                                    piece: Piece::Pawn,
+                                    typ: MoveType::Enpassant,
                                 });
                             }
 
@@ -1303,7 +1304,7 @@ impl Position {
     fn handle_castling(&self, moves: &mut MoveList) {
         if self.king_attackers.count_ones() != 0 {return;}
         match self.to_move {
-            Color::WHITE => {
+            Color::White => {
                 const WHITE_KING_CASTLE_MASK: Square  = 0b01100000;
                 const WHITE_QUEEN_CASTLE_CHECK_MASK: Square = 0b00001100;
                 const WHITE_QUEEN_CASTLE_MATERIAL_MASK: Square = 0b00001110;
@@ -1313,8 +1314,8 @@ impl Position {
                         moves.push(Move {
                             from: 4,
                             to:   6,
-                            piece: Piece::KING,
-                            typ: MoveType::CASTLE,
+                            piece: Piece::King,
+                            typ: MoveType::Castle,
                         });
                 }
                 if self.castling_legal.last().unwrap()[0][1]
@@ -1323,12 +1324,12 @@ impl Position {
                         moves.push(Move {
                             from: 4,
                             to:   2,
-                            piece: Piece::KING,
-                            typ: MoveType::CASTLE,
+                            piece: Piece::King,
+                            typ: MoveType::Castle,
                         });
                 }
             },
-            Color::BLACK => {
+            Color::Black => {
                 const BLACK_KING_CASTLE_MASK: Square  = 0b01100000 << 56;
                 const BLACK_QUEEN_CASTLE_CHECK_MASK: Square = 0b00001100 << 56;
                 const BLACK_QUEEN_CASTLE_MATERIAL_MASK: Square = 0b00001110 << 56;
@@ -1338,8 +1339,8 @@ impl Position {
                         moves.push(Move {
                             from: 60,
                             to:   62,
-                            piece: Piece::KING,
-                            typ: MoveType::CASTLE,
+                            piece: Piece::King,
+                            typ: MoveType::Castle,
                         });
                 }
                 if self.castling_legal.last().unwrap()[1][1]
@@ -1348,8 +1349,8 @@ impl Position {
                         moves.push(Move {
                             from: 60,
                             to:   58,
-                            piece: Piece::KING,
-                            typ: MoveType::CASTLE,
+                            piece: Piece::King,
+                            typ: MoveType::Castle,
                         });
                 }
             },
@@ -1357,67 +1358,67 @@ impl Position {
     }
     #[inline]
     fn get_pawn_moves(&self, moves: &mut MoveList, check_mask: Square) {
-            let pawns = self.board[(self.to_move, Piece::PAWN)];
+            let pawns = self.board[(self.to_move, Piece::Pawn)];
             for pawn in pawns.iter() {
                 let mut pmoves = (self.pawn_moves(pawn, self.to_move) |
                                   (self.pawn_attacks(pawn, self.to_move) &
-                                   self.board[(self.to_move.other(), Piece::ANY)]))
+                                   self.board[(self.to_move.other(), Piece::Any)]))
                                  & check_mask;
                 if self.pinned_pieces & pawn != 0 {
-                    pmoves &= constants::RAYS[self.board[(self.to_move, Piece::KING)].index()][pawn.index()];
+                    pmoves &= constants::RAYS[self.board[(self.to_move, Piece::King)].index()][pawn.index()];
                 }
                 for m in pmoves.iter() {
-                    if (self.to_move == Color::WHITE && m.is_at_north_border()) ||
-                    (self.to_move == Color::BLACK && m.is_at_south_border()) {
+                    if (self.to_move == Color::White && m.is_at_north_border()) ||
+                    (self.to_move == Color::Black && m.is_at_south_border()) {
                         moves.push(Move{
                             from: SquareIndex::from_square(pawn),
                             to: SquareIndex::from_square(m),
-                            piece: Piece::PAWN,
+                            piece: Piece::Pawn,
                             typ: if m & self.board.occupation == 0 {
-                                MoveType::PROMOTION(Piece::KNIGHT)
+                                MoveType::Promotion(Piece::Knight)
                             } else {
-                                MoveType::PROMOTIONCAPTURE((Piece::KNIGHT,self.board.piece_at(m).unwrap()))
+                                MoveType::PromotionCapture((Piece::Knight,self.board.piece_at(m).unwrap()))
                             }
                         });
                         moves.push(Move{
                             from: SquareIndex::from_square(pawn),
                             to: SquareIndex::from_square(m),
-                            piece: Piece::PAWN,
+                            piece: Piece::Pawn,
                             typ: if m & self.board.occupation == 0 {
-                                MoveType::PROMOTION(Piece::BISHOP)
+                                MoveType::Promotion(Piece::Bishop)
                             } else {
-                                MoveType::PROMOTIONCAPTURE((Piece::BISHOP,self.board.piece_at(m).unwrap()))
+                                MoveType::PromotionCapture((Piece::Bishop,self.board.piece_at(m).unwrap()))
                             }
                         });
                         moves.push(Move{
                             from: SquareIndex::from_square(pawn),
                             to: SquareIndex::from_square(m),
-                            piece: Piece::PAWN,
+                            piece: Piece::Pawn,
                             typ: if m & self.board.occupation == 0 {
-                                MoveType::PROMOTION(Piece::ROOK)
+                                MoveType::Promotion(Piece::Rook)
                             } else {
-                                MoveType::PROMOTIONCAPTURE((Piece::ROOK,self.board.piece_at(m).unwrap()))
+                                MoveType::PromotionCapture((Piece::Rook,self.board.piece_at(m).unwrap()))
                             }
                         });
                         moves.push(Move{
                             from: SquareIndex::from_square(pawn),
                             to: SquareIndex::from_square(m),
-                            piece: Piece::PAWN,
+                            piece: Piece::Pawn,
                             typ: if m & self.board.occupation == 0 {
-                                MoveType::PROMOTION(Piece::QUEEN)
+                                MoveType::Promotion(Piece::Queen)
                             } else {
-                                MoveType::PROMOTIONCAPTURE((Piece::QUEEN,self.board.piece_at(m).unwrap()))
+                                MoveType::PromotionCapture((Piece::Queen,self.board.piece_at(m).unwrap()))
                             }
                         });
                     } else {
                         moves.push(Move{
                             from: SquareIndex::from_square(pawn),
                             to: SquareIndex::from_square(m),
-                            piece: Piece::PAWN,
+                            piece: Piece::Pawn,
                             typ: if m & self.board.occupation == 0 {
-                                MoveType::MOVE
+                                MoveType::Normal
                             } else {
-                                MoveType::CAPTURE(self.board.piece_at(m).unwrap())
+                                MoveType::Capture(self.board.piece_at(m).unwrap())
                             }
                         });
                     }
@@ -1444,18 +1445,18 @@ impl Position {
             self.generate_attack_table();
         }
         //Generate King moves first (except castling)
-        let mut king_moves = self.king_moves(self.board[(self.to_move, Piece::KING)]);
-        king_moves &= king_moves ^ self.board[(self.to_move, Piece::ANY)];
+        let mut king_moves = self.king_moves(self.board[(self.to_move, Piece::King)]);
+        king_moves &= king_moves ^ self.board[(self.to_move, Piece::Any)];
         king_moves &= king_moves ^ self.attacked_squares;
         for km in king_moves.iter() {
             moves.push(Move{
-                from: SquareIndex::from_square(self.board[(self.to_move, Piece::KING)]),
+                from: SquareIndex::from_square(self.board[(self.to_move, Piece::King)]),
                 to: SquareIndex::from_square(km),
-                piece: Piece::KING,
+                piece: Piece::King,
                 typ: if self.board.occupation & km == 0 {
-                    MoveType::MOVE
+                    MoveType::Normal
                 } else {
-                    MoveType::CAPTURE(self.board.piece_at(km).unwrap())
+                    MoveType::Capture(self.board.piece_at(km).unwrap())
                 }
             });
         }
@@ -1465,12 +1466,12 @@ impl Position {
         }
         //If we are in check, we may only take the checker, or block it
         //If the checking piece is a knight, we can only take (or move the king)
-        let check_mask = if self.board[(self.to_move.other(), Piece::KNIGHT)]
+        let check_mask = if self.board[(self.to_move.other(), Piece::Knight)]
                             & self.king_attackers != 0 {
             self.king_attackers
         //For any other piece we may also try to block
         } else if self.king_attackers != 0 {
-            constants::CONNECTING_RAYS[self.king_attackers.index()][self.board[(self.to_move, Piece::KING)].index()] ^ self.board[(self.to_move, Piece::KING)]
+            constants::CONNECTING_RAYS[self.king_attackers.index()][self.board[(self.to_move, Piece::King)].index()] ^ self.board[(self.to_move, Piece::King)]
         } else {
             u64::MAX
         };
@@ -1478,19 +1479,19 @@ impl Position {
         self.get_piece_moves(|sq: Square| -> Square
                              {(self.rook_moves(sq) | self.bishop_moves(sq)) & check_mask},
                              &mut moves,
-                             Piece::QUEEN);
+                             Piece::Queen);
         //generate rook moves
         self.get_piece_moves(|sq: Square| -> Square {self.rook_moves(sq) & check_mask},
                              &mut moves,
-                             Piece::ROOK);
+                             Piece::Rook);
         //generate bishop moves
         self.get_piece_moves(|sq: Square| -> Square {self.bishop_moves(sq) & check_mask},
                              &mut moves,
-                             Piece::BISHOP);
+                             Piece::Bishop);
         //generate knight moves
         self.get_piece_moves(|sq: Square| -> Square {self.knight_moves(sq) & check_mask},
                              &mut moves,
-                             Piece::KNIGHT);
+                             Piece::Knight);
         //generate pawn moves without en passant
         self.get_pawn_moves(&mut moves, check_mask);
         //Handle castling and en passant.
@@ -1508,15 +1509,15 @@ impl Position {
         pos
     }
     pub fn do_move(&mut self, m: Move) {
-        if m.to.square() & (self.board[(Color::WHITE,Piece::KING)] | self.board[(Color::BLACK,Piece::KING)]) != 0 {
-            panic!("Invalid move {} in position\n{}\n(previos move {})", m, self.board, self.move_history.last().unwrap_or(&Move {from: 1, to: 2, piece:Piece::KING, typ:MoveType::MOVE}));
+        if m.to.square() & (self.board[(Color::White,Piece::King)] | self.board[(Color::Black,Piece::King)]) != 0 {
+            panic!("Invalid move {} in position\n{}\n(previos move {})", m, self.board, self.move_history.last().unwrap_or(&Move {from: 1, to: 2, piece:Piece::King, typ:MoveType::Normal}));
         }
         //Commit zobrist hash to history stack
         self.history.push(self.zobrist);
         //Unset the Zobrist en passant flag, if necessary
         if !self.move_history.is_empty() {
             let m = self.move_history.last().unwrap();
-            if m.piece == Piece::PAWN && (m.from < 16 || m.from > 47) && (m.to > 23 || m.to < 40) {
+            if m.piece == Piece::Pawn && (m.from < 16 || m.from > 47) && (m.to > 23 || m.to < 40) {
                 self.zobrist ^= constants::ZOBRIST_ENPASSANT_NUMBERS[m.to.index() % 8];
             }
         }
@@ -1524,7 +1525,7 @@ impl Position {
 
         self.zobrist ^= self.board.do_move(m);
         let mut castling_legal = *self.castling_legal.last().unwrap_or_else(|| panic!());
-        if m.piece == Piece::KING {
+        if m.piece == Piece::King {
             if castling_legal[self.to_move as usize][0] {
                 self.zobrist ^= constants::ZOBRIST_CASTLING_NUMBERS[2*self.to_move as usize];
             }
@@ -1553,7 +1554,7 @@ impl Position {
         self.king_attackers = 0;
         self.to_move = self.to_move.other();
         self.zobrist ^= constants::ZOBRIST_BLACK_NUMBER;
-        if m.piece == Piece::PAWN || matches!(m.typ,MoveType::CAPTURE(_)) {
+        if m.piece == Piece::Pawn || matches!(m.typ,MoveType::Capture(_)) {
             self.rule_50_counts.push(0);
         } else {
             self.rule_50_counts.push(*self.rule_50_counts.last().unwrap_or(&0)+1);
@@ -1594,13 +1595,13 @@ impl Position {
         //Set the Zobrist en passant flag, if necessary
         if !self.move_history.is_empty() {
             let m = self.move_history.last().unwrap();
-            if m.piece == Piece::PAWN && (m.from < 16 || m.from > 47) && (m.to > 23 || m.to < 40) {
+            if m.piece == Piece::Pawn && (m.from < 16 || m.from > 47) && (m.to > 23 || m.to < 40) {
                 self.zobrist ^= constants::ZOBRIST_ENPASSANT_NUMBERS[m.to.index() % 8];
             }
         }
     }
     pub fn do_null_move(&mut self) {
-        self.move_history.push(Move {typ: MoveType::NULL, piece: Piece::ANY, to: 0, from: 0});
+        self.move_history.push(Move {typ: MoveType::Null, piece: Piece::Any, to: 0, from: 0});
         self.zobrist ^= constants::ZOBRIST_BLACK_NUMBER;
         self.to_move = self.to_move.other();
         self.attacked_squares = 0;
@@ -1629,7 +1630,7 @@ impl Position {
         self.board.occupation.count_ones() as i32
     }
     fn material_count(&self, c: Color) -> i32 {
-        self.piece_count(c, Piece::PAWN) + 3*(self.piece_count(c, Piece::BISHOP)+self.piece_count(c,Piece::KNIGHT)) + 5*self.piece_count(c, Piece::ROOK)+9*self.piece_count(c, Piece::QUEEN)
+        self.piece_count(c, Piece::Pawn) + 3*(self.piece_count(c, Piece::Bishop)+self.piece_count(c,Piece::Knight)) + 5*self.piece_count(c, Piece::Rook)+9*self.piece_count(c, Piece::Queen)
     }
     pub fn material_balance(&self) -> i32 {
         self.material_count(self.to_move) - self.material_count(self.to_move.other())
@@ -1641,11 +1642,11 @@ impl Position {
     #[allow(dead_code)]
     pub fn piece_attacks(&self, p: Piece, c: Color, from: Square, target: Square) -> bool {
         match p {
-            Piece::PAWN => self.pawn_attacks(from, c) & target != 0,
-            Piece::KNIGHT => self.knight_moves(from) & target != 0,
-            Piece::BISHOP => self.bishop_moves(from) & target != 0,
-            Piece::ROOK => self.rook_moves(from) & target != 0,
-            Piece::QUEEN => (self.rook_moves(from) | self.bishop_moves(from)) != 0,
+            Piece::Pawn => self.pawn_attacks(from, c) & target != 0,
+            Piece::Knight => self.knight_moves(from) & target != 0,
+            Piece::Bishop => self.bishop_moves(from) & target != 0,
+            Piece::Rook => self.rook_moves(from) & target != 0,
+            Piece::Queen => (self.rook_moves(from) | self.bishop_moves(from)) != 0,
             //TODO: King..
             _ => false,
         }
@@ -1660,8 +1661,8 @@ impl Position {
     #[allow(dead_code)]
     pub fn color_factor(&self) -> i32 {
         match self.to_move {
-            Color::WHITE => 1,
-            Color::BLACK => -1,
+            Color::White => 1,
+            Color::Black => -1,
         }
     }
     #[allow(dead_code)]
@@ -1681,7 +1682,7 @@ impl Position {
     //Helper for SEE
     #[inline]
     fn least_valuable_attacker(&self, mut attackers: Square, c: Color) -> Option<(Square, Piece)> {
-        attackers &= self.board[(c, Piece::ANY)];
+        attackers &= self.board[(c, Piece::Any)];
         attackers.iter().map(|a| self.board.piece_at(a).map(|p| (a,p)))
                         .filter(|x| x.is_some())
                         .min_by_key(|x| x.unwrap().1.value()).flatten()
@@ -1690,16 +1691,16 @@ impl Position {
     //We ignore en passant here! Attackers are sorted by value!
     pub fn see(&self, m: Move) -> i32 {
         let target_piece = match m.typ {
-            MoveType::CAPTURE(p) => p,
+            MoveType::Capture(p) => p,
             _ => return 0,
         };
         let target = m.to.square();
         let mut color = self.to_move;
         let mut occupation = self.board.occupation;
         //We initialize pawn and knight attacks, since they do not depend on the occupation.
-        let mut attackers = (self.pawn_attacks(target, Color::WHITE) & self.board[(Color::BLACK, Piece::PAWN)])
-            | (self.pawn_attacks(target, Color::BLACK) & self.board[(Color::WHITE, Piece::PAWN)]);
-        attackers |= self.knight_moves(target) & (self.board[(Color::WHITE, Piece::KNIGHT)] | self.board[(Color::BLACK, Piece::KNIGHT)]);
+        let mut attackers = (self.pawn_attacks(target, Color::White) & self.board[(Color::Black, Piece::Pawn)])
+            | (self.pawn_attacks(target, Color::Black) & self.board[(Color::White, Piece::Pawn)]);
+        attackers |= self.knight_moves(target) & (self.board[(Color::White, Piece::Knight)] | self.board[(Color::Black, Piece::Knight)]);
         attackers |= m.from.square();
         //We guess that most exchanges will feature less than ten pieces, which seems a safe
         //assumption
@@ -1715,12 +1716,12 @@ impl Position {
             attackers ^= from;
             color = color.other();
             attackers |= self.bishop_moves_for_occupation(target, occupation)
-                        & (self.board[(Color::BLACK, Piece::BISHOP)] | self.board[(Color::WHITE, Piece::BISHOP)]
-                          | self.board[(Color::BLACK, Piece::QUEEN)] | self.board[(Color::WHITE, Piece::QUEEN)])
+                        & (self.board[(Color::Black, Piece::Bishop)] | self.board[(Color::White, Piece::Bishop)]
+                          | self.board[(Color::Black, Piece::Queen)] | self.board[(Color::White, Piece::Queen)])
                         & occupation;
             attackers |= self.rook_moves_for_occupation(target, occupation)
-                        & (self.board[(Color::BLACK, Piece::ROOK)] | self.board[(Color::WHITE, Piece::ROOK)]
-                          | self.board[(Color::BLACK, Piece::QUEEN)] | self.board[(Color::WHITE, Piece::QUEEN)])
+                        & (self.board[(Color::Black, Piece::Rook)] | self.board[(Color::White, Piece::Rook)]
+                          | self.board[(Color::Black, Piece::Queen)] | self.board[(Color::White, Piece::Queen)])
                         & occupation; //Do not accidentally include already used pieces again
             let next = match self.least_valuable_attacker(attackers, color) {
                 Some(a) => a,
@@ -1746,18 +1747,18 @@ impl Position {
         *self.rule_50_counts.last().unwrap()
     }
     pub fn gives_check(&self, m: &Move) -> bool {
-        let kpos = self.board[(self.color().other(), Piece::KING)];
+        let kpos = self.board[(self.color().other(), Piece::King)];
         let final_piece = match m.typ {
-            MoveType::PROMOTION(p) | MoveType::PROMOTIONCAPTURE((p,_)) => p,
+            MoveType::Promotion(p) | MoveType::PromotionCapture((p,_)) => p,
             _ => m.piece,
         };
         match final_piece {
-            Piece::KNIGHT => self.knight_moves(kpos) & m.to.square() != 0,
-            Piece::BISHOP => self.bishop_moves(kpos) & m.to.square() != 0,
-            Piece::ROOK => self.rook_moves(kpos) & m.to.square() != 0,
-            Piece::QUEEN => (self.rook_moves(kpos) | self.bishop_moves(kpos)) & m.to.square() != 0,
-            Piece::PAWN => match self.color() {
-                Color::WHITE => {
+            Piece::Knight => self.knight_moves(kpos) & m.to.square() != 0,
+            Piece::Bishop => self.bishop_moves(kpos) & m.to.square() != 0,
+            Piece::Rook => self.rook_moves(kpos) & m.to.square() != 0,
+            Piece::Queen => (self.rook_moves(kpos) | self.bishop_moves(kpos)) & m.to.square() != 0,
+            Piece::Pawn => match self.color() {
+                Color::White => {
                     let mut attacked_sqs = 0;
                     if !m.to.is_at_east_border() {
                         attacked_sqs |= m.to.go_ne().square()
@@ -1767,7 +1768,7 @@ impl Position {
                     }
                     kpos & attacked_sqs != 0
                 }
-                Color::BLACK => {
+                Color::Black => {
                     let mut attacked_sqs = 0;
                     if !m.to.is_at_east_border() {
                         attacked_sqs |= m.to.go_se().square()
@@ -1787,31 +1788,31 @@ impl Position {
 #[test]
 fn simple_sse() {
     let pos = Position::from_fen(String::from("1k1r4/1pp4p/p7/4p3/8/P5P1/1PP4P/2K1R3 w - - 0 0")).unwrap();
-    let mov = Move {from: 4, to: 36, typ: MoveType::CAPTURE(Piece::PAWN), piece: Piece::ROOK};
+    let mov = Move {from: 4, to: 36, typ: MoveType::Capture(Piece::Pawn), piece: Piece::Rook};
     assert!(pos.see(mov) == 100);
     let pos2 = Position::from_fen(String::from("1k1r3q/1ppn3p/p4b2/4p3/8/P2N2P1/1PP1R1BP/2K1Q3 w - - 0 0")).unwrap();
-    let mov2 = Move {from: 19, to: 36, typ: MoveType::CAPTURE(Piece::PAWN), piece: Piece::KNIGHT};
+    let mov2 = Move {from: 19, to: 36, typ: MoveType::Capture(Piece::Pawn), piece: Piece::Knight};
     assert!(pos2.see(mov2) == -200);
 }
 
 #[test]
 fn compress_and_decompress_move() {
-    let pieces = vec![Piece::PAWN, Piece::KING, Piece::QUEEN, Piece::BISHOP, Piece::KNIGHT, Piece::ROOK];
+    let pieces = vec![Piece::Pawn, Piece::King, Piece::Queen, Piece::Bishop, Piece::Knight, Piece::Rook];
     for p in pieces.iter() {
-        let m = Move {from: 0, to: 1, piece: *p, typ: MoveType::MOVE};
+        let m = Move {from: 0, to: 1, piece: *p, typ: MoveType::Normal};
         let m2 = m.compress().decompress();
         assert!(m == m2.unwrap());
     }
     for p in pieces.iter() {
         for q in pieces.iter() {
-            let m = Move {from:54,to:63,piece: Piece::PAWN, typ: MoveType::PROMOTIONCAPTURE((*p,*q))};
+            let m = Move {from:54,to:63,piece: Piece::Pawn, typ: MoveType::PromotionCapture((*p,*q))};
             let m2 = m.compress().decompress();
             assert!(m == m2.unwrap());
         }
     }
     for p in pieces.iter() {
         for q in pieces.iter() {
-            let m = Move {from:54,to:63,piece: *p, typ: MoveType::CAPTURE(*q)};
+            let m = Move {from:54,to:63,piece: *p, typ: MoveType::Capture(*q)};
             let m2 = m.compress().decompress();
             assert!(m == m2.unwrap());
         }

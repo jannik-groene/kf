@@ -37,17 +37,17 @@ impl TranspositionTable {
     #[inline]
     pub fn set(&mut self, zobrist_key: u64, entry: TTEntry) {
         //do not commit invalid scores or low depths to the hashtable
-        if self.size == 0 || matches!(entry.eval.value(), Value::INFTY | Value::NEGINFTY) {
+        if self.size == 0 || matches!(entry.eval.value(), Value::Infty | Value::NegInfty) {
             return;
         }
         let mut hash = self.hash.write().unwrap();
         let hash_entry = hash[zobrist_key as usize % self.size];
         //Mate scores may be seen as having infinite depth
         if (hash_entry.0.depth < entry.depth
-            || (matches!(entry.eval.value(), Value::MATE(_)) && entry.eval > hash_entry.0.eval))
+            || (matches!(entry.eval.value(), Value::Mate(_)) && entry.eval > hash_entry.0.eval))
            && (hash_entry.0.depth + 5 < entry.depth
-               || entry.eval.bound() == Bound::EXACT
-               || hash_entry.0.eval().bound() != Bound::EXACT) {
+               || entry.eval.bound() == Bound::Exact
+               || hash_entry.0.eval().bound() != Bound::Exact) {
             hash.get_mut(zobrist_key as usize % self.size).unwrap().0 = entry;
         } else {
             hash.get_mut(zobrist_key as usize % self.size).unwrap().1 = entry;
@@ -95,17 +95,17 @@ impl TTEntry {
 #[test]
 fn write_and_read_tt() {
     let mut hash = TranspositionTable::new(10000);
-    let entry = TTEntry::new(-Eval::MATE_NOW, 3, 1234628935786765, Move{from: 1, to: 2, piece: crate::chess::Piece::KING, typ: crate::chess::MoveType::MOVE});
-    hash.set(1234628935786765, entry.clone());
+    let entry = TTEntry::new(-Eval::MATE_NOW, 3, 1234628935786765, Move{from: 1, to: 2, piece: crate::chess::Piece::King, typ: crate::chess::MoveType::Normal});
+    hash.set(1234628935786765, entry);
     assert!(hash.get(1234628935786765).unwrap() == entry);
-    let entry2 = TTEntry::new(-Eval::MATE_NOW, 3, 1234628935786798, Move{from: 1, to: 2, piece: crate::chess::Piece::KING, typ: crate::chess::MoveType::MOVE});
-    let entry4 = TTEntry::new(Eval::DRAW, 2, 1234628935786798, Move{from: 4, to: 8, piece: crate::chess::Piece::QUEEN, typ: crate::chess::MoveType::MOVE});
-    hash.set(1234628935786798, entry2.clone());
-    hash.set(1234628935786798, entry4.clone());
+    let entry2 = TTEntry::new(-Eval::MATE_NOW, 3, 1234628935786798, Move{from: 1, to: 2, piece: crate::chess::Piece::King, typ: crate::chess::MoveType::Normal});
+    let entry4 = TTEntry::new(Eval::DRAW, 2, 1234628935786798, Move{from: 4, to: 8, piece: crate::chess::Piece::Queen, typ: crate::chess::MoveType::Normal});
+    hash.set(1234628935786798, entry2);
+    hash.set(1234628935786798, entry4);
     assert!(hash.get(1234628935786798).unwrap() == entry2);
-    let entry3 = TTEntry::new(-Eval::MATE_NOW, 3, 1234628935786700, Move{from: 1, to: 2, piece: crate::chess::Piece::KING, typ: crate::chess::MoveType::MOVE});
+    let entry3 = TTEntry::new(-Eval::MATE_NOW, 3, 1234628935786700, Move{from: 1, to: 2, piece: crate::chess::Piece::King, typ: crate::chess::MoveType::Normal});
     let mut hash_clone = hash.clone();
-    std::thread::spawn(move || hash_clone.set(1234628935786700, entry3.clone()));
+    std::thread::spawn(move || hash_clone.set(1234628935786700, entry3));
     std::thread::sleep(std::time::Duration::from_millis(100));
     assert!(hash.get(1234628935786700).unwrap() == entry3);
 }

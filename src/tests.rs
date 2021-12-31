@@ -33,8 +33,8 @@ fn simple_en_passant() {
     let m = chess::Move{
         from: 35,
         to: 42,
-        piece: chess::Piece::PAWN,
-        typ: chess::MoveType::ENPASSANT,
+        piece: chess::Piece::Pawn,
+        typ: chess::MoveType::Enpassant,
     };
     assert!(pos.get_moves().contains(&m));
     let npos1 = pos.from_move(m);
@@ -49,8 +49,8 @@ fn simple_castle() {
     let m = chess::Move {
         from: 60,
         to: 62,
-        piece: chess::Piece::KING,
-        typ: chess::MoveType::CASTLE,
+        piece: chess::Piece::King,
+        typ: chess::MoveType::Castle,
     };
     assert!(pos.get_moves().contains(&m));
     let npos1 = pos.from_move(m);
@@ -121,8 +121,8 @@ fn simple_pinned_pawn_attack() {
     pos.do_move(chess::Move {
         from: 12,
         to: 28,
-        piece: chess::Piece::PAWN,
-        typ: chess::MoveType::MOVE,
+        piece: chess::Piece::Pawn,
+        typ: chess::MoveType::Normal,
     });
     println!("Found {} moves, expected 16.",pos.get_moves().len());
     for m in pos.get_moves() {
@@ -173,8 +173,8 @@ fn simple_rook_capture() {
     pos = pos.from_move(chess::Move{
         from: 14,
         to: 7,
-        piece: chess::Piece::PAWN,
-        typ: chess::MoveType::PROMOTIONCAPTURE((chess::Piece::KNIGHT, chess::Piece::ROOK)),
+        piece: chess::Piece::Pawn,
+        typ: chess::MoveType::PromotionCapture((chess::Piece::Knight, chess::Piece::Rook)),
     });
     assert!(pos.get_moves().len() == 47);
 }
@@ -182,7 +182,7 @@ fn simple_rook_capture() {
 #[test]
 fn simple_pawn_advance() {
     let mut pos = chess::Position::from_fen(String::from("3rkr2/8/8/8/8/4r3/4P3/4K3 w - - 0 1")).unwrap();
-    assert!(pos.get_moves().len() == 0);
+    assert!(pos.get_moves().is_empty());
     pos = chess::Position::from_fen(String::from("3rkr2/8/8/8/4r3/8/4P3/4K3 w - - 0 1")).unwrap();
     assert!(pos.get_moves().len() == 1);
     pos = chess::Position::from_fen(String::from("3rkr2/8/8/4r3/8/8/4P3/4K3 w - - 0 1")).unwrap();
@@ -235,7 +235,7 @@ fn move_count_test() {
 
 fn do_and_undo_random_moves(pos: &mut chess::Position, count: usize) {
     let moves = pos.get_moves();
-    if moves.len() > 0 && count > 0 {
+    if !moves.is_empty() && count > 0 {
         let m = *pos.get_moves().choose(&mut thread_rng()).unwrap();
         let zobrist = pos.zobrist_hash();
         pos.do_move(m);
@@ -254,8 +254,8 @@ fn undo_moves() {
     let mov1 = chess::Move {
         from: 1,
         to: 16,
-        piece: chess::Piece::KNIGHT,
-        typ: chess::MoveType::MOVE,
+        piece: chess::Piece::Knight,
+        typ: chess::MoveType::Normal,
     };
     let mut pos2 = pos.from_move(mov1);
     pos2.undo_move();
@@ -265,8 +265,8 @@ fn undo_moves() {
     let mov2 = chess::Move {
         from: 21,
         to: 45,
-        piece: chess::Piece::QUEEN,
-        typ: chess::MoveType::CAPTURE(chess::Piece::KNIGHT),
+        piece: chess::Piece::Queen,
+        typ: chess::MoveType::Capture(chess::Piece::Knight),
     };
     pos2 = pos.from_move(mov2);
     pos2.undo_move();
@@ -276,8 +276,8 @@ fn undo_moves() {
     let mov3 = chess::Move{
         from: 35,
         to: 42,
-        piece: chess::Piece::PAWN,
-        typ: chess::MoveType::ENPASSANT,
+        piece: chess::Piece::Pawn,
+        typ: chess::MoveType::Enpassant,
     };
     pos2 = pos.from_move(mov3);
     pos2.undo_move();
@@ -287,8 +287,8 @@ fn undo_moves() {
     let mov4 = chess::Move {
         from: 60,
         to: 62,
-        piece: chess::Piece::KING,
-        typ: chess::MoveType::CASTLE,
+        piece: chess::Piece::King,
+        typ: chess::MoveType::Castle,
     };
     pos2 = pos.from_move(mov4);
     pos2.undo_move();

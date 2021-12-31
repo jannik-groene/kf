@@ -39,36 +39,36 @@ impl MoveFeatures<HalfKAv2Feature> for Move {
 
         //select updated features
         match self.typ {
-            MoveType::CAPTURE(p) => {
+            MoveType::Capture(p) => {
                 (vec![HalfKAv2Feature::new(ksq, self.piece, t, our_piece)],
                  vec![HalfKAv2Feature::new(ksq, self.piece, f, our_piece),
                       HalfKAv2Feature::new(ksq, p, t, !our_piece)])
             },
-            MoveType::PROMOTION(p) => {
+            MoveType::Promotion(p) => {
                 (vec![HalfKAv2Feature::new(ksq, p, t, our_piece)],
                  vec![HalfKAv2Feature::new(ksq, self.piece, f, our_piece)])
             },
-            MoveType::PROMOTIONCAPTURE((p_prom,p_cap)) => {
+            MoveType::PromotionCapture((p_prom,p_cap)) => {
                     (vec![HalfKAv2Feature::new(ksq, p_prom, t, our_piece)],
                      vec![HalfKAv2Feature::new(ksq, self.piece, f, our_piece),
                           HalfKAv2Feature::new(ksq, p_cap, t, !our_piece)])
             },
-            MoveType::ENPASSANT => {
+            MoveType::Enpassant => {
                 let cap_square = if our_piece {t - 8} else {t + 8};
                 (vec![HalfKAv2Feature::new(ksq, self.piece, t, our_piece)],
                  vec![HalfKAv2Feature::new(ksq, self.piece, f, our_piece),
-                      HalfKAv2Feature::new(ksq, Piece::PAWN, cap_square, !our_piece)])
+                      HalfKAv2Feature::new(ksq, Piece::Pawn, cap_square, !our_piece)])
             },
-            MoveType::CASTLE => {
+            MoveType::Castle => {
                 let (rf,rt) = if t == 58 {
                     (56,59)
                 } else {
                     (63,61)
                 };
-                (vec![HalfKAv2Feature::new(ksq, Piece::KING, t, false),
-                      HalfKAv2Feature::new(ksq, Piece::ROOK, rt, false)],
-                 vec![HalfKAv2Feature::new(ksq, Piece::KING, f, false),
-                      HalfKAv2Feature::new(ksq, Piece::ROOK, rf, false)])
+                (vec![HalfKAv2Feature::new(ksq, Piece::King, t, false),
+                      HalfKAv2Feature::new(ksq, Piece::Rook, rt, false)],
+                 vec![HalfKAv2Feature::new(ksq, Piece::King, f, false),
+                      HalfKAv2Feature::new(ksq, Piece::Rook, rf, false)])
             }
             _ => {
                 (vec![HalfKAv2Feature::new(ksq, self.piece, t, our_piece)],
@@ -83,9 +83,9 @@ impl EnumerateFeatures<HalfKAv2Feature> for Position {
     fn features(&self, p: Perspective) -> ArrayVec<HalfKAv2Feature, 32> {
         let mut features = ArrayVec::new();
         let flip = if p == Perspective::WHITE {0} else {56};
-        let ksq = SquareIndex::from_square(self.board[(p.into(), Piece::KING)]);
+        let ksq = SquareIndex::from_square(self.board[(p.into(), Piece::King)]);
         let c: Color = p.into();
-        let pieces = [Piece::PAWN, Piece::KNIGHT, Piece::BISHOP, Piece::ROOK, Piece::QUEEN, Piece::KING];
+        let pieces = [Piece::Pawn, Piece::Knight, Piece::Bishop, Piece::Rook, Piece::Queen, Piece::King];
         //generate piece indices in order, for faster computations
         for p in pieces {
             for sq in self.board[(c,p)].iter() {
@@ -99,20 +99,20 @@ impl EnumerateFeatures<HalfKAv2Feature> for Position {
     }
 }
 
-impl Into<Color> for Perspective {
-    fn into(self) -> Color {
-        match self {
-            Perspective::WHITE => Color::WHITE,
-            Perspective::BLACK => Color::BLACK,
+impl From<Perspective> for Color {
+    fn from(p: Perspective) -> Color {
+        match p {
+            Perspective::WHITE => Color::White,
+            Perspective::BLACK => Color::Black,
         }
     }
 }
 
-impl Into<Perspective> for Color {
-    fn into(self) -> Perspective {
-        match self {
-            Color::WHITE => Perspective::WHITE,
-            Color::BLACK => Perspective::BLACK,
+impl From<Color> for Perspective {
+    fn from(c: Color) -> Perspective {
+        match c {
+            Color::White => Perspective::WHITE,
+            Color::Black => Perspective::BLACK,
         }
     }
 }
