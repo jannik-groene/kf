@@ -11,7 +11,7 @@ fn read_start_fen() {
 #[test]
 fn no_moves_in_checkmate() {
     let pos = chess::Position::from_fen(String::from("2Q4k/4Q3/4p3/4P3/5P2/4BK2/8/8 b - - 0 106"));
-    assert!(pos.unwrap().get_moves().len() == 0);
+    assert!(pos.unwrap().get_moves().is_empty());
 }
 
 #[test]
@@ -31,8 +31,8 @@ fn print_board() {
 fn simple_en_passant() {
     let mut pos = chess::Position::from_fen(String::from("rnbqkbnr/pp3ppp/8/2pPp3/5P2/8/PPPP2PP/RNBQKBNR w KQkq c6 0 4")).unwrap();
     let m = chess::Move{
-        from: 35,
-        to: 42,
+        from: 35u8.into(),
+        to: 42u8.into(),
         piece: chess::Piece::Pawn,
         typ: chess::MoveType::Enpassant,
     };
@@ -47,8 +47,8 @@ fn simple_en_passant() {
 fn simple_castle() {
     let mut pos = chess::Position::from_fen(String::from("rn1qk2r/1p2bppp/p2pbn2/4p3/4P3/1NN1BP2/PPPQ2PP/R3KB1R b KQkq - 2 9")).unwrap();
     let m = chess::Move {
-        from: 60,
-        to: 62,
+        from: 60u8.into(),
+        to: 62u8.into(),
         piece: chess::Piece::King,
         typ: chess::MoveType::Castle,
     };
@@ -96,7 +96,7 @@ fn simple_pinned_no_en_passant() {
         println!("Move {} from {} to {}", m.piece as u8, m.from, m.to);
     }
     println!("{}", pos.get_board());
-    assert!(pos.get_moves().len() == 0);
+    assert!(pos.get_moves().is_empty());
 }
 
 #[test]
@@ -112,15 +112,15 @@ fn simple_remove_attacker() {
 #[test]
 fn move_count_test_2() {
     let mut pos = chess::Position::from_fen(String::from("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 0")).unwrap();
-    assert!(pos.get_moves().len()==48);
+    assert_eq!(pos.get_moves().len(), 48);
 }
 
 #[test]
 fn simple_pinned_pawn_attack() {
     let mut pos = chess::Position::from_fen(String::from("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 2")).unwrap();
     pos.do_move(chess::Move {
-        from: 12,
-        to: 28,
+        from: 12u8.into(),
+        to: 28u8.into(),
         piece: chess::Piece::Pawn,
         typ: chess::MoveType::Normal,
     });
@@ -162,7 +162,7 @@ fn simple_en_passant_remove_attacker() {
     let mut pos = chess::Position::from_fen(String::from("4k3/8/8/3pP3/4K3/8/8/8 w - d6 0 1")).unwrap();
     println!("Found {} moves, expected 8.",pos.get_moves().len());
     for m in pos.get_moves() {
-        println!("Move {} from {} to {}", m.piece as u8, m.from, m.to);
+        println!("Move {:?} from {} to {}", m.piece, m.from, m.to);
     }
     assert!(pos.get_moves().len() == 8);
 }
@@ -171,8 +171,8 @@ fn simple_en_passant_remove_attacker() {
 fn simple_rook_capture() {
     let mut pos = chess::Position::from_fen(String::from("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N1Q3/PPPBBPpP/R3K2R b KQkq - 1 2")).unwrap();
     pos = pos.from_move(chess::Move{
-        from: 14,
-        to: 7,
+        from: 14u8.into(),
+        to: 7u8.into(),
         piece: chess::Piece::Pawn,
         typ: chess::MoveType::PromotionCapture((chess::Piece::Knight, chess::Piece::Rook)),
     });
@@ -229,7 +229,7 @@ fn move_count_test() {
     //Choose a test depth between 1 and 6, depth 6 takes about 40 minutes
     let depth: usize = 4;
     for (pos,res) in positions.iter_mut().zip(results.iter()) {
-        assert!(do_perft(pos, depth) == res[depth]);
+        assert_eq!(do_perft(pos, depth),res[depth]);
     }
 }
 
@@ -252,8 +252,8 @@ fn undo_moves() {
     //Undo normal move
     let mut pos = chess::Position::new();
     let mov1 = chess::Move {
-        from: 1,
-        to: 16,
+        from: 1u8.into(),
+        to: 16u8.into(),
         piece: chess::Piece::Knight,
         typ: chess::MoveType::Normal,
     };
@@ -263,8 +263,8 @@ fn undo_moves() {
     //Undo capture move
     pos = chess::Position::from_fen(String::from("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1")).unwrap();
     let mov2 = chess::Move {
-        from: 21,
-        to: 45,
+        from: 21u8.into(),
+        to: 45u8.into(),
         piece: chess::Piece::Queen,
         typ: chess::MoveType::Capture(chess::Piece::Knight),
     };
@@ -274,8 +274,8 @@ fn undo_moves() {
     //Undo enpassant
     pos = chess::Position::from_fen(String::from("rnbqkbnr/pp3ppp/8/2pPp3/5P2/8/PPPP2PP/RNBQKBNR w KQkq c6 0 4")).unwrap();
     let mov3 = chess::Move{
-        from: 35,
-        to: 42,
+        from: 35u8.into(),
+        to: 42u8.into(),
         piece: chess::Piece::Pawn,
         typ: chess::MoveType::Enpassant,
     };
@@ -285,8 +285,8 @@ fn undo_moves() {
     //Undo castling
     pos = chess::Position::from_fen(String::from("rn1qk2r/1p2bppp/p2pbn2/4p3/4P3/1NN1BP2/PPPQ2PP/R3KB1R b KQkq - 2 9")).unwrap();
     let mov4 = chess::Move {
-        from: 60,
-        to: 62,
+        from: 60u8.into(),
+        to: 62u8.into(),
         piece: chess::Piece::King,
         typ: chess::MoveType::Castle,
     };

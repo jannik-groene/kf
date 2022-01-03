@@ -1,17 +1,17 @@
 use arrayvec::ArrayVec;
 use nnue::features::{Feature, EnumerateFeatures, MoveFeatures, Perspective};
-use crate::chess::{Move, MoveType, Position, SquareMethods, SquareIndex, SquareIndexMethods, Piece, Color};
+use crate::chess::{Move, MoveType, Position, Piece, Color, Square, ep_cap_square};
 
 
 pub struct HalfKAv2Feature {
-    pub kpos: SquareIndex,
+    pub kpos: Square,
     pub piece: Piece,
     pub same_color: bool,
-    pub square: SquareIndex,
+    pub square: Square,
 }
 
 impl HalfKAv2Feature {
-    pub fn new(kpos: SquareIndex, piece: Piece, square: SquareIndex, same_color: bool) -> HalfKAv2Feature {
+    pub fn new(kpos: Square, piece: Piece, square: Square, same_color: bool) -> HalfKAv2Feature {
         HalfKAv2Feature {kpos, piece, same_color, square}
     }
 }
@@ -23,19 +23,18 @@ impl Feature for HalfKAv2Feature {
         if idx == 11 {
             idx -= 1;
         }
-        self.kpos.index() * 64 * 11 + idx * 64 + self.square.index()
+        self.kpos as usize * 64 * 11 + idx * 64 + self.square as usize
     }
 }
 
 
 impl MoveFeatures<HalfKAv2Feature> for Move {
     #[inline]
-    fn changed_features(&self, perspective: Perspective, mut ksq: SquareIndex, our_piece: bool)
+    fn changed_features(&self, perspective: Perspective, ksq: u8, our_piece: bool)
                                                         -> (Vec<HalfKAv2Feature>, Vec<HalfKAv2Feature>) {
-        let flip = if perspective == Perspective::WHITE {0} else {56};
-        let f = self.from ^ flip;
-        let t = self.to ^ flip;
-        ksq ^= flip;
+        let f = self.from.relative(perspective.into());
+        let t = self.to.relative(perspective.into());
+        let ksq = Square::from(ksq).relative(perspective.into());
 
         //select updated features
         match self.typ {
@@ -54,16 +53,20 @@ impl MoveFeatures<HalfKAv2Feature> for Move {
                           HalfKAv2Feature::new(ksq, p_cap, t, !our_piece)])
             },
             MoveType::Enpassant => {
-                let cap_square = if our_piece {t - 8} else {t + 8};
+                let cap_square = if our_piece {
+                                     ep_cap_square(t.file())
+                                 } else {
+                                     ep_cap_square(t.file()).flipped()
+                                 };
                 (vec![HalfKAv2Feature::new(ksq, self.piece, t, our_piece)],
                  vec![HalfKAv2Feature::new(ksq, self.piece, f, our_piece),
                       HalfKAv2Feature::new(ksq, Piece::Pawn, cap_square, !our_piece)])
             },
             MoveType::Castle => {
-                let (rf,rt) = if t == 58 {
-                    (56,59)
+                let (rf,rt) = if t == Square::C8 {
+                    (Square::A8, Square::D8)
                 } else {
-                    (63,61)
+                    (Square::H8, Square::F8)
                 };
                 (vec![HalfKAv2Feature::new(ksq, Piece::King, t, false),
                       HalfKAv2Feature::new(ksq, Piece::Rook, rt, false)],
@@ -82,17 +85,16 @@ impl EnumerateFeatures<HalfKAv2Feature> for Position {
     #[inline]
     fn features(&self, p: Perspective) -> ArrayVec<HalfKAv2Feature, 32> {
         let mut features = ArrayVec::new();
-        let flip = if p == Perspective::WHITE {0} else {56};
-        let ksq = SquareIndex::from_square(self.board[(p.into(), Piece::King)]);
+        let ksq = self.board[(p.into(), Piece::King)].least_square();
         let c: Color = p.into();
         let pieces = [Piece::Pawn, Piece::Knight, Piece::Bishop, Piece::Rook, Piece::Queen, Piece::King];
         //generate piece indices in order, for faster computations
-        for p in pieces {
-            for sq in self.board[(c,p)].iter() {
-                features.push(HalfKAv2Feature::new(ksq ^ flip, p, SquareIndex::from_square(sq) ^ flip, true));
+        for piece in pieces {
+            for sq in self.board[(c,piece)] {
+                features.push(HalfKAv2Feature::new(ksq.relative(p.into()), piece, sq.relative(p.into()), true));
             }
-            for sq in self.board[(c.other(),p)].iter() {
-                features.push(HalfKAv2Feature::new(ksq ^ flip, p, SquareIndex::from_square(sq) ^ flip, false));
+            for sq in self.board[(c.other(),piece)] {
+                features.push(HalfKAv2Feature::new(ksq.relative(p.into()), piece, sq.relative(p.into()), false));
             }
         }
         features

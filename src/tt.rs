@@ -94,16 +94,17 @@ impl TTEntry {
 
 #[test]
 fn write_and_read_tt() {
+    use crate::chess::Square;
     let mut hash = TranspositionTable::new(10000);
-    let entry = TTEntry::new(-Eval::MATE_NOW, 3, 1234628935786765, Move{from: 1, to: 2, piece: crate::chess::Piece::King, typ: crate::chess::MoveType::Normal});
+    let entry = TTEntry::new(-Eval::MATE_NOW, 3, 1234628935786765, Move{from: Square::B1, to: Square::C1, piece: crate::chess::Piece::King, typ: crate::chess::MoveType::Normal});
     hash.set(1234628935786765, entry);
     assert!(hash.get(1234628935786765).unwrap() == entry);
-    let entry2 = TTEntry::new(-Eval::MATE_NOW, 3, 1234628935786798, Move{from: 1, to: 2, piece: crate::chess::Piece::King, typ: crate::chess::MoveType::Normal});
-    let entry4 = TTEntry::new(Eval::DRAW, 2, 1234628935786798, Move{from: 4, to: 8, piece: crate::chess::Piece::Queen, typ: crate::chess::MoveType::Normal});
+    let entry2 = TTEntry::new(-Eval::MATE_NOW, 3, 1234628935786798, Move{from: Square::B1, to: Square::C1, piece: crate::chess::Piece::King, typ: crate::chess::MoveType::Normal});
+    let entry4 = TTEntry::new(Eval::DRAW, 2, 1234628935786798, Move{from: Square::E1, to: Square::A2, piece: crate::chess::Piece::Queen, typ: crate::chess::MoveType::Normal});
     hash.set(1234628935786798, entry2);
     hash.set(1234628935786798, entry4);
     assert!(hash.get(1234628935786798).unwrap() == entry2);
-    let entry3 = TTEntry::new(-Eval::MATE_NOW, 3, 1234628935786700, Move{from: 1, to: 2, piece: crate::chess::Piece::King, typ: crate::chess::MoveType::Normal});
+    let entry3 = TTEntry::new(-Eval::MATE_NOW, 3, 1234628935786700, Move{from: Square::B1, to: Square::C1, piece: crate::chess::Piece::King, typ: crate::chess::MoveType::Normal});
     let mut hash_clone = hash.clone();
     std::thread::spawn(move || hash_clone.set(1234628935786700, entry3));
     std::thread::sleep(std::time::Duration::from_millis(100));

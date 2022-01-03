@@ -6,5 +6,6 @@ mod piecetables;
 mod search;
 mod tt;
 mod thread;
-pub mod nnue;
+mod nnue;
 pub mod engine;
+pub mod bitboard;

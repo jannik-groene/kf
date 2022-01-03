@@ -1,6 +1,26 @@
 from functools import reduce
 import random
 
+def pawn_white_attacks(n):
+    if n >> 8 == 0 or n << 8 >= 2**64:
+        return 0
+    attacks = 0
+    if n & 0x8080808080808080 == 0:
+        attacks |= n << 9
+    if n & 0x0101010101010101 == 0:
+        attacks |= n << 7
+    return attacks
+
+def pawn_black_attacks(n):
+    if n >> 8 == 0 or n << 8 >= 2**64:
+        return 0
+    attacks = 0
+    if n & 0x0101010101010101 == 0:
+        attacks |= n >> 9
+    if n & 0x8080808080808080 == 0:
+        attacks |= n >> 7
+    return attacks
+
 def calculate_neighbours(n):
     neighbours = 0
     if n < 1<<56:
@@ -265,6 +285,17 @@ for i in range(64):
     moves = calculate_rook_moves(1 << i)
     print("    0x{0:016x},".format(moves))
 print("];")
+
+print("pub static PAWN_ATTACKS: [[u64; 64]; 2] = [[")
+for i in range(64):
+    attacks = pawn_white_attacks(1 << i)
+    print("    0x{0:016x},".format(attacks))
+print("],")
+print("[")
+for i in range(64):
+    attacks = pawn_black_attacks(1 << i)
+    print("    0x{0:016x},".format(attacks))
+print("]];")
 
 print("pub static NEIGHBOURS: [u64;64] = [")
 for i in range(64):

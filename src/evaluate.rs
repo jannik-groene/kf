@@ -1,38 +1,38 @@
 use crate::{
-    chess::{Position, Move, MoveType, MoveList, Board, Piece, Color, SquareMethods, SquareIndexMethods},
+    chess::{Position, Move, MoveType, MoveList, Board, Piece, Color, Square, BitBoard, File},
     eval::{Eval, Bound, Value},
     piecetables,
 };
 
 #[allow(dead_code)]
 pub fn has_pawns(pos: &Position) -> bool {
-    pos.board[(Color::White, Piece::Pawn)]
-        | pos.board[(Color::Black, Piece::Pawn)] != 0
+    !(pos.board[(Color::White, Piece::Pawn)]
+        | pos.board[(Color::Black, Piece::Pawn)]).is_empty()
 }
 
 pub fn has_minor_pieces(pos: &Position) -> bool {
-    pos.board[(Color::White, Piece::Bishop)]
+    !(pos.board[(Color::White, Piece::Bishop)]
         | pos.board[(Color::Black, Piece::Bishop)]
         | pos.board[(Color::White, Piece::Knight)]
-        | pos.board[(Color::Black, Piece::Knight)] != 0
+        | pos.board[(Color::Black, Piece::Knight)]).is_empty()
 }
 
 pub fn has_major_pieces(pos: &Position) -> bool {
-    pos.board[(Color::White, Piece::Rook)]
+    !(pos.board[(Color::White, Piece::Rook)]
         | pos.board[(Color::Black, Piece::Rook)]
         | pos.board[(Color::White, Piece::Queen)]
-        | pos.board[(Color::Black, Piece::Queen)] != 0
+        | pos.board[(Color::Black, Piece::Queen)]).is_empty()
 }
 
 pub fn is_material_draw(pos: &Position) -> bool {
-    pos.board.occupation.count_ones() == 2
-        || (pos.board.occupation.count_ones() == 3 && has_minor_pieces(pos))
+    pos.board.occupation.count() == 2
+        || (pos.board.occupation.count() == 3 && has_minor_pieces(pos))
 }
 
-fn piece_table_value(p: Piece, c: Color, s: impl SquareMethods, phase: i32) -> i32 {
-    let index = match c {
-        Color::White => s.index(),
-        Color::Black => s.index() ^ 56,
+fn piece_table_value(p: Piece, c: Color, s: Square, phase: i32) -> i32 {
+    let index: usize = match c {
+        Color::White => s.into(),
+        Color::Black => s.flipped().into(),
     };
     match p {
         Piece::Pawn => piecetables::PAWN_VALUES[index],
@@ -45,26 +45,15 @@ fn piece_table_value(p: Piece, c: Color, s: impl SquareMethods, phase: i32) -> i
     }
 }
 
-fn pawn_attacks(pos: &Position) -> (u64,u64) {
-    let mut pawn_attacks_white = 0;
-    let mut pawn_attacks_black = 0;
+fn pawn_attacks(pos: &Position) -> (BitBoard,BitBoard) {
+    let mut pawn_attacks_white = BitBoard::EMPTY;
+    let mut pawn_attacks_black = BitBoard::EMPTY;
 
-    for pawn in pos.board[(Color::White, Piece::Pawn)].iter() {
-        if !pawn.is_at_west_border() {
-            pawn_attacks_white |= pawn.go_nw();
-        }
-        if !pawn.is_at_east_border() {
-            pawn_attacks_white |= pawn.go_ne()
-        }
+    for pawn in pos.board[(Color::White, Piece::Pawn)] {
+        pawn_attacks_white |= pos.pawn_attacks(pawn, Color::White);
     }
-
-    for pawn in pos.board[(Color::Black, Piece::Pawn)].iter() {
-        if !pawn.is_at_west_border() {
-            pawn_attacks_black |= pawn.go_sw();
-        }
-        if !pawn.is_at_east_border() {
-            pawn_attacks_black |= pawn.go_se()
-        }
+    for pawn in pos.board[(Color::Black, Piece::Pawn)] {
+        pawn_attacks_black |= pos.pawn_attacks(pawn, Color::Black);
     }
 
     match pos.color() {
@@ -83,22 +72,20 @@ fn evaluate_pawns(pos: &mut Position, phase: i32) -> i32 {
 
     let (guarded_us, guarded_them) = pawn_attacks(pos);
 
-    for pawn in pawns_us.iter() {
+    for pawn in pawns_us {
 
-        let file = Board::file(Board::get_file(pawn));
-        let in_front = file & Board::forward(pawn, pos.color());
-        let advance = match pos.color() {
-            Color::White => pawn.go_n(),
-            Color::Black => pawn.go_s(),
-        };
+        let file = BitBoard::from_file(pawn.file());
+        let in_front = file & BitBoard::forward_of(pawn, pos.color());
+        let mut advance: BitBoard = pawn.into();
+        advance = advance.shifted_forward(pos.color());
         let behind = file ^ in_front;
 
-        let neighbours = if pawn.is_at_east_border() {
-            pawns_us & file.go_w()
-        } else if pawn.is_at_west_border() {
-            pawns_us & file.go_e()
+        let neighbours = if pawn.file() == File::H {
+            pawns_us & file.shifted_by(-1)
+        } else if pawn.file() == File::A {
+            pawns_us & file.shifted_by(1)
         } else {
-            pawns_us & (file.go_e() | file.go_w())
+            pawns_us & (file.shifted_by(1) | file.shifted_by(-1))
         };
 
         //0. Add the base value of the pawn
@@ -106,44 +93,45 @@ fn evaluate_pawns(pos: &mut Position, phase: i32) -> i32 {
 
         //1. Check if the pawn is doubled (or worse).
         let pawns_us_on_file = file & pawns_us;
-        res_early -= (pawns_us_on_file.count_ones() as i32 - 1) * 10;
-        res_late  -= (pawns_us_on_file.count_ones() as i32 - 1) * 20;
+        res_early -= (pawns_us_on_file.count() as i32 - 1) * 10;
+        res_late  -= (pawns_us_on_file.count() as i32 - 1) * 20;
 
         //2. Check if the pawn is isolated
-        if neighbours == 0 {
-            if pawn.is_at_east_border() || pawn.is_at_west_border() {
+        if neighbours.is_empty() {
+            if pawn.file() == File::A || pawn.file() == File::H {
                 res -= 15;
             } else {
                 res -= 25;
             }
         }
         //3. Check for backward pawn
-        if in_front & guarded_them != 0 && (behind | advance) & guarded_us == 0 {
+        if !(in_front & guarded_them).is_empty() && ((behind | advance) & guarded_us).is_empty() {
             res -= 20;
         }
 
         //4. Check if we have a passer
-        if in_front & (pawns_them | guarded_them | pawns_us) == 0 {
+        if (in_front & (pawns_them | guarded_them | pawns_us)).is_empty() {
             res_early += match pos.color() {
-                Color::White => 50 / (7 - pawn.index() as i32 / 8),
-                Color::Black => 50 / (pawn.index() as i32 / 8)
+                Color::White => 50 / (7 - pawn.rank() as i32),
+                Color::Black => 50 / pawn.rank() as i32
             };
             res_late += match pos.color() {
-                Color::White => 150 / (7 - pawn.index() as i32 / 8),
-                Color::Black => 150 / (pawn.index() as i32 / 8)
+                Color::White => 150 / (7 - pawn.rank() as i32),
+                Color::Black => 150 / pawn.rank() as i32
             };
         }
 
         //5. Check for candidate passers
-        let supporters = (if !pawn.is_at_west_border() { behind.go_w() } else {0}
-                            | if !pawn.is_at_east_border() { behind.go_e() } else {0})
+        let supporters = (if pawn.file() != File::A { behind.shifted_by(-1) } else {BitBoard::EMPTY}
+                            | if pawn.file() != File::H { behind.shifted_by(1) } else {BitBoard::EMPTY})
                          & pawns_us;
 
-        let sentries   = (if !pawn.is_at_west_border() { in_front.go_w() } else {0}
-                            | if !pawn.is_at_east_border() { in_front.go_e() } else {0})
+        let sentries   = (if pawn.file() != File::A { in_front.shifted_by(-1) } else {BitBoard::EMPTY}
+                            | if pawn.file() != File::H { in_front.shifted_by(1) } else {BitBoard::EMPTY})
                          & pawns_them;
 
-        if in_front & (pawns_them | pawns_us) == 0 && supporters.count_ones() > sentries.count_ones() {
+        if (in_front & (pawns_them | pawns_us)).is_empty()
+                && supporters.count() > sentries.count() {
             res_early += 15; res_late += 25;
         }
 
@@ -154,7 +142,7 @@ fn evaluate_pawns(pos: &mut Position, phase: i32) -> i32 {
 }
 
 fn evaluate_king_position(pos: &mut Position, phase: i32) -> i32 {
-    let king_pos = pos.get_board()[(pos.color(), Piece::King)];
+    let king_pos = pos.get_board()[(pos.color(), Piece::King)].least_square();
     //In the late game stages we want an active king. Maybe want to keep it somewhat central?
     piece_table_value(Piece::King, pos.color(), king_pos, phase)
 }
@@ -162,7 +150,7 @@ fn evaluate_king_position(pos: &mut Position, phase: i32) -> i32 {
 fn evaluate_queens(pos: &mut Position, phase: i32) -> i32 {
     let mut res: i32 = 0;
     //Do not run away with our Queen too fast
-    for queen in pos.board[(pos.color(), Piece::Queen)].iter() {
+    for queen in pos.board[(pos.color(), Piece::Queen)] {
         res += piece_table_value(Piece::Queen, pos.color(), queen, phase);
     }
     res
@@ -170,19 +158,19 @@ fn evaluate_queens(pos: &mut Position, phase: i32) -> i32 {
 
 fn evaluate_rooks(pos: &mut Position, phase: i32) -> i32 {
     let mut res: i32 = 0;
-    for rook in pos.board[(pos.color(), Piece::Rook)].iter() {
+    for rook in pos.board[(pos.color(), Piece::Rook)] {
         res += piece_table_value(Piece::Rook, pos.color(), rook, phase);
-        let file = Board::get_file(rook);
+        let file = BitBoard::from_file(rook.file());
         //Rooks are good on semi-open and open files
-        if Board::file(file) & pos.board[(pos.color(), Piece::Pawn)] == 0 {
+        if (file & pos.board[(pos.color(), Piece::Pawn)]).is_empty() {
             res += 10;
-            if Board::file(file) & pos.board[(pos.color().other(), Piece::Pawn)] == 0 {
+            if (file & pos.board[(pos.color().other(), Piece::Pawn)]).is_empty() {
                 res += 30;
             }
         }
         //Doubled Rooks may be good
         //We give half the bonus and double count
-        if (Board::file(file) & pos.board[(pos.color(), Piece::Rook)]).count_ones() > 1 {
+        if (file & pos.board[(pos.color(), Piece::Rook)]).count() > 1 {
             res += 5;
         }
     }
@@ -193,36 +181,36 @@ fn evaluate_bishops(pos: &mut Position, phase: i32) -> i32 {
     let mut res: i32 = 0;
 
     let bishops = pos.board[(pos.color(), Piece::Bishop)];
-    let pawns_us = pos.board[(pos.color(),Piece::Pawn)];
+    let pawns_us = pos.board[(pos.color(), Piece::Pawn)];
 
-    for bishop in bishops.iter() {
+    for bishop in bishops {
             res += piece_table_value(Piece::Bishop, pos.color(), bishop, phase);
 
             //reduce the value of the bishop, if it is blocked in by pawns
-            let mut blocked_score = if bishop & Board::WHITE_SQUARES != 0 {
-                (pawns_us & Board::WHITE_SQUARES).count_ones().saturating_sub(3) * 10
+            let mut blocked_score = if Board::WHITE_SQUARES.is_set(bishop) {
+                (pawns_us & Board::WHITE_SQUARES).count().saturating_sub(3) * 10
             } else {
-                (pawns_us & Board::BLACK_SQUARES).count_ones().saturating_sub(3) * 10
+                (pawns_us & Board::BLACK_SQUARES).count().saturating_sub(3) * 10
             } as i32;
             //if the bishop is in front of the pawns, the penalty is smaller
-            if Board::forward(bishop, pos.color()) & pawns_us < 2 {
+            if (BitBoard::forward_of(bishop, pos.color()) & pawns_us).count() < 2 {
                 blocked_score /= 2;
             }
             res -= blocked_score;
     }
 
     //check for color weaknesses
-    if bishops & Board::WHITE_SQUARES == 0 {
-        res -= 4_i32.saturating_sub((pawns_us & Board::WHITE_SQUARES).count_ones() as i32)
+    if (bishops & Board::WHITE_SQUARES).is_empty() {
+        res -= 4_i32.saturating_sub((pawns_us & Board::WHITE_SQUARES).count() as i32)
                 * 10 * phase / OPENING_PHASE;
     }
-    if bishops & Board::BLACK_SQUARES == 0 {
-        res -= 4_i32.saturating_sub((pawns_us & Board::BLACK_SQUARES).count_ones() as i32)
+    if (bishops & Board::BLACK_SQUARES).is_empty() {
+        res -= 4_i32.saturating_sub((pawns_us & Board::BLACK_SQUARES).count() as i32)
                 * 10 * phase / OPENING_PHASE;
     }
 
     //give a bonus for the bishop pair
-    if bishops & Board::WHITE_SQUARES != 0 && bishops & Board::BLACK_SQUARES != 0 {
+    if !(bishops & Board::WHITE_SQUARES).is_empty() && !(bishops & Board::BLACK_SQUARES).is_empty() {
         res += 50;
     }
     res
@@ -233,7 +221,7 @@ fn evaluate_knights(pos: &mut Position, phase: i32) -> i32 {
     //we like knights in positions with many pawns
     let pawns = pos.piece_count(Color::White, Piece::Pawn) + pos.piece_count(Color::Black, Piece::Pawn);
 
-    for knight in pos.board[(pos.color(), Piece::Knight)].iter() {
+    for knight in pos.board[(pos.color(), Piece::Knight)] {
         res += piece_table_value(Piece::Knight, pos.color(), knight, phase);
         //bonus for closed positions
         res += 25 * pawns / 16;
@@ -316,41 +304,41 @@ fn evaluate_king_safety(pos: &Position, moves_them: &MoveList, phase: i32) -> i3
     const DISTANCE_TWO_MULTIPLIER: i32 = 1;
     const SCALE: i32 = 32;
     let mut safety = 0;
-    let king_pos = pos.board[(pos.color(), Piece::King)];
+    let king_pos = pos.board[(pos.color(), Piece::King)].least_square();
     let king_neighbours = Board::get_neighbours(king_pos);
     let king_next_neighbours = Board::get_next_neighbours(king_pos);
-    let mut attackers = 0;
+    let mut attackers = BitBoard::EMPTY;
     for m in moves_them {
-        if m.to.square() & king_neighbours != 0 {
+        if king_neighbours.is_set(m.to) {
             safety -= DISTANCE_ONE_MULTIPLIER * attacker_weight(m.piece);
-            attackers |= m.from.square();
-        } else if m.to.square() & king_next_neighbours != 0 {
+            attackers |= m.from.into();
+        } else if king_next_neighbours.is_set(m.to) {
             safety -= DISTANCE_TWO_MULTIPLIER * attacker_weight(m.piece);
-            attackers |= m.from.square();
+            attackers |= m.from.into();
         }
     }
-    let (mut res_early, res_late) = if attackers.count_ones() > 1 {
+    let (mut res_early, res_late) = if attackers.count() > 1 {
         (((- safety * safety) / SCALE).clamp(-500,0), -safety)
     } else {(0,0)};
 
     //In the early game we want pawns to shield our king.
     match pos.color() {
         Color::White => {
-            if king_pos.index() < 2 {
-                res_early += ((0b111 << 8) &
-                        pos.get_board()[(Color::White, Piece::Pawn)]).count_ones() as i32 * 5;
-            } else if king_pos.index() < 8 && king_pos.index() > 4 {
-                res_early += ((0b11100000 << 8) &
-                        pos.get_board()[(Color::White, Piece::Pawn)]).count_ones() as i32 * 5;
+            if king_pos < Square::C1 {
+                res_early += (BitBoard::new(0b111 << 8) &
+                        pos.get_board()[(Color::White, Piece::Pawn)]).count() as i32 * 5;
+            } else if king_pos <= Square::H1 && king_pos > Square::E1 {
+                res_early += (BitBoard::new(0b11100000 << 8) &
+                        pos.get_board()[(Color::White, Piece::Pawn)]).count() as i32 * 5;
             }
         },
         Color::Black => {
-            if king_pos.index() > 47 && king_pos.index() < 51 {
-                res_early += ((0b111 << 48) &
-                        pos.get_board()[(Color::Black, Piece::Pawn)]).count_ones() as i32 * 5;
-            } else if king_pos.index() > 61 {
-                res_early += ((0b11100000 << 48) &
-                        pos.get_board()[(Color::Black, Piece::Pawn)]).count_ones() as i32 * 5;
+            if king_pos >= Square::A8 && king_pos < Square::C8 {
+                res_early += (BitBoard::new(0b111 << 48) &
+                        pos.get_board()[(Color::Black, Piece::Pawn)]).count() as i32 * 5;
+            } else if king_pos > Square::E8 {
+                res_early += (BitBoard::new(0b11100000 << 48) &
+                        pos.get_board()[(Color::Black, Piece::Pawn)]).count() as i32 * 5;
             }
         }
     }
@@ -389,9 +377,9 @@ pub fn evaluate(pos: &mut Position) -> Eval {
     //if we are heading into a pawnless endgame, we aim to have a material advantage of five or
     //higher
     let remaining_pawns = (pos.board[(Color::White, Piece::Pawn)]
-                            | pos.board[(Color::Black, Piece::Pawn)]).count_ones();
+                            | pos.board[(Color::Black, Piece::Pawn)]).count();
     //dampen eval quickly for low material difference
-    if remaining_pawns < 2 && pos.material_balance().abs() < 5 && pos.board.occupation.count_ones() < 7 {
+    if remaining_pawns < 2 && pos.material_balance().abs() < 5 && pos.board.occupation.count() < 7 {
         res /= ((5-pos.material_balance())*(5-pos.material_balance())/(remaining_pawns as i32 + 1)).clamp(1,25);
     }
 

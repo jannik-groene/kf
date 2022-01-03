@@ -1,6 +1,6 @@
 mod halfkav2;
 
-use crate::chess::{SquareIndex, SquareIndexMethods, Move, Position, Piece, Color};
+use crate::chess::{Move, Position, Piece, Color};
 use nnue::{
     make_model,
     features::{EnumerateFeatures, MoveFeatures, Perspective},
@@ -29,14 +29,15 @@ impl NNUEState {
                                                         pos: &Position, m: Move, c: Color) {
         //if the King has not moved the update is simple
         if m.piece != Piece::King
-                || pos.get_board()[(c.other(), Piece::King)] & (m.from.square() | m.to.square()) != 0 {
+                || pos.get_board()[(c.other(), Piece::King)].is_set(m.from)
+                || pos.get_board()[(c.other(), Piece::King)].is_set(m.to) {
 
-            let kp = SquareIndex::from_square(pos.get_board()[(c, Piece::King)]);
+            let kp = pos.get_board()[(c, Piece::King)].least_square();
 
-            let our_piece = pos.get_board()[(c, Piece::Any)] & m.to.square() != 0;
+            let our_piece = pos.get_board()[(c, Piece::Any)].is_set(m.to);
 
             //select updated features
-            let (added, removed) = m.changed_features(c.into(), kp, our_piece);
+            let (added, removed) = m.changed_features(c.into(), kp.into(), our_piece);
             sf_half_ka_v2::update_accumulator(acc, acc_new, added, removed, c as usize)
         }
         //if the king has moved we need to update all weights in the position
@@ -59,7 +60,7 @@ impl NNUEState {
 
     //Evaluate the current state of the input transformers
     pub fn evaluate_position(&self, pos: &Position, to_move: Color) -> i32 {
-        let bucket = (pos.board.occupation.count_ones() - 1) / 4;
+        let bucket = (pos.board.occupation.count() - 1) / 4;
         sf_half_ka_v2::evaluate_state(self.states.last().unwrap(), bucket as usize, to_move as usize)
     }
 }

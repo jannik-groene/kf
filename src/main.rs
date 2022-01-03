@@ -9,6 +9,7 @@ mod evaluate;
 mod eval;
 mod piecetables;
 mod nnue;
+mod bitboard;
 
 use crate::{
     engine::Engine,

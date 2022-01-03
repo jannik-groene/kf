@@ -240,11 +240,11 @@ impl Engine {
         for m in pos.get_moves() {
             pos.do_move(m);
             let m_count = Self::perft_step(&mut pos, d-1);
-            println!("Root move {} positions {}", m, m_count);
+            println!("{}: {}", m, m_count);
             total += m_count;
             pos.undo_move();
         }
-        println!("Total {}", total);
+        println!("\nTotal: {}", total);
         println!("Time {} µs", (std::time::Instant::now()-now).as_micros());
     }
 }
