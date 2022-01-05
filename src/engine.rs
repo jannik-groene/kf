@@ -1,5 +1,6 @@
 use std::sync::mpsc::{Sender, Receiver};
 use std::fmt::Display;
+use std::io::{stdout, Write};
 
 use crate::{
     search::{SearchManager, SearchInfo},
@@ -235,17 +236,26 @@ impl Engine {
     }
     pub fn perft(&self, d: u8) {
         let mut pos = self.search.root_position();
-        let now = std::time::Instant::now();
         let mut total = 0;
-        for m in pos.get_moves() {
-            pos.do_move(m);
+        let moves = pos.get_moves();
+        let rootmove_len = (moves.len() as f64).log10().floor() as usize + 1;
+        let mut counts = Vec::with_capacity(moves.len());
+        for (i,m) in moves.iter().enumerate() {
+            pos.do_move(*m);
             let m_count = Self::perft_step(&mut pos, d-1);
-            println!("{}: {}", m, m_count);
+            counts.push(m_count);
             total += m_count;
             pos.undo_move();
+            print!("\rMove {:>3$}/{}: {}", i+1, moves.len(), total, rootmove_len);
+            stdout().flush().unwrap();
         }
-        println!("\nTotal: {}", total);
-        println!("Time {} µs", (std::time::Instant::now()-now).as_micros());
+        let numlen = (total as f64).log10().floor() as usize + 1;
+        print!("\r{:>1$}\r", "", 14 + numlen);
+        for (m,c) in moves.iter().zip(counts) {
+            println!("{:<5}  {:>2$}", format!("{}",m), c, numlen);
+        }
+        println!("{:->1$}", "", numlen + 7);
+        println!("Total  {}", total);
     }
 }
 
