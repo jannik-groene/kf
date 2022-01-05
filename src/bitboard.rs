@@ -243,11 +243,19 @@ impl Square {
             Color::Black => self.flipped(),
         }
     }
+    #[inline]
     pub fn shifted_by(&self, shift: i8) -> Self {
         if shift >= 0 {
             Self::new(*self as u8 + shift as u8)
         } else {
             Self::new(*self as u8 - shift.abs() as u8)
+        }
+    }
+    #[inline]
+    pub fn advance(&self, c: Color) -> Self {
+        match c {
+            Color::White => self.shifted_by(8),
+            Color::Black => self.shifted_by(-8),
         }
     }
 }

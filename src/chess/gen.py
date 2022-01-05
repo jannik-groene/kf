@@ -274,19 +274,19 @@ def calculate_pinning_ray(n,m):
                     ray |= 1 << (x + y*8)
     return ray
 
-print("pub static BISHOP_MOVES: [u64;64] = [")
+print("pub const BISHOP_MOVES: [u64;64] = [")
 for i in range(64):
     moves = calculate_bishop_moves(1 << i)
     print("    0x{0:016x},".format(moves))
 print("];")
 
-print("pub static ROOK_MOVES: [u64;64] = [")
+print("pub const ROOK_MOVES: [u64;64] = [")
 for i in range(64):
     moves = calculate_rook_moves(1 << i)
     print("    0x{0:016x},".format(moves))
 print("];")
 
-print("pub static PAWN_ATTACKS: [[u64; 64]; 2] = [[")
+print("pub const PAWN_ATTACKS: [[u64; 64]; 2] = [[")
 for i in range(64):
     attacks = pawn_white_attacks(1 << i)
     print("    0x{0:016x},".format(attacks))
@@ -297,26 +297,26 @@ for i in range(64):
     print("    0x{0:016x},".format(attacks))
 print("]];")
 
-print("pub static NEIGHBOURS: [u64;64] = [")
+print("pub const NEIGHBOURS: [u64;64] = [")
 for i in range(64):
     moves = calculate_neighbours(1 << i)
     print("    0x{0:016x},".format(moves))
 print("];")
 
-print("pub static NEXT_NEIGHBOURS: [u64;64] = [")
+print("pub const NEXT_NEIGHBOURS: [u64;64] = [")
 for i in range(64):
     moves = calculate_next_neighbours(1 << i)
     print("    0x{0:016x},".format(moves))
 print("];")
 
-print("pub static KNIGHT_MOVES: [u64;64] = [")
+print("pub const KNIGHT_MOVES: [u64;64] = [")
 for i in range(64):
     moves = calculate_knight_moves(1 << i)
     print("    0x{0:016x},".format(moves))
 print("];")
 
 offsets = [0]
-print("pub static ROOK_MMASK: [u64;102400] = [")
+print("pub const ROOK_MMASK: [u64;102400] = [")
 for i in range(64):
     masks = calculate_rook_move_masks(1 << i)
     offsets += [offsets[-1]+len(masks)]
@@ -326,13 +326,13 @@ for i in range(64):
 print("];")
 offsets = offsets[:64]
 
-print("pub static ROOK_MMASK_OFFSETS: [u64;64] = [")
+print("pub const ROOK_MMASK_OFFSETS: [u64;64] = [")
 for i in range(64):
     print("    0x{0:04x},".format(offsets[i]))
 print("];")
 
 offsets = [0]
-print("pub static BISHOP_MMASK: [u64;5248] = [")
+print("pub const BISHOP_MMASK: [u64;5248] = [")
 for i in range(64):
     masks = calculate_bishop_masks(1 << i)
     offsets += [offsets[-1]+len(masks)]
@@ -343,12 +343,12 @@ print("];")
 
 offsets = offsets[:64]
 
-print("pub static BISHOP_MMASK_OFFSETS: [u64;64] = [")
+print("pub const BISHOP_MMASK_OFFSETS: [u64;64] = [")
 for i in range(64):
     print("    0x{0:04x},".format(offsets[i]))
 print("];")
 
-print ("pub static RAYS: [[u64; 64]; 64] = [")
+print ("pub const RAYS: [[u64; 64]; 64] = [")
 for i in range(64):
     print("    [")
     for j in range(64):
@@ -356,7 +356,7 @@ for i in range(64):
     print("    ],")
 print("];")
 
-print ("pub static CONNECTING_RAYS: [[u64; 64]; 64] = [")
+print ("pub const CONNECTING_RAYS: [[u64; 64]; 64] = [")
 for i in range(64):
     print("    [")
     for j in range(64):
@@ -366,20 +366,20 @@ print("];")
 
 for p in ["KING","QUEEN","BISHOP","KNIGHT","ROOK","PAWN"]:
     for c in ["BLACK", "WHITE"]:
-        print("pub static ZOBRIST_{}_{}_NUMBERS: [u64;64] = [".format(c,p))
+        print("pub const ZOBRIST_{}_{}_NUMBERS: [u64;64] = [".format(c,p))
         for _ in range(64):
             print("    0x{:016x},".format(random.randint(0,18446744073709551615)))
         print("];")
-print("pub static ZOBRIST_CASTLING_NUMBERS: [u64;4] = [")
+print("pub const ZOBRIST_CASTLING_NUMBERS: [u64;4] = [")
 
 for _ in range(4):
     print("    0x{:016x},".format(random.randint(0,18446744073709551615)))
 print("];")
 
-print("pub static ZOBRIST_ENPASSANT_NUMBERS: [u64;8] = [")
+print("pub const ZOBRIST_ENPASSANT_NUMBERS: [u64;8] = [")
 for _ in range(8):
     print("    0x{:016x},".format(random.randint(0,18446744073709551615)))
 print("];")
 
-print("pub static ZOBRIST_BLACK_NUMBER: u64 = 0x{:016x};".format(random.randint(0,18446744073709551615)))
+print("pub const ZOBRIST_BLACK_NUMBER: u64 = 0x{:016x};".format(random.randint(0,18446744073709551615)))
 

@@ -29,12 +29,12 @@ impl NNUEState {
                                                         pos: &Position, m: Move, c: Color) {
         //if the King has not moved the update is simple
         if m.piece != Piece::King
-                || pos.get_board()[(c.other(), Piece::King)].is_set(m.from)
-                || pos.get_board()[(c.other(), Piece::King)].is_set(m.to) {
+                || pos.get_board().get_bb(c.other(), Piece::King).is_set(m.from)
+                || pos.get_board().get_bb(c.other(), Piece::King).is_set(m.to) {
 
-            let kp = pos.get_board()[(c, Piece::King)].least_square();
+            let kp = pos.get_board().get_bb(c, Piece::King).least_square();
 
-            let our_piece = pos.get_board()[(c, Piece::Any)].is_set(m.to);
+            let our_piece = pos.get_board().get_color_bb(c).is_set(m.to);
 
             //select updated features
             let (added, removed) = m.changed_features(c.into(), kp.into(), our_piece);
@@ -60,7 +60,8 @@ impl NNUEState {
 
     //Evaluate the current state of the input transformers
     pub fn evaluate_position(&self, pos: &Position, to_move: Color) -> i32 {
-        let bucket = (pos.board.occupation.count() - 1) / 4;
+        let bucket = (pos.board.occupation().count() - 1) / 4;
+        assert!(bucket < 8);
         sf_half_ka_v2::evaluate_state(self.states.last().unwrap(), bucket as usize, to_move as usize)
     }
 }

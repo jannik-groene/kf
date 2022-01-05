@@ -9,3 +9,4 @@ mod thread;
 mod nnue;
 pub mod engine;
 pub mod bitboard;
+pub mod board;

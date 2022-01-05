@@ -85,15 +85,15 @@ impl EnumerateFeatures<HalfKAv2Feature> for Position {
     #[inline]
     fn features(&self, p: Perspective) -> ArrayVec<HalfKAv2Feature, 32> {
         let mut features = ArrayVec::new();
-        let ksq = self.board[(p.into(), Piece::King)].least_square();
+        let ksq = self.board.get_bb(p.into(), Piece::King).least_square();
         let c: Color = p.into();
         let pieces = [Piece::Pawn, Piece::Knight, Piece::Bishop, Piece::Rook, Piece::Queen, Piece::King];
         //generate piece indices in order, for faster computations
         for piece in pieces {
-            for sq in self.board[(c,piece)] {
+            for sq in self.board.get_bb(c,piece) {
                 features.push(HalfKAv2Feature::new(ksq.relative(p.into()), piece, sq.relative(p.into()), true));
             }
-            for sq in self.board[(c.other(),piece)] {
+            for sq in self.board.get_bb(c.other(),piece) {
                 features.push(HalfKAv2Feature::new(ksq.relative(p.into()), piece, sq.relative(p.into()), false));
             }
         }

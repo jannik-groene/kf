@@ -243,7 +243,7 @@ fn do_and_undo_random_moves(pos: &mut chess::Position, count: usize) {
         pos.undo_move();
         println!("{},{:?}", m, m.typ);
         println!("0x{:016x},0x{:016x}", zobrist, pos.zobrist_hash());
-        assert!(pos.zobrist_hash() == zobrist);
+        assert_eq!(pos.zobrist_hash(), zobrist);
     }
 }
 
@@ -299,7 +299,7 @@ fn undo_moves() {
     pos.do_move(mov5);
     pos.undo_move();
     //random checks
-    for _ in 0..1000 {
+    for _ in 0..10000 {
         pos = chess::Position::new();
         do_and_undo_random_moves(&mut pos, 40);
         assert!(*pos.get_board()==chess::Board::new());
