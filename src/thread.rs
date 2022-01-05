@@ -1,17 +1,16 @@
-use std::sync::{Arc, RwLock};
-use std::sync::mpsc::Sender;
 use std::io::Write;
+use std::sync::mpsc::Sender;
+use std::sync::{Arc, RwLock};
 
 use crate::{
-    chess::{Position, Move},
-    tt::TranspositionTable,
-    search::SearchInfo,
-    eval::Eval,
+    chess::{Move, Position},
     engine::EngineIO,
-    nnue::NNUEState,
+    eval::Eval,
     evaluate::evaluate,
+    nnue::NNUEState,
+    search::SearchInfo,
+    tt::TranspositionTable,
 };
-
 
 pub trait Thread {
     fn pos(&self) -> &Position;
@@ -28,7 +27,9 @@ pub trait Thread {
     fn stop_flag(&self) -> &Arc<RwLock<bool>>;
 
     //These are optional and not used for helper threads
-    fn threads(&self) -> usize {1}
+    fn threads(&self) -> usize {
+        1
+    }
     fn set_bestmove(&mut self, _m: Option<Move>) {}
 
     fn do_move(&mut self, m: Move);
@@ -61,23 +62,41 @@ pub struct MainThread {
 
 impl Thread for MainThread {
     #[inline]
-    fn pos_mut(&mut self) -> &mut Position {&mut self.pos}
+    fn pos_mut(&mut self) -> &mut Position {
+        &mut self.pos
+    }
     #[inline]
-    fn pos(&self) -> &Position {&self.pos}
+    fn pos(&self) -> &Position {
+        &self.pos
+    }
     #[inline]
-    fn nodes(&self) -> &u64 {&self.nodes}
+    fn nodes(&self) -> &u64 {
+        &self.nodes
+    }
     #[inline]
-    fn nodes_mut(&mut self) -> &mut u64 {&mut self.nodes}
+    fn nodes_mut(&mut self) -> &mut u64 {
+        &mut self.nodes
+    }
     #[inline]
-    fn tt(&self) -> &TranspositionTable {&self.tt}
+    fn tt(&self) -> &TranspositionTable {
+        &self.tt
+    }
     #[inline]
-    fn tt_mut(&mut self) -> &mut TranspositionTable {&mut self.tt}
+    fn tt_mut(&mut self) -> &mut TranspositionTable {
+        &mut self.tt
+    }
     #[inline]
-    fn is_helper(&self) -> bool {false}
+    fn is_helper(&self) -> bool {
+        false
+    }
     #[inline]
-    fn stop_flag(&self) -> &Arc<RwLock<bool>> {&self.stop_flag}
+    fn stop_flag(&self) -> &Arc<RwLock<bool>> {
+        &self.stop_flag
+    }
     #[inline]
-    fn threads(&self) -> usize {self.threads}
+    fn threads(&self) -> usize {
+        self.threads
+    }
     #[inline]
     fn set_bestmove(&mut self, m: Option<Move>) {
         self.bestmove = m;
@@ -118,7 +137,8 @@ impl Thread for MainThread {
     #[inline]
     fn register_killer(&mut self, ply: u8, m: Move) {
         if self.killers.len() <= ply as usize {
-            self.killers.resize(ply as usize+1, ([None,None],[0,0]));
+            self.killers
+                .resize(ply as usize + 1, ([None, None], [0, 0]));
         }
         if self.killers[ply as usize].0[0] == Some(m) {
             self.killers[ply as usize].1[0] += 1;
@@ -143,51 +163,68 @@ impl Thread for MainThread {
     #[inline]
     fn invalidate_killers(&mut self, ply: u8) {
         if self.killers.len() > ply as usize + 1 {
-            self.killers[ply as usize + 1].1 = [0,0];
+            self.killers[ply as usize + 1].1 = [0, 0];
         }
     }
 }
 
 impl MainThread {
-    pub fn new(pos: Position,
-               threads: usize,
-               tt: TranspositionTable,
-               stop_flag: Arc<RwLock<bool>>,
-               search_info: SearchInfo,
-               sender: Sender<EngineIO>,
-               use_nnue: bool) -> MainThread {
+    pub fn new(
+        pos: Position,
+        threads: usize,
+        tt: TranspositionTable,
+        stop_flag: Arc<RwLock<bool>>,
+        search_info: SearchInfo,
+        sender: Sender<EngineIO>,
+        use_nnue: bool,
+    ) -> MainThread {
         let nnue = NNUEState::new(&pos);
-        MainThread {pos,
-                    nodes: 0,
-                    threads,
-                    tt,
-                    stop_flag,
-                    search_info,
-                    sender,
-                    bestmove: None,
-                    killers: Vec::new(),
-                    nnue,
-                    use_nnue}
+        MainThread {
+            pos,
+            nodes: 0,
+            threads,
+            tt,
+            stop_flag,
+            search_info,
+            sender,
+            bestmove: None,
+            killers: Vec::new(),
+            nnue,
+            use_nnue,
+        }
     }
     #[inline]
     pub fn bestmove(&self) -> Option<Move> {
         self.bestmove
     }
     pub fn print_pv(&self, depth: u8) {
-        if self.bestmove().is_none() {return;}
+        if self.bestmove().is_none() {
+            return;
+        }
         let stdout = std::io::stdout();
         let mut handle = stdout.lock();
-        drop(write!(handle, "info depth {} pv {}", depth, self.bestmove().unwrap()));
+        drop(write!(
+            handle,
+            "info depth {} pv {}",
+            depth,
+            self.bestmove().unwrap()
+        ));
         let mut pos = self.pos().from_move(self.bestmove().unwrap());
         let mut index = 1;
         loop {
             let hashentry = self.tt.get(pos.zobrist_hash());
-            if hashentry.is_none() {break;}
+            if hashentry.is_none() {
+                break;
+            }
             let next_move = hashentry.unwrap().mov();
-            if next_move.is_none() {break;}
+            if next_move.is_none() {
+                break;
+            }
             drop(write!(handle, " {}", next_move.unwrap()));
             index += 1;
-            if index >= depth {break;}
+            if index >= depth {
+                break;
+            }
             pos.do_move(next_move.unwrap());
         }
         drop(writeln!(handle));
@@ -217,38 +254,58 @@ pub struct HelperThread {
 }
 
 impl HelperThread {
-    pub fn new(pos: Position,
-               tt: TranspositionTable,
-               stop_flag: Arc<RwLock<bool>>,
-               use_nnue: bool) -> HelperThread {
+    pub fn new(
+        pos: Position,
+        tt: TranspositionTable,
+        stop_flag: Arc<RwLock<bool>>,
+        use_nnue: bool,
+    ) -> HelperThread {
         let nnue = NNUEState::new(&pos);
-        HelperThread {pos,
-                      nodes: 0,
-                      tt,
-                      stop_flag,
-                      killers: Vec::new(),
-                      nnue,
-                      use_nnue}
+        HelperThread {
+            pos,
+            nodes: 0,
+            tt,
+            stop_flag,
+            killers: Vec::new(),
+            nnue,
+            use_nnue,
+        }
     }
 }
 
 impl Thread for HelperThread {
     #[inline]
-    fn pos_mut(&mut self) -> &mut Position {&mut self.pos}
+    fn pos_mut(&mut self) -> &mut Position {
+        &mut self.pos
+    }
     #[inline]
-    fn pos(&self) -> &Position {&self.pos}
+    fn pos(&self) -> &Position {
+        &self.pos
+    }
     #[inline]
-    fn nodes(&self) -> &u64 {&self.nodes}
+    fn nodes(&self) -> &u64 {
+        &self.nodes
+    }
     #[inline]
-    fn nodes_mut(&mut self) -> &mut u64 {&mut self.nodes}
+    fn nodes_mut(&mut self) -> &mut u64 {
+        &mut self.nodes
+    }
     #[inline]
-    fn tt(&self) -> &TranspositionTable {&self.tt}
+    fn tt(&self) -> &TranspositionTable {
+        &self.tt
+    }
     #[inline]
-    fn tt_mut(&mut self) -> &mut TranspositionTable {&mut self.tt}
+    fn tt_mut(&mut self) -> &mut TranspositionTable {
+        &mut self.tt
+    }
     #[inline]
-    fn is_helper(&self) -> bool {true}
+    fn is_helper(&self) -> bool {
+        true
+    }
     #[inline]
-    fn stop_flag(&self) -> &Arc<RwLock<bool>> {&self.stop_flag}
+    fn stop_flag(&self) -> &Arc<RwLock<bool>> {
+        &self.stop_flag
+    }
     #[inline]
     fn do_move(&mut self, m: Move) {
         if self.use_nnue {
@@ -284,7 +341,8 @@ impl Thread for HelperThread {
     #[inline]
     fn register_killer(&mut self, ply: u8, m: Move) {
         if self.killers.len() <= ply as usize {
-            self.killers.resize(ply as usize+1, ([None,None],[0,0]));
+            self.killers
+                .resize(ply as usize + 1, ([None, None], [0, 0]));
         }
         if self.killers[ply as usize].0[0] == Some(m) {
             self.killers[ply as usize].1[0] += 1;
@@ -309,8 +367,7 @@ impl Thread for HelperThread {
     #[inline]
     fn invalidate_killers(&mut self, ply: u8) {
         if self.killers.len() > ply as usize + 1 {
-            self.killers[ply as usize + 1].1 = [0,0];
+            self.killers[ply as usize + 1].1 = [0, 0];
         }
     }
 }
-

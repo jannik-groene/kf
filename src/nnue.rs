@@ -1,12 +1,12 @@
 mod halfkav2;
 
-use crate::chess::{Move, Position, Piece, Color};
+use crate::chess::{Color, Move, Piece, Position};
 use nnue::{
-    make_model,
     features::{EnumerateFeatures, MoveFeatures, Perspective},
+    make_model,
 };
 
-make_model!{sf_half_ka_v2, 45056 => 1024 => 16 => 32 => 1, 8}
+make_model! {sf_half_ka_v2, 45056 => 1024 => 16 => 32 => 1, 8}
 
 use sf_half_ka_v2::Accumulator;
 
@@ -21,17 +21,26 @@ impl NNUEState {
         let mut acc = Accumulator::new();
         sf_half_ka_v2::refresh_accumulator(&mut acc, pos.features(Perspective::WHITE), 0);
         sf_half_ka_v2::refresh_accumulator(&mut acc, pos.features(Perspective::BLACK), 1);
-        NNUEState { states: vec![acc]}
+        NNUEState { states: vec![acc] }
     }
 
     //Input is the up-to-date position, after the move is done (or undone).
-    pub fn update_color_state(&self, acc: &Accumulator, acc_new: &mut Accumulator,
-                                                        pos: &Position, m: Move, c: Color) {
+    pub fn update_color_state(
+        &self,
+        acc: &Accumulator,
+        acc_new: &mut Accumulator,
+        pos: &Position,
+        m: Move,
+        c: Color,
+    ) {
         //if the King has not moved the update is simple
         if m.piece != Piece::King
-                || pos.get_board().get_bb(c.other(), Piece::King).is_set(m.from)
-                || pos.get_board().get_bb(c.other(), Piece::King).is_set(m.to) {
-
+            || pos
+                .get_board()
+                .get_bb(c.other(), Piece::King)
+                .is_set(m.from)
+            || pos.get_board().get_bb(c.other(), Piece::King).is_set(m.to)
+        {
             let kp = pos.get_board().get_bb(c, Piece::King).least_square();
 
             let our_piece = pos.get_board().get_color_bb(c).is_set(m.to);
@@ -62,7 +71,11 @@ impl NNUEState {
     pub fn evaluate_position(&self, pos: &Position, to_move: Color) -> i32 {
         let bucket = (pos.board.occupation().count() - 1) / 4;
         assert!(bucket < 8);
-        sf_half_ka_v2::evaluate_state(self.states.last().unwrap(), bucket as usize, to_move as usize)
+        sf_half_ka_v2::evaluate_state(
+            self.states.last().unwrap(),
+            bucket as usize,
+            to_move as usize,
+        )
     }
 }
 

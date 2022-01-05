@@ -1,6 +1,6 @@
 use crate::{
-    engine::{EngineIO, Engine},
-    chess::{Position, Move, Color},
+    chess::{Color, Move, Position},
+    engine::{Engine, EngineIO},
     search::SearchInfo,
 };
 use std::sync::mpsc::Sender;
@@ -13,7 +13,7 @@ fn read_input(ch: Sender<EngineIO>) {
         let mut s = String::new();
         sin.read_line(&mut s).unwrap();
         match ch.send(EngineIO::UciInput(s)) {
-            Ok(_) => {},
+            Ok(_) => {}
             Err(_) => break,
         }
     }
@@ -31,39 +31,36 @@ fn timer(time: TimeSpec, id: u64, ch: Sender<EngineIO>) {
     const SAFETY_DELTA: std::time::Duration = std::time::Duration::from_millis(1);
     let now = std::time::Instant::now();
     //We play with increment
-    let movetime = if let (Some(time),Some(inc)) = (time.ustime, time.usinc) {
-            //We spend about 7% of the remaining time on each move.
-            std::time::Duration::from_millis(inc) +
-                                std::time::Duration::from_micros((time-inc) * 70)
-        }
-        //We play with time per x moves, we split evenly and spend a little more earlier
-        else if let (Some(time),Some(togo)) = (time.ustime, time.movestogo) {
-            if togo == 1 {
-                std::time::Duration::from_millis(time)
-            } else {
-                std::time::Duration::from_micros((time * 1200)/togo)
-            }
-        }
-        //sudden death
-        else if let Some(time) = time.ustime {
-            //we simply spend 4% of our time in each move
-            std::time::Duration::from_micros(time * 40)
-        }
-        //We play with fixed time per move
-        else if let Some(time) = time.movetime {
+    let movetime = if let (Some(time), Some(inc)) = (time.ustime, time.usinc) {
+        //We spend about 7% of the remaining time on each move.
+        std::time::Duration::from_millis(inc) + std::time::Duration::from_micros((time - inc) * 70)
+    }
+    //We play with time per x moves, we split evenly and spend a little more earlier
+    else if let (Some(time), Some(togo)) = (time.ustime, time.movestogo) {
+        if togo == 1 {
             std::time::Duration::from_millis(time)
         } else {
-            panic!("Invalid time control data!")
-        };
+            std::time::Duration::from_micros((time * 1200) / togo)
+        }
+    }
+    //sudden death
+    else if let Some(time) = time.ustime {
+        //we simply spend 4% of our time in each move
+        std::time::Duration::from_micros(time * 40)
+    }
+    //We play with fixed time per move
+    else if let Some(time) = time.movetime {
+        std::time::Duration::from_millis(time)
+    } else {
+        panic!("Invalid time control data!")
+    };
     if movetime > SAFETY_DELTA {
-        std::thread::sleep(movetime-SAFETY_DELTA);
+        std::thread::sleep(movetime - SAFETY_DELTA);
     }
     //Spin until we reach target time
     while now.elapsed() < movetime - std::time::Duration::from_micros(1) {}
     drop(ch.send(EngineIO::TimerEnded(id)));
 }
-
-
 
 pub trait UCIHandler {
     fn uci_loop(&mut self);
@@ -103,9 +100,9 @@ impl UCIHandler for Engine {
                             self.stop_search();
                             waiting_for_search_end = true;
                         }
-                    },
+                    }
                     EngineIO::SearchUpdate(up) => last_search_update = Some(up),
-                    EngineIO::SearchEnded(id)  => {
+                    EngineIO::SearchEnded(id) => {
                         if !waiting_for_search_end && id == self.search_id() {
                             self.increase_search_id(); //invalidate search_id
                             if last_search_update.is_some() {
@@ -122,7 +119,7 @@ impl UCIHandler for Engine {
         }
     }
     fn handle_input(&mut self, s: String) {
-        let tokens:Vec<&str> = s.trim().split_whitespace().collect();
+        let tokens: Vec<&str> = s.trim().split_whitespace().collect();
         match tokens[0] {
             "uci" => self.handle_uci(),
             "debug" => self.handle_debug(tokens),
@@ -136,7 +133,7 @@ impl UCIHandler for Engine {
             "handle_ponderhit" => self.handle_ponderhit(),
             "quit" => std::process::exit(0),
             "perft" => self.handle_perft(tokens),
-            _ => eprintln!("Did not recognize command \"{}\"", tokens[0])
+            _ => eprintln!("Did not recognize command \"{}\"", tokens[0]),
         }
     }
     fn handle_uci(&self) {
@@ -153,7 +150,9 @@ impl UCIHandler for Engine {
     fn handle_setoption(&mut self, tokens: Vec<&str>) {
         let option = tokens.get(2);
         let value = tokens.get(4);
-        if option.is_none() || value.is_none() {return;}
+        if option.is_none() || value.is_none() {
+            return;
+        }
         self.config.set_option(option.unwrap(), value.unwrap());
         self.apply_options();
     }
@@ -172,16 +171,20 @@ impl UCIHandler for Engine {
             return;
         };
         if tokens.len() > offset && tokens[offset] == "moves" {
-            for m in tokens[offset+1..].iter() {
+            for m in tokens[offset + 1..].iter() {
                 pos.do_move(Move::from_str(m, &pos));
             }
         }
         self.set_position(pos)
     }
     fn handle_go(&mut self, tokens: Vec<&str>) {
-        if tokens.len() < 2 {return;}
+        if tokens.len() < 2 {
+            return;
+        }
         if tokens[1] == "depth" {
-            if tokens.len() < 3 {return;}
+            if tokens.len() < 3 {
+                return;
+            }
             self.start_search(tokens[2].parse::<u8>().ok());
             return;
         }
@@ -203,14 +206,24 @@ impl UCIHandler for Engine {
                 "binc" => binc = chunk[1].parse::<u64>().ok(),
                 "movetime" => movetime = chunk[1].parse::<u64>().ok(),
                 "movestogo" => movestogo = chunk[1].parse::<u64>().ok(),
-                _ => {},
+                _ => {}
             }
         }
         let tx = self.get_sender();
         let id = self.search_id() + 1;
         let time = match self.color() {
-            Color::White => TimeSpec {ustime: wtime, usinc: winc, movestogo, movetime},
-            Color::Black => TimeSpec {ustime: btime, usinc: binc, movestogo, movetime},
+            Color::White => TimeSpec {
+                ustime: wtime,
+                usinc: winc,
+                movestogo,
+                movetime,
+            },
+            Color::Black => TimeSpec {
+                ustime: btime,
+                usinc: binc,
+                movestogo,
+                movetime,
+            },
         };
         std::thread::spawn(move || timer(time, id, tx));
         self.start_search(None);

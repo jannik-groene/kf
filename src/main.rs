@@ -1,21 +1,18 @@
 #![feature(portable_simd)]
-mod engine;
-mod uci;
-mod chess;
-mod search;
-mod tt;
-mod thread;
-mod evaluate;
-mod eval;
-mod piecetables;
-mod nnue;
 mod bitboard;
 mod board;
+mod chess;
+mod engine;
+mod eval;
+mod evaluate;
+mod nnue;
+mod piecetables;
+mod search;
+mod thread;
+mod tt;
+mod uci;
 
-use crate::{
-    engine::Engine,
-    uci::UCIHandler,
-};
+use crate::{engine::Engine, uci::UCIHandler};
 
 #[cfg(test)]
 mod tests;
@@ -24,4 +21,3 @@ fn main() {
     let mut engine = Engine::new();
     engine.uci_loop();
 }
-

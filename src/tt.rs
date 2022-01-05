@@ -1,8 +1,8 @@
-use std::sync::{Arc, RwLock};
 use crate::{
-    eval::{Eval, Value, Bound},
-    chess::{Move, CompressedMove},
+    chess::{CompressedMove, Move},
+    eval::{Bound, Eval, Value},
 };
+use std::sync::{Arc, RwLock};
 
 #[derive(Clone)]
 pub struct TranspositionTable {
@@ -45,9 +45,10 @@ impl TranspositionTable {
         //Mate scores may be seen as having infinite depth
         if (hash_entry.0.depth < entry.depth
             || (matches!(entry.eval.value(), Value::Mate(_)) && entry.eval > hash_entry.0.eval))
-           && (hash_entry.0.depth + 5 < entry.depth
-               || entry.eval.bound() == Bound::Exact
-               || hash_entry.0.eval().bound() != Bound::Exact) {
+            && (hash_entry.0.depth + 5 < entry.depth
+                || entry.eval.bound() == Bound::Exact
+                || hash_entry.0.eval().bound() != Bound::Exact)
+        {
             hash.get_mut(zobrist_key as usize % self.size).unwrap().0 = entry;
         } else {
             hash.get_mut(zobrist_key as usize % self.size).unwrap().1 = entry;
@@ -55,12 +56,15 @@ impl TranspositionTable {
     }
     pub fn reset(&mut self) {
         self.hash = Arc::new(RwLock::new(Vec::new()));
-        self.hash = Arc::new(RwLock::new(vec![(TTEntry::UNCHECKED, TTEntry::UNCHECKED); self.size]));
+        self.hash = Arc::new(RwLock::new(vec![
+            (TTEntry::UNCHECKED, TTEntry::UNCHECKED);
+            self.size
+        ]));
         self.hash.write().unwrap().shrink_to_fit();
     }
 }
 
-#[derive(Clone,PartialEq,Copy)]
+#[derive(Clone, PartialEq, Copy)]
 pub struct TTEntry {
     eval: Eval,
     depth: u8,
@@ -69,7 +73,16 @@ pub struct TTEntry {
 }
 
 impl TTEntry {
-    const UNCHECKED: TTEntry = TTEntry {eval: Eval::MIN, depth: 0, zobrist_hash: 0, mov: CompressedMove{to:0, from:0, piece_and_type:0}};
+    const UNCHECKED: TTEntry = TTEntry {
+        eval: Eval::MIN,
+        depth: 0,
+        zobrist_hash: 0,
+        mov: CompressedMove {
+            to: 0,
+            from: 0,
+            piece_and_type: 0,
+        },
+    };
     #[inline]
     pub fn mov(&self) -> Option<Move> {
         self.mov.decompress()
@@ -96,15 +109,55 @@ impl TTEntry {
 fn write_and_read_tt() {
     use crate::chess::Square;
     let mut hash = TranspositionTable::new(10000);
-    let entry = TTEntry::new(-Eval::MATE_NOW, 3, 1234628935786765, Move{from: Square::B1, to: Square::C1, piece: crate::chess::Piece::King, typ: crate::chess::MoveType::Normal});
+    let entry = TTEntry::new(
+        -Eval::MATE_NOW,
+        3,
+        1234628935786765,
+        Move {
+            from: Square::B1,
+            to: Square::C1,
+            piece: crate::chess::Piece::King,
+            typ: crate::chess::MoveType::Normal,
+        },
+    );
     hash.set(1234628935786765, entry);
     assert!(hash.get(1234628935786765).unwrap() == entry);
-    let entry2 = TTEntry::new(-Eval::MATE_NOW, 3, 1234628935786798, Move{from: Square::B1, to: Square::C1, piece: crate::chess::Piece::King, typ: crate::chess::MoveType::Normal});
-    let entry4 = TTEntry::new(Eval::DRAW, 2, 1234628935786798, Move{from: Square::E1, to: Square::A2, piece: crate::chess::Piece::Queen, typ: crate::chess::MoveType::Normal});
+    let entry2 = TTEntry::new(
+        -Eval::MATE_NOW,
+        3,
+        1234628935786798,
+        Move {
+            from: Square::B1,
+            to: Square::C1,
+            piece: crate::chess::Piece::King,
+            typ: crate::chess::MoveType::Normal,
+        },
+    );
+    let entry4 = TTEntry::new(
+        Eval::DRAW,
+        2,
+        1234628935786798,
+        Move {
+            from: Square::E1,
+            to: Square::A2,
+            piece: crate::chess::Piece::Queen,
+            typ: crate::chess::MoveType::Normal,
+        },
+    );
     hash.set(1234628935786798, entry2);
     hash.set(1234628935786798, entry4);
     assert!(hash.get(1234628935786798).unwrap() == entry2);
-    let entry3 = TTEntry::new(-Eval::MATE_NOW, 3, 1234628935786700, Move{from: Square::B1, to: Square::C1, piece: crate::chess::Piece::King, typ: crate::chess::MoveType::Normal});
+    let entry3 = TTEntry::new(
+        -Eval::MATE_NOW,
+        3,
+        1234628935786700,
+        Move {
+            from: Square::B1,
+            to: Square::C1,
+            piece: crate::chess::Piece::King,
+            typ: crate::chess::MoveType::Normal,
+        },
+    );
     let mut hash_clone = hash.clone();
     std::thread::spawn(move || hash_clone.set(1234628935786700, entry3));
     std::thread::sleep(std::time::Duration::from_millis(100));

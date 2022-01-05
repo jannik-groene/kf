@@ -1,27 +1,32 @@
 use crate::{
-    chess::{Position, Move, MoveType, MoveList, Board, Piece, Color, Square, BitBoard, File, get_neighbours, get_next_neighbours},
-    eval::{Eval, Bound, Value},
+    chess::{
+        get_neighbours, get_next_neighbours, BitBoard, Board, Color, File, Move, MoveList,
+        MoveType, Piece, Position, Square,
+    },
+    eval::{Bound, Eval, Value},
     piecetables,
 };
 
 #[allow(dead_code)]
 pub fn has_pawns(pos: &Position) -> bool {
-    !(pos.board.get_bb(Color::White, Piece::Pawn)
-        | pos.board.get_bb(Color::Black, Piece::Pawn)).is_empty()
+    !(pos.board.get_bb(Color::White, Piece::Pawn) | pos.board.get_bb(Color::Black, Piece::Pawn))
+        .is_empty()
 }
 
 pub fn has_minor_pieces(pos: &Position) -> bool {
     !(pos.board.get_bb(Color::White, Piece::Bishop)
         | pos.board.get_bb(Color::Black, Piece::Bishop)
         | pos.board.get_bb(Color::White, Piece::Knight)
-        | pos.board.get_bb(Color::Black, Piece::Knight)).is_empty()
+        | pos.board.get_bb(Color::Black, Piece::Knight))
+    .is_empty()
 }
 
 pub fn has_major_pieces(pos: &Position) -> bool {
     !(pos.board.get_bb(Color::White, Piece::Rook)
         | pos.board.get_bb(Color::Black, Piece::Rook)
         | pos.board.get_bb(Color::White, Piece::Queen)
-        | pos.board.get_bb(Color::Black, Piece::Queen)).is_empty()
+        | pos.board.get_bb(Color::Black, Piece::Queen))
+    .is_empty()
 }
 
 pub fn is_material_draw(pos: &Position) -> bool {
@@ -40,12 +45,16 @@ fn piece_table_value(p: Piece, c: Color, s: Square, phase: i32) -> i32 {
         Piece::Bishop => piecetables::BISHOP_VALUES[index],
         Piece::Rook => piecetables::ROOK_VALUES[index],
         Piece::Queen => piecetables::QUEEN_VALUES[index],
-        Piece::King => (piecetables::KING_EARLY_VALUES[index] * phase + piecetables::KING_LATE_VALUES[index] * (OPENING_PHASE-phase)) / OPENING_PHASE,
-        _ => 0
+        Piece::King => {
+            (piecetables::KING_EARLY_VALUES[index] * phase
+                + piecetables::KING_LATE_VALUES[index] * (OPENING_PHASE - phase))
+                / OPENING_PHASE
+        }
+        _ => 0,
     }
 }
 
-fn pawn_attacks(pos: &Position) -> (BitBoard,BitBoard) {
+fn pawn_attacks(pos: &Position) -> (BitBoard, BitBoard) {
     let mut pawn_attacks_white = BitBoard::EMPTY;
     let mut pawn_attacks_black = BitBoard::EMPTY;
 
@@ -58,7 +67,7 @@ fn pawn_attacks(pos: &Position) -> (BitBoard,BitBoard) {
 
     match pos.color() {
         Color::White => (pawn_attacks_white, pawn_attacks_black),
-        Color::Black=> (pawn_attacks_black, pawn_attacks_white),
+        Color::Black => (pawn_attacks_black, pawn_attacks_white),
     }
 }
 
@@ -73,7 +82,6 @@ fn evaluate_pawns(pos: &mut Position, phase: i32) -> i32 {
     let (guarded_us, guarded_them) = pawn_attacks(pos);
 
     for pawn in pawns_us {
-
         let file = BitBoard::from_file(pawn.file());
         let in_front = file & BitBoard::forward_of(pawn, pos.color());
         let mut advance: BitBoard = pawn.into();
@@ -94,7 +102,7 @@ fn evaluate_pawns(pos: &mut Position, phase: i32) -> i32 {
         //1. Check if the pawn is doubled (or worse).
         let pawns_us_on_file = file & pawns_us;
         res_early -= (pawns_us_on_file.count() as i32 - 1) * 10;
-        res_late  -= (pawns_us_on_file.count() as i32 - 1) * 20;
+        res_late -= (pawns_us_on_file.count() as i32 - 1) * 20;
 
         //2. Check if the pawn is isolated
         if neighbours.is_empty() {
@@ -113,26 +121,39 @@ fn evaluate_pawns(pos: &mut Position, phase: i32) -> i32 {
         if (in_front & (pawns_them | guarded_them | pawns_us)).is_empty() {
             res_early += match pos.color() {
                 Color::White => 50 / (7 - pawn.rank() as i32),
-                Color::Black => 50 / pawn.rank() as i32
+                Color::Black => 50 / pawn.rank() as i32,
             };
             res_late += match pos.color() {
                 Color::White => 150 / (7 - pawn.rank() as i32),
-                Color::Black => 150 / pawn.rank() as i32
+                Color::Black => 150 / pawn.rank() as i32,
             };
         }
 
         //5. Check for candidate passers
-        let supporters = (if pawn.file() != File::A { behind.shifted_by(-1) } else {BitBoard::EMPTY}
-                            | if pawn.file() != File::H { behind.shifted_by(1) } else {BitBoard::EMPTY})
-                         & pawns_us;
+        let supporters = (if pawn.file() != File::A {
+            behind.shifted_by(-1)
+        } else {
+            BitBoard::EMPTY
+        } | if pawn.file() != File::H {
+            behind.shifted_by(1)
+        } else {
+            BitBoard::EMPTY
+        }) & pawns_us;
 
-        let sentries   = (if pawn.file() != File::A { in_front.shifted_by(-1) } else {BitBoard::EMPTY}
-                            | if pawn.file() != File::H { in_front.shifted_by(1) } else {BitBoard::EMPTY})
-                         & pawns_them;
+        let sentries = (if pawn.file() != File::A {
+            in_front.shifted_by(-1)
+        } else {
+            BitBoard::EMPTY
+        } | if pawn.file() != File::H {
+            in_front.shifted_by(1)
+        } else {
+            BitBoard::EMPTY
+        }) & pawns_them;
 
-        if (in_front & (pawns_them | pawns_us)).is_empty()
-                && supporters.count() > sentries.count() {
-            res_early += 15; res_late += 25;
+        if (in_front & (pawns_them | pawns_us)).is_empty() && supporters.count() > sentries.count()
+        {
+            res_early += 15;
+            res_late += 25;
         }
 
         //TODO: hidden passers?
@@ -142,7 +163,10 @@ fn evaluate_pawns(pos: &mut Position, phase: i32) -> i32 {
 }
 
 fn evaluate_king_position(pos: &mut Position, phase: i32) -> i32 {
-    let king_pos = pos.get_board().get_bb(pos.color(), Piece::King).least_square();
+    let king_pos = pos
+        .get_board()
+        .get_bb(pos.color(), Piece::King)
+        .least_square();
     //In the late game stages we want an active king. Maybe want to keep it somewhat central?
     piece_table_value(Piece::King, pos.color(), king_pos, phase)
 }
@@ -184,33 +208,34 @@ fn evaluate_bishops(pos: &mut Position, phase: i32) -> i32 {
     let pawns_us = pos.board.get_bb(pos.color(), Piece::Pawn);
 
     for bishop in bishops {
-            res += piece_table_value(Piece::Bishop, pos.color(), bishop, phase);
+        res += piece_table_value(Piece::Bishop, pos.color(), bishop, phase);
 
-            //reduce the value of the bishop, if it is blocked in by pawns
-            let mut blocked_score = if Board::WHITE_SQUARES.is_set(bishop) {
-                (pawns_us & Board::WHITE_SQUARES).count().saturating_sub(3) * 10
-            } else {
-                (pawns_us & Board::BLACK_SQUARES).count().saturating_sub(3) * 10
-            } as i32;
-            //if the bishop is in front of the pawns, the penalty is smaller
-            if (BitBoard::forward_of(bishop, pos.color()) & pawns_us).count() < 2 {
-                blocked_score /= 2;
-            }
-            res -= blocked_score;
+        //reduce the value of the bishop, if it is blocked in by pawns
+        let mut blocked_score = if Board::WHITE_SQUARES.is_set(bishop) {
+            (pawns_us & Board::WHITE_SQUARES).count().saturating_sub(3) * 10
+        } else {
+            (pawns_us & Board::BLACK_SQUARES).count().saturating_sub(3) * 10
+        } as i32;
+        //if the bishop is in front of the pawns, the penalty is smaller
+        if (BitBoard::forward_of(bishop, pos.color()) & pawns_us).count() < 2 {
+            blocked_score /= 2;
+        }
+        res -= blocked_score;
     }
 
     //check for color weaknesses
     if (bishops & Board::WHITE_SQUARES).is_empty() {
-        res -= 4_i32.saturating_sub((pawns_us & Board::WHITE_SQUARES).count() as i32)
-                * 10 * phase / OPENING_PHASE;
+        res -= 4_i32.saturating_sub((pawns_us & Board::WHITE_SQUARES).count() as i32) * 10 * phase
+            / OPENING_PHASE;
     }
     if (bishops & Board::BLACK_SQUARES).is_empty() {
-        res -= 4_i32.saturating_sub((pawns_us & Board::BLACK_SQUARES).count() as i32)
-                * 10 * phase / OPENING_PHASE;
+        res -= 4_i32.saturating_sub((pawns_us & Board::BLACK_SQUARES).count() as i32) * 10 * phase
+            / OPENING_PHASE;
     }
 
     //give a bonus for the bishop pair
-    if !(bishops & Board::WHITE_SQUARES).is_empty() && !(bishops & Board::BLACK_SQUARES).is_empty() {
+    if !(bishops & Board::WHITE_SQUARES).is_empty() && !(bishops & Board::BLACK_SQUARES).is_empty()
+    {
         res += 50;
     }
     res
@@ -219,7 +244,8 @@ fn evaluate_bishops(pos: &mut Position, phase: i32) -> i32 {
 fn evaluate_knights(pos: &mut Position, phase: i32) -> i32 {
     let mut res: i32 = 0;
     //we like knights in positions with many pawns
-    let pawns = pos.piece_count(Color::White, Piece::Pawn) + pos.piece_count(Color::Black, Piece::Pawn);
+    let pawns =
+        pos.piece_count(Color::White, Piece::Pawn) + pos.piece_count(Color::Black, Piece::Pawn);
 
     for knight in pos.board.get_bb(pos.color(), Piece::Knight) {
         res += piece_table_value(Piece::Knight, pos.color(), knight, phase);
@@ -230,38 +256,68 @@ fn evaluate_knights(pos: &mut Position, phase: i32) -> i32 {
 }
 fn evaluate_mobility(moves_us: &MoveList, moves_them: &MoveList, phase: i32) -> i32 {
     let phase_factor = phase as f32 / OPENING_PHASE as f32;
-    const KNIGHT_MOVE_VALUES: [f32;2] = [1.,1.5];
-    const BISHOP_MOVE_VALUES: [f32;2] = [2.,1.];
-    const QUEEN_MOVE_VALUES: [f32;2] = [1.,1.];
+    const KNIGHT_MOVE_VALUES: [f32; 2] = [1., 1.5];
+    const BISHOP_MOVE_VALUES: [f32; 2] = [2., 1.];
+    const QUEEN_MOVE_VALUES: [f32; 2] = [1., 1.];
     //Early our King will probably want to stay put
-    const KING_MOVE_VALUES: [f32;2] = [0.2,1.8];
+    const KING_MOVE_VALUES: [f32; 2] = [0.2, 1.8];
     //Early rooks are hard to develop and it is not an urgent priority
-    const ROOK_MOVE_VALUES: [f32;2] = [0.4,1.0];
+    const ROOK_MOVE_VALUES: [f32; 2] = [0.4, 1.0];
     //We value early pawn movement low as to not discurage moves like e4e5 (halving the pawns
     //potential moves)
-    const PAWN_MOVE_VALUES: [f32;2] = [0.5,1.2];
+    const PAWN_MOVE_VALUES: [f32; 2] = [0.5, 1.2];
 
-    let move_value_us = moves_us.iter().map(|m| match m.piece {
-                                                Piece::Pawn => PAWN_MOVE_VALUES[0]*phase_factor + PAWN_MOVE_VALUES[1]*(1.-phase_factor),
-                                                Piece::Knight => KNIGHT_MOVE_VALUES[0]*phase_factor + KNIGHT_MOVE_VALUES[1]*(1.-phase_factor),
-                                                Piece::Bishop => BISHOP_MOVE_VALUES[0]*phase_factor + BISHOP_MOVE_VALUES[1]*(1.-phase_factor),
-                                                Piece::Rook => ROOK_MOVE_VALUES[0]*phase_factor + ROOK_MOVE_VALUES[1]*(1.-phase_factor),
-                                                Piece::Queen => QUEEN_MOVE_VALUES[0]*phase_factor + QUEEN_MOVE_VALUES[1]*(1.-phase_factor),
-                                                Piece::King => KING_MOVE_VALUES[0]*phase_factor + KING_MOVE_VALUES[1]*(1.-phase_factor),
-                                                _ => panic!("Invalid Position"),
-                                             }).fold(0., |s, mv| s+mv);
+    let move_value_us = moves_us
+        .iter()
+        .map(|m| match m.piece {
+            Piece::Pawn => {
+                PAWN_MOVE_VALUES[0] * phase_factor + PAWN_MOVE_VALUES[1] * (1. - phase_factor)
+            }
+            Piece::Knight => {
+                KNIGHT_MOVE_VALUES[0] * phase_factor + KNIGHT_MOVE_VALUES[1] * (1. - phase_factor)
+            }
+            Piece::Bishop => {
+                BISHOP_MOVE_VALUES[0] * phase_factor + BISHOP_MOVE_VALUES[1] * (1. - phase_factor)
+            }
+            Piece::Rook => {
+                ROOK_MOVE_VALUES[0] * phase_factor + ROOK_MOVE_VALUES[1] * (1. - phase_factor)
+            }
+            Piece::Queen => {
+                QUEEN_MOVE_VALUES[0] * phase_factor + QUEEN_MOVE_VALUES[1] * (1. - phase_factor)
+            }
+            Piece::King => {
+                KING_MOVE_VALUES[0] * phase_factor + KING_MOVE_VALUES[1] * (1. - phase_factor)
+            }
+            _ => panic!("Invalid Position"),
+        })
+        .fold(0., |s, mv| s + mv);
 
-    let move_value_them = moves_them.iter().map(|m| match m.piece {
-                                                Piece::Pawn => PAWN_MOVE_VALUES[0]*phase_factor + PAWN_MOVE_VALUES[1]*(1.-phase_factor),
-                                                Piece::Knight => KNIGHT_MOVE_VALUES[0]*phase_factor + KNIGHT_MOVE_VALUES[1]*(1.-phase_factor),
-                                                Piece::Bishop => BISHOP_MOVE_VALUES[0]*phase_factor + BISHOP_MOVE_VALUES[1]*(1.-phase_factor),
-                                                Piece::Rook => ROOK_MOVE_VALUES[0]*phase_factor + ROOK_MOVE_VALUES[1]*(1.-phase_factor),
-                                                Piece::Queen => QUEEN_MOVE_VALUES[0]*phase_factor + QUEEN_MOVE_VALUES[1]*(1.-phase_factor),
-                                                Piece::King => KING_MOVE_VALUES[0]*phase_factor + KING_MOVE_VALUES[1]*(1.-phase_factor),
-                                                _ => panic!("Invalid Position"),
-                                             }).fold(0., |s, mv| s+mv);
+    let move_value_them = moves_them
+        .iter()
+        .map(|m| match m.piece {
+            Piece::Pawn => {
+                PAWN_MOVE_VALUES[0] * phase_factor + PAWN_MOVE_VALUES[1] * (1. - phase_factor)
+            }
+            Piece::Knight => {
+                KNIGHT_MOVE_VALUES[0] * phase_factor + KNIGHT_MOVE_VALUES[1] * (1. - phase_factor)
+            }
+            Piece::Bishop => {
+                BISHOP_MOVE_VALUES[0] * phase_factor + BISHOP_MOVE_VALUES[1] * (1. - phase_factor)
+            }
+            Piece::Rook => {
+                ROOK_MOVE_VALUES[0] * phase_factor + ROOK_MOVE_VALUES[1] * (1. - phase_factor)
+            }
+            Piece::Queen => {
+                QUEEN_MOVE_VALUES[0] * phase_factor + QUEEN_MOVE_VALUES[1] * (1. - phase_factor)
+            }
+            Piece::King => {
+                KING_MOVE_VALUES[0] * phase_factor + KING_MOVE_VALUES[1] * (1. - phase_factor)
+            }
+            _ => panic!("Invalid Position"),
+        })
+        .fold(0., |s, mv| s + mv);
 
-    ((move_value_us/(move_value_us+move_value_them)-0.5) * 70. * phase_factor) as i32
+    ((move_value_us / (move_value_us + move_value_them) - 0.5) * 70. * phase_factor) as i32
 }
 
 //use piece values as first approximation to phase
@@ -271,20 +327,24 @@ const KNIGHT_PHASE_WEIGHT: i32 = 3;
 const ROOK_PHASE_WEIGHT: i32 = 5;
 const QUEEN_PHASE_WEIGHT: i32 = 9;
 //In the starting position, this yields a phase factor of 78
-const OPENING_PHASE: i32 = 16*PAWN_PHASE_WEIGHT + 4*BISHOP_PHASE_WEIGHT + 4*KNIGHT_PHASE_WEIGHT + 4*ROOK_PHASE_WEIGHT + 2*QUEEN_PHASE_WEIGHT;
+const OPENING_PHASE: i32 = 16 * PAWN_PHASE_WEIGHT
+    + 4 * BISHOP_PHASE_WEIGHT
+    + 4 * KNIGHT_PHASE_WEIGHT
+    + 4 * ROOK_PHASE_WEIGHT
+    + 2 * QUEEN_PHASE_WEIGHT;
 
 fn phase_factor(pos: &Position) -> i32 {
     let mut phase = 0;
-    phase += PAWN_PHASE_WEIGHT*pos.piece_count(Color::White, Piece::Pawn);
-    phase += PAWN_PHASE_WEIGHT*pos.piece_count(Color::Black, Piece::Pawn);
-    phase += BISHOP_PHASE_WEIGHT*pos.piece_count(Color::White, Piece::Knight);
-    phase += BISHOP_PHASE_WEIGHT*pos.piece_count(Color::Black, Piece::Knight);
-    phase += KNIGHT_PHASE_WEIGHT*pos.piece_count(Color::White, Piece::Bishop);
-    phase += KNIGHT_PHASE_WEIGHT*pos.piece_count(Color::Black, Piece::Bishop);
-    phase += ROOK_PHASE_WEIGHT*pos.piece_count(Color::White, Piece::Rook);
-    phase += ROOK_PHASE_WEIGHT*pos.piece_count(Color::Black, Piece::Rook);
-    phase += QUEEN_PHASE_WEIGHT*pos.piece_count(Color::White, Piece::Queen);
-    phase += QUEEN_PHASE_WEIGHT*pos.piece_count(Color::Black, Piece::Queen);
+    phase += PAWN_PHASE_WEIGHT * pos.piece_count(Color::White, Piece::Pawn);
+    phase += PAWN_PHASE_WEIGHT * pos.piece_count(Color::Black, Piece::Pawn);
+    phase += BISHOP_PHASE_WEIGHT * pos.piece_count(Color::White, Piece::Knight);
+    phase += BISHOP_PHASE_WEIGHT * pos.piece_count(Color::Black, Piece::Knight);
+    phase += KNIGHT_PHASE_WEIGHT * pos.piece_count(Color::White, Piece::Bishop);
+    phase += KNIGHT_PHASE_WEIGHT * pos.piece_count(Color::Black, Piece::Bishop);
+    phase += ROOK_PHASE_WEIGHT * pos.piece_count(Color::White, Piece::Rook);
+    phase += ROOK_PHASE_WEIGHT * pos.piece_count(Color::Black, Piece::Rook);
+    phase += QUEEN_PHASE_WEIGHT * pos.piece_count(Color::White, Piece::Queen);
+    phase += QUEEN_PHASE_WEIGHT * pos.piece_count(Color::Black, Piece::Queen);
     phase
 }
 
@@ -318,27 +378,37 @@ fn evaluate_king_safety(pos: &Position, moves_them: &MoveList, phase: i32) -> i3
         }
     }
     let (mut res_early, res_late) = if attackers.count() > 1 {
-        (((- safety * safety) / SCALE).clamp(-500,0), -safety)
-    } else {(0,0)};
+        (((-safety * safety) / SCALE).clamp(-500, 0), -safety)
+    } else {
+        (0, 0)
+    };
 
     //In the early game we want pawns to shield our king.
     match pos.color() {
         Color::White => {
             if king_pos < Square::C1 {
-                res_early += (BitBoard::new(0b111 << 8) &
-                        pos.get_board().get_bb(Color::White, Piece::Pawn)).count() as i32 * 5;
+                res_early += (BitBoard::new(0b111 << 8)
+                    & pos.get_board().get_bb(Color::White, Piece::Pawn))
+                .count() as i32
+                    * 5;
             } else if king_pos <= Square::H1 && king_pos > Square::E1 {
-                res_early += (BitBoard::new(0b11100000 << 8) &
-                        pos.get_board().get_bb(Color::White, Piece::Pawn)).count() as i32 * 5;
+                res_early += (BitBoard::new(0b11100000 << 8)
+                    & pos.get_board().get_bb(Color::White, Piece::Pawn))
+                .count() as i32
+                    * 5;
             }
-        },
+        }
         Color::Black => {
             if king_pos >= Square::A8 && king_pos < Square::C8 {
-                res_early += (BitBoard::new(0b111 << 48) &
-                        pos.get_board().get_bb(Color::Black, Piece::Pawn)).count() as i32 * 5;
+                res_early += (BitBoard::new(0b111 << 48)
+                    & pos.get_board().get_bb(Color::Black, Piece::Pawn))
+                .count() as i32
+                    * 5;
             } else if king_pos > Square::E8 {
-                res_early += (BitBoard::new(0b11100000 << 48) &
-                        pos.get_board().get_bb(Color::Black, Piece::Pawn)).count() as i32 * 5;
+                res_early += (BitBoard::new(0b11100000 << 48)
+                    & pos.get_board().get_bb(Color::Black, Piece::Pawn))
+                .count() as i32
+                    * 5;
             }
         }
     }
@@ -349,7 +419,7 @@ fn evaluate_king_safety(pos: &Position, moves_them: &MoveList, phase: i32) -> i3
 pub fn evaluate(pos: &mut Position) -> Eval {
     let phase = phase_factor(pos);
     let moves_us = pos.get_moves();
-    let mut res = pos.material_balance()*100 + 20;
+    let mut res = pos.material_balance() * 100 + 20;
     pos.switch_color();
     let moves_them = pos.get_moves();
     res += evaluate_mobility(&moves_us, &moves_them, phase);
@@ -377,10 +447,14 @@ pub fn evaluate(pos: &mut Position) -> Eval {
     //if we are heading into a pawnless endgame, we aim to have a material advantage of five or
     //higher
     let remaining_pawns = (pos.board.get_bb(Color::White, Piece::Pawn)
-                            | pos.board.get_bb(Color::Black, Piece::Pawn)).count();
+        | pos.board.get_bb(Color::Black, Piece::Pawn))
+    .count();
     //dampen eval quickly for low material difference
-    if remaining_pawns < 2 && pos.material_balance().abs() < 5 && pos.board.occupation().count() < 7 {
-        res /= ((5-pos.material_balance())*(5-pos.material_balance())/(remaining_pawns as i32 + 1)).clamp(1,25);
+    if remaining_pawns < 2 && pos.material_balance().abs() < 5 && pos.board.occupation().count() < 7
+    {
+        res /= ((5 - pos.material_balance()) * (5 - pos.material_balance())
+            / (remaining_pawns as i32 + 1))
+            .clamp(1, 25);
     }
 
     //adjust evaluation to be lower near 50 move rule, since possibility of improvement may be
@@ -391,11 +465,15 @@ pub fn evaluate(pos: &mut Position) -> Eval {
     Eval::new(Bound::Exact, Value::Centis(res))
 }
 
-pub fn order_moves(movs: &mut MoveList, pos: &Position,
-                   hash_move: Option<Move>, killers: &[Option<Move>; 2]) {
+pub fn order_moves(
+    movs: &mut MoveList,
+    pos: &Position,
+    hash_move: Option<Move>,
+    killers: &[Option<Move>; 2],
+) {
     movs.sort_unstable_by_key(|m| match m.typ { MoveType::Capture(_) => -pos.see(*m), _ => 200 } - if killers[0].map_or(false, |k| k == *m) || killers[1].map_or(false, |k| k == *m) {0} else {1});
-    if let Some(mov) = hash_move  {
-        movs.sort_by_key(|m| if *m == mov {0} else {1});
+    if let Some(mov) = hash_move {
+        movs.sort_by_key(|m| if *m == mov { 0 } else { 1 });
     }
 }
 
@@ -410,8 +488,14 @@ fn evaluate_start_pos() {
 
 #[test]
 fn bug_hunt() {
-    let mut pos = Position::from_fen(String::from("r6r/ppp1nkbp/3B2p1/4p3/1n2P3/2N3PP/qPP2PB1/2KR3R b - - 1 16")).unwrap();
+    let mut pos = Position::from_fen(String::from(
+        "r6r/ppp1nkbp/3B2p1/4p3/1n2P3/2N3PP/qPP2PB1/2KR3R b - - 1 16",
+    ))
+    .unwrap();
     println!("eval: {}", evaluate(&mut pos));
-    let mut pos2 = Position::from_fen(String::from("r6r/pp2nkbp/2nR2p1/4p3/4P3/4Q1PP/1PPKNPB1/q6R b - - 2 17")).unwrap();
+    let mut pos2 = Position::from_fen(String::from(
+        "r6r/pp2nkbp/2nR2p1/4p3/4P3/4Q1PP/1PPKNPB1/q6R b - - 2 17",
+    ))
+    .unwrap();
     println!("eval: {}", evaluate(&mut pos2));
 }

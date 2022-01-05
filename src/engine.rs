@@ -1,18 +1,18 @@
-use std::sync::mpsc::{Sender, Receiver};
 use std::fmt::Display;
 use std::io::{stdout, Write};
+use std::sync::mpsc::{Receiver, Sender};
 
 use crate::{
-    search::{SearchManager, SearchInfo},
-    chess::{Position, Color},
+    chess::{Color, Position},
+    search::{SearchInfo, SearchManager},
 };
 
-#[derive(Clone,PartialEq)]
+#[derive(Clone, PartialEq)]
 enum OptionValue {
     Check(bool),
     Spin(i64),
-//    COMBO(String),
-//    BUTTON,
+    //    COMBO(String),
+    //    BUTTON,
     String(String),
 }
 
@@ -21,8 +21,8 @@ impl Display for OptionValue {
         match self {
             Self::Check(b) => write!(f, "{}", b),
             Self::Spin(n) => write!(f, "{}", n),
-//            Self::COMBO(s) => write!(f, "{}", s),
-//            Self::BUTTON => write!(f, ""),
+            //            Self::COMBO(s) => write!(f, "{}", s),
+            //            Self::BUTTON => write!(f, ""),
             Self::String(s) => write!(f, "{}", s),
         }
     }
@@ -38,37 +38,46 @@ struct ConfigOption {
 }
 
 pub struct EngineConfig {
-    options: Vec<ConfigOption>
+    options: Vec<ConfigOption>,
 }
 
 impl EngineConfig {
     fn new() -> EngineConfig {
-        let options = vec![ ConfigOption {id: "Hash".to_string(),
-                                          value: OptionValue::Spin(128),
-                                          default: Some(OptionValue::Spin(128)),
-                                          min: Some(OptionValue::Spin(0)),
-                                          max: Some(OptionValue::Spin(8192)),
-                                          vars: None},
-                            ConfigOption {id: "Threads".to_string(),
-                                          value: OptionValue::Spin(4),
-                                          default: Some(OptionValue::Spin(4)),
-                                          min: Some(OptionValue::Spin(1)),
-                                          max: Some(OptionValue::Spin(8)),
-                                          vars: None},
-                            ConfigOption {id: "UseNNUE".to_string(),
-                                          value: OptionValue::Check(false),
-                                          default: Some(OptionValue::Check(false)),
-                                          min: None,
-                                          max: None,
-                                          vars: None},
-                            ConfigOption {id: "NNUEPath".to_string(),
-                                          value: OptionValue::String("nn-33c9d39e5eb6.nnue".to_string()),
-                                          default: Some(OptionValue::String("nn-33c9d39e5eb6.nnue".to_string())),
-                                          min: None,
-                                          max: None,
-                                          vars: None}
-                          ];
-        EngineConfig {options,}
+        let options = vec![
+            ConfigOption {
+                id: "Hash".to_string(),
+                value: OptionValue::Spin(128),
+                default: Some(OptionValue::Spin(128)),
+                min: Some(OptionValue::Spin(0)),
+                max: Some(OptionValue::Spin(8192)),
+                vars: None,
+            },
+            ConfigOption {
+                id: "Threads".to_string(),
+                value: OptionValue::Spin(4),
+                default: Some(OptionValue::Spin(4)),
+                min: Some(OptionValue::Spin(1)),
+                max: Some(OptionValue::Spin(8)),
+                vars: None,
+            },
+            ConfigOption {
+                id: "UseNNUE".to_string(),
+                value: OptionValue::Check(false),
+                default: Some(OptionValue::Check(false)),
+                min: None,
+                max: None,
+                vars: None,
+            },
+            ConfigOption {
+                id: "NNUEPath".to_string(),
+                value: OptionValue::String("nn-33c9d39e5eb6.nnue".to_string()),
+                default: Some(OptionValue::String("nn-33c9d39e5eb6.nnue".to_string())),
+                min: None,
+                max: None,
+                vars: None,
+            },
+        ];
+        EngineConfig { options }
     }
     fn print_config(&self) {
         for option in self.options.iter() {
@@ -76,8 +85,8 @@ impl EngineConfig {
             match option.value {
                 OptionValue::Spin(_) => print!("spin"),
                 OptionValue::Check(_) => print!("check"),
-//                OptionValue::COMBO(_) => print!("combo"),
-//                OptionValue::BUTTON => print!("button"),
+                //                OptionValue::COMBO(_) => print!("combo"),
+                //                OptionValue::BUTTON => print!("button"),
                 OptionValue::String(_) => print!("string"),
             }
             if option.default.is_some() {
@@ -103,24 +112,24 @@ impl EngineConfig {
     }
     pub fn set_option(&mut self, id: &str, value: &str) {
         let option = self.options.iter_mut().find(|o| o.id == id);
-        if option.is_none() {return;}
+        if option.is_none() {
+            return;
+        }
         match &mut option.unwrap().value {
             OptionValue::Spin(n) => {
                 let val = value.parse::<i64>();
                 if let Ok(k) = val {
                     *n = k;
                 }
-            },
+            }
             OptionValue::Check(b) => {
                 if value == "true" {
                     *b = true;
                 } else if value == "false" {
                     *b = false;
                 }
-            },
-            OptionValue::String(s) => {
-                *s = value.to_string()
-            },
+            }
+            OptionValue::String(s) => *s = value.to_string(),
         }
     }
 }
@@ -145,14 +154,26 @@ impl Engine {
     pub fn new() -> Engine {
         let config = EngineConfig::new();
         let mut search = SearchManager::new();
-        let threads = match config.get_option("Threads").unwrap() { OptionValue::Spin(n) => n, _ => 1 };
-        let hash_size = match config.get_option("Hash").unwrap() { OptionValue::Spin(n) => n, _ => 1 };
-        let use_nnue = match config.get_option("UseNNUE").unwrap() { OptionValue::Check(b) => b, _ => false };
+        let threads = match config.get_option("Threads").unwrap() {
+            OptionValue::Spin(n) => n,
+            _ => 1,
+        };
+        let hash_size = match config.get_option("Hash").unwrap() {
+            OptionValue::Spin(n) => n,
+            _ => 1,
+        };
+        let use_nnue = match config.get_option("UseNNUE").unwrap() {
+            OptionValue::Check(b) => b,
+            _ => false,
+        };
         search.set_threads(threads as usize);
         search.set_hash_size(hash_size as usize);
         search.set_use_nnue(use_nnue);
         if use_nnue {
-            let nnue_path = match config.get_option("NNUEPath").unwrap() { OptionValue::String(s) => s, _ => "".to_string() };
+            let nnue_path = match config.get_option("NNUEPath").unwrap() {
+                OptionValue::String(s) => s,
+                _ => "".to_string(),
+            };
             let path = std::path::Path::new(&nnue_path);
             crate::nnue::load_model(path).unwrap();
         }
@@ -177,7 +198,8 @@ impl Engine {
     }
     pub fn start_search(&mut self, depth: Option<u8>) {
         self.search_id += 1;
-        self.search.search(self.channel.0.clone(),depth, self.search_id);
+        self.search
+            .search(self.channel.0.clone(), depth, self.search_id);
     }
     pub fn stop_search(&mut self) {
         self.search.stop();
@@ -228,7 +250,7 @@ impl Engine {
             let mut total = 0;
             for m in pos.get_moves() {
                 pos.do_move(m);
-                total += Self::perft_step(pos, d-1);
+                total += Self::perft_step(pos, d - 1);
                 pos.undo_move();
             }
             total
@@ -240,19 +262,25 @@ impl Engine {
         let moves = pos.get_moves();
         let rootmove_len = (moves.len() as f64).log10().floor() as usize + 1;
         let mut counts = Vec::with_capacity(moves.len());
-        for (i,m) in moves.iter().enumerate() {
+        for (i, m) in moves.iter().enumerate() {
             pos.do_move(*m);
-            let m_count = Self::perft_step(&mut pos, d-1);
+            let m_count = Self::perft_step(&mut pos, d - 1);
             counts.push(m_count);
             total += m_count;
             pos.undo_move();
-            print!("\rMove {:>3$}/{}: {}", i+1, moves.len(), total, rootmove_len);
+            print!(
+                "\rMove {:>3$}/{}: {}",
+                i + 1,
+                moves.len(),
+                total,
+                rootmove_len
+            );
             stdout().flush().unwrap();
         }
         let numlen = (total as f64).log10().floor() as usize + 1;
         print!("\r{:>1$}\r", "", 14 + numlen);
-        for (m,c) in moves.iter().zip(counts) {
-            println!("{:<5}  {:>2$}", format!("{}",m), c, numlen);
+        for (m, c) in moves.iter().zip(counts) {
+            println!("{:<5}  {:>2$}", format!("{}", m), c, numlen);
         }
         println!("{:->1$}", "", numlen + 7);
         println!("Total  {}", total);
@@ -260,9 +288,9 @@ impl Engine {
 }
 
 impl Default for Engine {
-   fn default() -> Self {
-       Self::new()
-   }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[test]

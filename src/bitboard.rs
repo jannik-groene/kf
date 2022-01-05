@@ -1,18 +1,20 @@
-use std::ops::{BitAnd, BitOr, BitXor, BitAndAssign, BitOrAssign, BitXorAssign, Not, Index};
-use std::fmt;
 use crate::chess::Color;
 use bitintr::Pext;
+use std::fmt;
+use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Index, Not};
 
-#[derive(Copy,Clone,Debug,PartialEq,Eq,PartialOrd,Ord)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct BitBoard {
-    bits: u64
+    bits: u64,
 }
 
 impl BitAnd for BitBoard {
     type Output = Self;
     #[inline]
     fn bitand(self, rhs: Self) -> Self::Output {
-        BitBoard {bits: self.bits & rhs.bits}
+        BitBoard {
+            bits: self.bits & rhs.bits,
+        }
     }
 }
 
@@ -27,7 +29,9 @@ impl BitOr for BitBoard {
     type Output = Self;
     #[inline]
     fn bitor(self, rhs: Self) -> Self::Output {
-        BitBoard {bits: self.bits | rhs.bits}
+        BitBoard {
+            bits: self.bits | rhs.bits,
+        }
     }
 }
 
@@ -42,7 +46,9 @@ impl BitXor for BitBoard {
     type Output = Self;
     #[inline]
     fn bitxor(self, rhs: Self) -> Self::Output {
-        BitBoard {bits: self.bits ^ rhs.bits}
+        BitBoard {
+            bits: self.bits ^ rhs.bits,
+        }
     }
 }
 
@@ -57,27 +63,29 @@ impl Not for BitBoard {
     type Output = Self;
     #[inline]
     fn not(self) -> Self::Output {
-        BitBoard {bits: !self.bits}
+        BitBoard { bits: !self.bits }
     }
 }
 
 impl From<Square> for BitBoard {
     #[inline]
     fn from(sq: Square) -> Self {
-        BitBoard{ bits: 1 << u8::from(sq) }
+        BitBoard {
+            bits: 1 << u8::from(sq),
+        }
     }
 }
 
 impl From<u64> for BitBoard {
     #[inline]
     fn from(bits: u64) -> Self {
-        BitBoard {bits}
+        BitBoard { bits }
     }
 }
 
 impl BitBoard {
-    pub const EMPTY: Self = Self {bits: 0};
-    pub const FULL: Self = Self {bits: u64::MAX};
+    pub const EMPTY: Self = Self { bits: 0 };
+    pub const FULL: Self = Self { bits: u64::MAX };
     #[inline]
     pub const fn new(bits: u64) -> BitBoard {
         BitBoard { bits }
@@ -96,7 +104,7 @@ impl BitBoard {
     }
     #[inline]
     pub fn set(&mut self, sq: Square) {
-        *self |=  sq.into()
+        *self |= sq.into()
     }
     #[inline]
     pub fn unset(&mut self, sq: Square) {
@@ -116,25 +124,38 @@ impl BitBoard {
     }
     #[inline]
     pub fn shifted_forward(&self, c: Color) -> Self {
-        BitBoard { bits: match c {Color::White => self.bits << 8, Color::Black => self.bits >> 8}}
+        BitBoard {
+            bits: match c {
+                Color::White => self.bits << 8,
+                Color::Black => self.bits >> 8,
+            },
+        }
     }
     #[inline]
     pub fn shifted_by(&self, i: i32) -> Self {
         if i >= 0 {
-            BitBoard { bits: self.bits << i }
+            BitBoard {
+                bits: self.bits << i,
+            }
         } else {
-            BitBoard { bits: self.bits >> i.abs() }
+            BitBoard {
+                bits: self.bits >> i.abs(),
+            }
         }
     }
     #[inline]
     pub fn forward_of(s: Square, c: Color) -> Self {
-        let offset = (s.relative(c).rank() as u8 + 1)*8;
+        let offset = (s.relative(c).rank() as u8 + 1) * 8;
         if offset >= 64 {
             return BitBoard::EMPTY;
         }
         match c {
-            Color::White => BitBoard {bits: u64::MAX << offset},
-            Color::Black => BitBoard {bits: u64::MAX >> offset},
+            Color::White => BitBoard {
+                bits: u64::MAX << offset,
+            },
+            Color::Black => BitBoard {
+                bits: u64::MAX >> offset,
+            },
         }
     }
     #[inline]
@@ -166,20 +187,76 @@ impl IntoIterator for BitBoard {
     type IntoIter = BitBoardIterator;
     #[inline]
     fn into_iter(self) -> Self::IntoIter {
-        BitBoardIterator {board: self}
+        BitBoardIterator { board: self }
     }
 }
 
-#[derive(Copy,Clone,Debug,PartialEq,Eq,PartialOrd,Ord)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Square {
-    A1, B1, C1, D1, E1, F1, G1, H1,
-    A2, B2, C2, D2, E2, F2, G2, H2,
-    A3, B3, C3, D3, E3, F3, G3, H3,
-    A4, B4, C4, D4, E4, F4, G4, H4,
-    A5, B5, C5, D5, E5, F5, G5, H5,
-    A6, B6, C6, D6, E6, F6, G6, H6,
-    A7, B7, C7, D7, E7, F7, G7, H7,
-    A8, B8, C8, D8, E8, F8, G8, H8,
+    A1,
+    B1,
+    C1,
+    D1,
+    E1,
+    F1,
+    G1,
+    H1,
+    A2,
+    B2,
+    C2,
+    D2,
+    E2,
+    F2,
+    G2,
+    H2,
+    A3,
+    B3,
+    C3,
+    D3,
+    E3,
+    F3,
+    G3,
+    H3,
+    A4,
+    B4,
+    C4,
+    D4,
+    E4,
+    F4,
+    G4,
+    H4,
+    A5,
+    B5,
+    C5,
+    D5,
+    E5,
+    F5,
+    G5,
+    H5,
+    A6,
+    B6,
+    C6,
+    D6,
+    E6,
+    F6,
+    G6,
+    H6,
+    A7,
+    B7,
+    C7,
+    D7,
+    E7,
+    F7,
+    G7,
+    H7,
+    A8,
+    B8,
+    C8,
+    D8,
+    E8,
+    F8,
+    G8,
+    H8,
 }
 
 macro_rules! from_square {
@@ -216,12 +293,11 @@ impl Square {
     pub fn new<T: Into<u8>>(t: T) -> Square {
         let sq = t.into() as u8;
         assert!(sq < 64);
-        unsafe {std::mem::transmute(sq)}
+        unsafe { std::mem::transmute(sq) }
     }
     pub fn from_string(s: &str) -> Self {
         let mut bytes = s.bytes();
-        let idx = (bytes.next().unwrap() - b'a')
-                    + 8 * (bytes.next().unwrap() - b'1');
+        let idx = (bytes.next().unwrap() - b'a') + 8 * (bytes.next().unwrap() - b'1');
         Self::new(idx)
     }
     #[inline]
@@ -265,7 +341,12 @@ const RANKS: [char; 8] = ['1', '2', '3', '4', '5', '6', '7', '8'];
 
 impl fmt::Display for Square {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}{}", FILES[self.file() as usize], RANKS[self.rank() as usize])
+        write!(
+            f,
+            "{}{}",
+            FILES[self.file() as usize],
+            RANKS[self.rank() as usize]
+        )
     }
 }
 
@@ -276,7 +357,7 @@ impl<T, const N: usize> Index<Square> for [T; N] {
     }
 }
 
-#[derive(Copy,Clone,Debug,PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum File {
     A,
     B,
@@ -292,11 +373,11 @@ impl File {
     pub fn new<T: Into<u8>>(t: T) -> File {
         let f = t.into() as u8;
         assert!(f < 8);
-        unsafe {std::mem::transmute(f)}
+        unsafe { std::mem::transmute(f) }
     }
 }
 
-#[derive(Copy,Clone,Debug,PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Rank {
     First,
     Second,
@@ -312,7 +393,7 @@ impl Rank {
     pub fn new<T: Into<u8>>(t: T) -> Rank {
         let r = t.into() as u8;
         assert!(r < 8);
-        unsafe {std::mem::transmute(r)}
+        unsafe { std::mem::transmute(r) }
     }
     pub fn relative(&self, c: Color) -> Rank {
         match c {
