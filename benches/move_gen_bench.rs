@@ -15,10 +15,10 @@ fn attack_gen_in_opening(c: &mut Criterion<CyclesPerByte>) {
 fn do_move_en_passant(c: &mut Criterion<CyclesPerByte>) {
     let mut pos = chess::Position::from_fen(String::from("rnbqkbnr/pp3ppp/8/2pPp3/5P2/8/PPPP2PP/RNBQKBNR w KQkq c6 0 4")).unwrap();
     let m = chess::Move {
-        from: 35,
-        to: 42,
-        piece: chess::Piece::PAWN,
-        typ: chess::MoveType::ENPASSANT,
+        from: 35u8.into(),
+        to: 42u8.into(),
+        piece: chess::Piece::Pawn,
+        typ: chess::MoveType::Enpassant,
     };
     c.bench_function("do move en passant", |b| b.iter(|| {pos.do_move(m); pos.undo_move();}));
 }
