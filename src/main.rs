@@ -11,6 +11,7 @@ mod search;
 mod thread;
 mod tt;
 mod uci;
+mod constants;
 
 use crate::{engine::Engine, uci::UCIHandler};
 

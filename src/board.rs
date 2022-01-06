@@ -86,6 +86,10 @@ impl Board {
         None
     }
     #[inline]
+    pub fn king_square(&self, c: Color) -> Square{
+        self.get_bb(c, Piece::King).least_square()
+    }
+    #[inline]
     fn move_castling_rooks(&mut self, ksq: Square) {
         match ksq {
             Square::C1 => {

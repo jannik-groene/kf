@@ -3,6 +3,7 @@ name = "kf"
 version = "0.0.7"
 authors = ["jgroene <jannik.groene@gmail.com>"]
 edition = "2021"
+build="src/build.rs"
 
 [lib]
 name = "kf_internals"
@@ -25,11 +26,15 @@ opt-level = 3
 debug = true
 
 [dependencies]
+rand = "0.8.4"
 bitintr = { version = "0.3.0" }
-rand = "*"
 arrayvec = { version = "0.7.2" }
 lazy_static = "1.4.0"
 nnue = {path="../nnue"}
+
+[build-dependencies]
+bitintr = { version = "0.3.0" }
+rand = { version = "0.8.4", features = ["small_rng"] }
 
 [dev-dependencies]
 criterion = "0.3"

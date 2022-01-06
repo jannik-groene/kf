@@ -3,8 +3,7 @@ use std::iter::Iterator;
 
 pub use crate::bitboard::{BitBoard, File, Rank, Square};
 pub use crate::board::Board;
-
-mod constants;
+use crate::constants;
 
 //translate a fen symbol (kqbnrpKQBNRP) into a (Color, Piece) pair
 fn fen_to_type(c: char) -> Option<(Color, Piece)> {
@@ -22,30 +21,6 @@ fn fen_to_type(c: char) -> Option<(Color, Piece)> {
         'N' => Some((Color::White, Piece::Knight)),
         'P' => Some((Color::White, Piece::Pawn)),
         _ => None,
-    }
-}
-
-#[inline]
-fn get_zobrist_number(p: Piece, c: Color, sq: Square) -> u64 {
-    match c {
-        Color::White => match p {
-            Piece::King => constants::ZOBRIST_WHITE_KING_NUMBERS[sq],
-            Piece::Queen => constants::ZOBRIST_WHITE_QUEEN_NUMBERS[sq],
-            Piece::Bishop => constants::ZOBRIST_WHITE_BISHOP_NUMBERS[sq],
-            Piece::Knight => constants::ZOBRIST_WHITE_KNIGHT_NUMBERS[sq],
-            Piece::Rook => constants::ZOBRIST_WHITE_ROOK_NUMBERS[sq],
-            Piece::Pawn => constants::ZOBRIST_WHITE_PAWN_NUMBERS[sq],
-            Piece::Any => panic!("Invalid Piece"),
-        },
-        Color::Black => match p {
-            Piece::King => constants::ZOBRIST_BLACK_KING_NUMBERS[sq],
-            Piece::Queen => constants::ZOBRIST_BLACK_QUEEN_NUMBERS[sq],
-            Piece::Bishop => constants::ZOBRIST_BLACK_BISHOP_NUMBERS[sq],
-            Piece::Knight => constants::ZOBRIST_BLACK_KNIGHT_NUMBERS[sq],
-            Piece::Rook => constants::ZOBRIST_BLACK_ROOK_NUMBERS[sq],
-            Piece::Pawn => constants::ZOBRIST_BLACK_PAWN_NUMBERS[sq],
-            Piece::Any => panic!("Invalid Piece"),
-        },
     }
 }
 
@@ -147,53 +122,16 @@ fn determine_move_type(
 
 fn get_zobrist(board: &Board) -> u64 {
     let mut zobrist: u64 = 0;
-    for p in board.get_bb(Color::White, Piece::King) {
-        zobrist ^= constants::ZOBRIST_WHITE_KING_NUMBERS[p];
-    }
-    for p in board.get_bb(Color::White, Piece::Queen) {
-        zobrist ^= constants::ZOBRIST_WHITE_QUEEN_NUMBERS[p];
-    }
-    for p in board.get_bb(Color::White, Piece::Bishop) {
-        zobrist ^= constants::ZOBRIST_WHITE_BISHOP_NUMBERS[p];
-    }
-    for p in board.get_bb(Color::White, Piece::Knight) {
-        zobrist ^= constants::ZOBRIST_WHITE_KNIGHT_NUMBERS[p];
-    }
-    for p in board.get_bb(Color::White, Piece::Rook) {
-        zobrist ^= constants::ZOBRIST_WHITE_ROOK_NUMBERS[p];
-    }
-    for p in board.get_bb(Color::White, Piece::Pawn) {
-        zobrist ^= constants::ZOBRIST_WHITE_PAWN_NUMBERS[p];
-    }
-    for p in board.get_bb(Color::Black, Piece::King) {
-        zobrist ^= constants::ZOBRIST_BLACK_KING_NUMBERS[p];
-    }
-    for p in board.get_bb(Color::Black, Piece::Queen) {
-        zobrist ^= constants::ZOBRIST_BLACK_QUEEN_NUMBERS[p];
-    }
-    for p in board.get_bb(Color::Black, Piece::Bishop) {
-        zobrist ^= constants::ZOBRIST_BLACK_BISHOP_NUMBERS[p];
-    }
-    for p in board.get_bb(Color::Black, Piece::Knight) {
-        zobrist ^= constants::ZOBRIST_BLACK_KNIGHT_NUMBERS[p];
-    }
-    for p in board.get_bb(Color::Black, Piece::Rook) {
-        zobrist ^= constants::ZOBRIST_BLACK_ROOK_NUMBERS[p];
-    }
-    for p in board.get_bb(Color::Black, Piece::Pawn) {
-        zobrist ^= constants::ZOBRIST_BLACK_PAWN_NUMBERS[p];
+    let pieces = [Piece::King, Piece::Queen, Piece::Bishop, Piece::Knight, Piece::Rook, Piece::Pawn];
+    for piece in pieces {
+        for sq in board.get_bb(Color::White, piece) {
+            zobrist ^= constants::piece_zobrist(piece, Color::White, sq);
+        }
+        for sq in board.get_bb(Color::Black, piece) {
+            zobrist ^= constants::piece_zobrist(piece, Color::Black, sq);
+        }
     }
     zobrist
-}
-
-#[inline]
-pub fn get_neighbours(s: Square) -> BitBoard {
-    BitBoard::new(constants::NEIGHBOURS[s])
-}
-
-#[inline]
-pub fn get_next_neighbours(s: Square) -> BitBoard {
-    BitBoard::new(constants::NEXT_NEIGHBOURS[s])
 }
 
 #[derive(PartialEq, Clone, Copy, Debug)]
@@ -396,8 +334,8 @@ impl Position {
 
         let mut zobrist = get_zobrist(&board);
 
-        for i in 0..4 {
-            zobrist ^= constants::ZOBRIST_CASTLING_NUMBERS[i];
+        for i in [Square::C1, Square::C8, Square::G1, Square::G8] {
+            zobrist ^= constants::castle_zobrist(i);
         }
 
         Position {
@@ -449,7 +387,7 @@ impl Position {
                 if p == "w" {
                     pos.to_move = Color::White;
                 } else if p == "b" {
-                    pos.zobrist ^= constants::ZOBRIST_BLACK_NUMBER;
+                    pos.zobrist ^= constants::color_zobrist();
                     pos.to_move = Color::Black;
                 } else {
                     return None;
@@ -463,19 +401,19 @@ impl Position {
         if let Some(p) = fen_parts.next() {
             if p.contains('K') {
                 castling_legal[0][0] = true;
-                pos.zobrist ^= constants::ZOBRIST_CASTLING_NUMBERS[0];
+                pos.zobrist ^= constants::castle_zobrist(Square::G1);
             }
             if p.contains('Q') {
                 castling_legal[0][1] = true;
-                pos.zobrist ^= constants::ZOBRIST_CASTLING_NUMBERS[1];
+                pos.zobrist ^= constants::castle_zobrist(Square::C1);
             }
             if p.contains('k') {
                 castling_legal[1][0] = true;
-                pos.zobrist ^= constants::ZOBRIST_CASTLING_NUMBERS[2];
+                pos.zobrist ^= constants::castle_zobrist(Square::G8);
             }
             if p.contains('q') {
                 castling_legal[1][1] = true;
-                pos.zobrist ^= constants::ZOBRIST_CASTLING_NUMBERS[3];
+                pos.zobrist ^= constants::castle_zobrist(Square::G8);
             }
         }
 
@@ -488,7 +426,7 @@ impl Position {
                 _ => {
                     let sq = Square::from_string(p);
                     pos.ply_info.ep_square = Some(sq);
-                    pos.zobrist ^= constants::ZOBRIST_ENPASSANT_NUMBERS[sq.file() as usize];
+                    pos.zobrist ^= constants::enpassant_zobrist(sq.file());
                     pos.move_history.push(Move {
                         piece: Piece::Pawn,
                         from: sq.advance(pos.to_move),
@@ -514,47 +452,14 @@ impl Position {
         &self.board
     }
 
-    // Compute the knight moves from a given square using the lookup table
-    // Computes the possible moves from the least significant bit in the Square
-    #[inline]
-    fn knight_moves(&self, sq: Square) -> BitBoard {
-        BitBoard::new(constants::KNIGHT_MOVES[sq])
-    }
-
-    // Compute the rook moves from a given square using the lookup table and PEXT/PDEP boards
-    // Computes the possible moves from the least significant bit in the Square
-    #[inline]
-    fn rook_moves_for_occupation(&self, sq: Square, occ: BitBoard) -> BitBoard {
-        let moves = constants::ROOK_MOVES[sq];
-        BitBoard::new(
-            constants::ROOK_MMASK[occ.pext(moves) + constants::ROOK_MMASK_OFFSETS[sq] as usize],
-        )
-    }
-
     #[inline]
     fn rook_moves(&self, sq: Square) -> BitBoard {
-        self.rook_moves_for_occupation(sq, self.board.occupation())
-    }
-
-    // Compute the bishop moves from a given square using the lookup table and PEXT/PDEP boards
-    // Computes the possible moves from the least significant bit in the Square
-    #[inline]
-    fn bishop_moves_for_occupation(&self, sq: Square, occ: BitBoard) -> BitBoard {
-        let moves = constants::BISHOP_MOVES[sq];
-        BitBoard::new(
-            constants::BISHOP_MMASK[occ.pext(moves) + constants::BISHOP_MMASK_OFFSETS[sq] as usize],
-        )
+        constants::rook_moves(sq, self.board.occupation())
     }
 
     #[inline]
     fn bishop_moves(&self, sq: Square) -> BitBoard {
-        self.bishop_moves_for_occupation(sq, self.board.occupation())
-    }
-
-    // Compute the king moves from a given square using the lookup table
-    #[inline]
-    fn king_moves(&self, sq: Square) -> BitBoard {
-        BitBoard::new(constants::NEIGHBOURS[sq])
+        constants::bishop_moves(sq, self.board.occupation())
     }
 
     #[inline]
@@ -576,11 +481,6 @@ impl Position {
     }
 
     #[inline]
-    pub fn pawn_attacks(&self, sq: Square, c: Color) -> BitBoard {
-        BitBoard::new(constants::PAWN_ATTACKS[c as usize][sq as usize])
-    }
-
-    #[inline]
     pub fn generate_attack_table(&mut self) {
         let opp = self.to_move.other();
         let king_pos = self.board.get_bb(self.to_move, Piece::King);
@@ -596,7 +496,7 @@ impl Position {
         let pawns = self.board.get_bb(opp, Piece::Pawn);
 
         for pawn in pawns {
-            let attacked = self.pawn_attacks(pawn, opp);
+            let attacked = constants::pawn_attacks(pawn, opp);
 
             if !(attacked & king_pos).is_empty() {
                 self.ply_info.king_attackers.set(pawn);
@@ -609,7 +509,7 @@ impl Position {
         let knights = self.board.get_bb(opp, Piece::Knight);
 
         for knight in knights {
-            let attacked = self.knight_moves(knight);
+            let attacked = constants::knight_moves(knight);
 
             if !(attacked & king_pos).is_empty() {
                 self.ply_info.king_attackers.set(knight);
@@ -620,14 +520,14 @@ impl Position {
 
         //calculate squares attacked by king
         self.ply_info.attacked_squares |=
-            self.king_moves(self.board.get_bb(opp, Piece::King).least_square());
+            constants::king_moves(self.board.get_bb(opp, Piece::King).least_square());
 
         //calculate squares attacked by rooks
         let rook_moves_from_king = self.rook_moves(king_square);
         let rooks = self.board.get_bb(opp, Piece::Rook);
 
         for rook in rooks {
-            let attacked = self.rook_moves_for_occupation(rook, occupation);
+            let attacked = constants::rook_moves(rook, occupation);
 
             if !(attacked & king_pos).is_empty() {
                 self.ply_info.king_attackers.set(rook);
@@ -636,7 +536,7 @@ impl Position {
             self.ply_info.pinned_pieces |= attacked
                 & rook_moves_from_king
                 & self.board.occupation()
-                & BitBoard::new(constants::RAYS[king_square][rook]);
+                & constants::ray(king_square, rook);
 
             self.ply_info.attacked_squares |= attacked;
         }
@@ -646,7 +546,7 @@ impl Position {
         let bishops = self.board.get_bb(opp, Piece::Bishop);
 
         for bishop in bishops {
-            let attacked = self.bishop_moves_for_occupation(bishop, occupation);
+            let attacked = constants::bishop_moves(bishop, occupation);
 
             if !(attacked & king_pos).is_empty() {
                 self.ply_info.king_attackers.set(bishop);
@@ -655,7 +555,7 @@ impl Position {
             self.ply_info.pinned_pieces |= attacked
                 & bish_moves_from_king
                 & self.board.occupation()
-                & BitBoard::new(constants::RAYS[king_square][bishop]);
+                & constants::ray(king_square, bishop);
 
             self.ply_info.attacked_squares |= attacked;
         }
@@ -664,8 +564,8 @@ impl Position {
 
         //calculate squares attacked by queens
         for queen in queens {
-            let attacked_r = self.rook_moves_for_occupation(queen, occupation);
-            let attacked_b = self.bishop_moves_for_occupation(queen, occupation);
+            let attacked_r = constants::rook_moves(queen, occupation);
+            let attacked_b = constants::bishop_moves(queen, occupation);
 
             if !((attacked_r | attacked_b) & king_pos).is_empty() {
                 self.ply_info.king_attackers |= queen.into();
@@ -674,12 +574,12 @@ impl Position {
             self.ply_info.pinned_pieces |= attacked_r
                 & rook_moves_from_king
                 & self.board.occupation()
-                & BitBoard::new(constants::RAYS[king_square][queen]);
+                & constants::ray(king_square, queen);
 
             self.ply_info.pinned_pieces |= attacked_b
                 & bish_moves_from_king
                 & self.board.occupation()
-                & BitBoard::new(constants::RAYS[king_square][queen]);
+                & constants::ray(king_square, queen);
 
             self.ply_info.attacked_squares |= attacked_b | attacked_r;
         }
@@ -695,13 +595,10 @@ impl Position {
     ) {
         for pos in self.board.get_bb(self.to_move, p) {
             let mut pmoves = move_getter(pos);
-            pmoves &= pmoves ^ self.board.get_color_bb(self.to_move);
+            pmoves &= !self.board.get_color_bb(self.to_move);
 
             if !(self.ply_info.pinned_pieces & pos.into()).is_empty() {
-                pmoves &= BitBoard::new(
-                    constants::RAYS[pos]
-                        [self.board.get_bb(self.to_move, Piece::King).least_square()],
-                );
+                pmoves &= constants::ray(pos, self.board.king_square(self.to_move));
             }
 
             for m in pmoves {
@@ -725,20 +622,19 @@ impl Position {
             let cap_sq = esq.advance(self.to_move.other());
 
             if check_mask.is_set(esq) || check_mask.is_set(cap_sq) {
-                let cands = self.pawn_attacks(esq, self.to_move.other())
+                let cands = constants::pawn_attacks(esq, self.to_move.other())
                     & self.board.get_bb(self.to_move, Piece::Pawn);
 
                 for cand in cands {
-                    let kpos = self.board.get_bb(self.to_move, Piece::King);
+                    let ksq = self.board.king_square(self.to_move);
 
-                    let pin_ray = BitBoard::new(constants::RAYS[cand][kpos.least_square()]);
+                    let pin_ray = constants::ray(cand, ksq);
 
                     //Check if we expose the king by taking en passant
                     //See if our pawn is pinned
                     if (self.ply_info.pinned_pieces.is_set(cand) && !pin_ray.is_set(esq))
                         || (self.ply_info.pinned_pieces.is_set(cap_sq)
-                            && !BitBoard::new(constants::RAYS[cap_sq][kpos.least_square()])
-                                .is_set(esq))
+                            && !constants::ray(cap_sq, ksq).is_set(esq))
                     {
                         continue;
                     //Check for a double pin by a rook or queen.
@@ -749,7 +645,7 @@ impl Position {
                         occupation.unset(cand);
 
                         let k_ray = pin_ray
-                            & self.rook_moves_for_occupation(kpos.least_square(), occupation);
+                            & constants::rook_moves(ksq, occupation);
 
                         if !(k_ray & self.board.get_bb(self.to_move.other(), Piece::Rook))
                             .is_empty()
@@ -835,7 +731,7 @@ impl Position {
             let from = to.shifted_by(-direction * 8);
 
             if self.ply_info.pinned_pieces.is_set(from)
-                && !BitBoard::new(constants::RAYS[ksq][from]).is_set(to)
+                && !constants::ray(ksq, from).is_set(to)
             {
                 continue;
             }
@@ -853,7 +749,7 @@ impl Position {
             let from = to.shifted_by(-direction * 16);
 
             if self.ply_info.pinned_pieces.is_set(from)
-                && !BitBoard::new(constants::RAYS[ksq][from]).is_set(to)
+                && !constants::ray(ksq, from).is_set(to)
             {
                 continue;
             }
@@ -886,12 +782,12 @@ impl Position {
 
         //Push pawn captures
         for pawn in pawns {
-            let mut attacks = (self.pawn_attacks(pawn, self.to_move)
+            let mut attacks = (constants::pawn_attacks(pawn, self.to_move)
                 & self.board.get_color_bb(self.to_move.other()))
                 & check_mask;
 
             if self.ply_info.pinned_pieces.is_set(pawn) {
-                attacks &= BitBoard::new(constants::RAYS[ksq][pawn]);
+                attacks &= constants::ray(ksq, pawn);
             }
 
             for m in attacks {
@@ -931,7 +827,7 @@ impl Position {
 
         //Generate King moves first (except castling)
         let mut king_moves =
-            self.king_moves(self.board.get_bb(self.to_move, Piece::King).least_square());
+            constants::king_moves(self.board.get_bb(self.to_move, Piece::King).least_square());
         king_moves &= !self.board.get_color_bb(self.to_move);
         king_moves &= !self.ply_info.attacked_squares;
 
@@ -962,10 +858,9 @@ impl Position {
             self.ply_info.king_attackers
         //For any other piece we may also try to block
         } else if !self.ply_info.king_attackers.is_empty() {
-            BitBoard::new(
-                constants::CONNECTING_RAYS[self.ply_info.king_attackers.least_square()]
-                    [self.board.get_bb(self.to_move, Piece::King).least_square()],
-            ) ^ self.board.get_bb(self.to_move, Piece::King)
+            constants::ray_between(self.ply_info.king_attackers.least_square(),
+                                           self.board.king_square(self.to_move))
+            | self.ply_info.king_attackers
         } else {
             BitBoard::FULL
         };
@@ -993,7 +888,7 @@ impl Position {
 
         //generate knight moves
         self.get_piece_moves(
-            |sq: Square| -> BitBoard { self.knight_moves(sq) & check_mask },
+            |sq: Square| -> BitBoard { constants::knight_moves(sq) & check_mask },
             &mut moves,
             Piece::Knight,
         );
@@ -1025,36 +920,36 @@ impl Position {
         self.zobrist ^= match m.typ {
             MoveType::Castle => match m.to {
                 Square::C1 => {
-                    get_zobrist_number(Piece::King, Color::White, Square::E1)
-                        ^ get_zobrist_number(Piece::King, Color::White, Square::C1)
-                        ^ get_zobrist_number(Piece::Rook, Color::White, Square::A1)
-                        ^ get_zobrist_number(Piece::Rook, Color::White, Square::D1)
+                    constants::piece_zobrist(Piece::King, Color::White, Square::E1)
+                        ^ constants::piece_zobrist(Piece::King, Color::White, Square::C1)
+                        ^ constants::piece_zobrist(Piece::Rook, Color::White, Square::A1)
+                        ^ constants::piece_zobrist(Piece::Rook, Color::White, Square::D1)
                 }
                 Square::G1 => {
-                    get_zobrist_number(Piece::King, Color::White, Square::E1)
-                        ^ get_zobrist_number(Piece::King, Color::White, Square::G1)
-                        ^ get_zobrist_number(Piece::Rook, Color::White, Square::H1)
-                        ^ get_zobrist_number(Piece::Rook, Color::White, Square::F1)
+                    constants::piece_zobrist(Piece::King, Color::White, Square::E1)
+                        ^ constants::piece_zobrist(Piece::King, Color::White, Square::G1)
+                        ^ constants::piece_zobrist(Piece::Rook, Color::White, Square::H1)
+                        ^ constants::piece_zobrist(Piece::Rook, Color::White, Square::F1)
                 }
                 Square::C8 => {
-                    get_zobrist_number(Piece::King, Color::Black, Square::E8)
-                        ^ get_zobrist_number(Piece::King, Color::Black, Square::C8)
-                        ^ get_zobrist_number(Piece::Rook, Color::Black, Square::A8)
-                        ^ get_zobrist_number(Piece::Rook, Color::Black, Square::D8)
+                    constants::piece_zobrist(Piece::King, Color::Black, Square::E8)
+                        ^ constants::piece_zobrist(Piece::King, Color::Black, Square::C8)
+                        ^ constants::piece_zobrist(Piece::Rook, Color::Black, Square::A8)
+                        ^ constants::piece_zobrist(Piece::Rook, Color::Black, Square::D8)
                 }
                 Square::G8 => {
-                    get_zobrist_number(Piece::King, Color::Black, Square::E8)
-                        ^ get_zobrist_number(Piece::King, Color::Black, Square::G8)
-                        ^ get_zobrist_number(Piece::Rook, Color::Black, Square::H8)
-                        ^ get_zobrist_number(Piece::Rook, Color::Black, Square::F8)
+                    constants::piece_zobrist(Piece::King, Color::Black, Square::E8)
+                        ^ constants::piece_zobrist(Piece::King, Color::Black, Square::G8)
+                        ^ constants::piece_zobrist(Piece::Rook, Color::Black, Square::H8)
+                        ^ constants::piece_zobrist(Piece::Rook, Color::Black, Square::F8)
                 }
                 _ => 0,
             },
 
             MoveType::Enpassant => {
-                get_zobrist_number(Piece::Pawn, self.to_move, m.from)
-                    ^ get_zobrist_number(Piece::Pawn, self.to_move, m.to)
-                    ^ get_zobrist_number(
+                constants::piece_zobrist(Piece::Pawn, self.to_move, m.from)
+                    ^ constants::piece_zobrist(Piece::Pawn, self.to_move, m.to)
+                    ^ constants::piece_zobrist(
                         Piece::Pawn,
                         self.to_move.other(),
                         self.ply_info.ep_square.unwrap(),
@@ -1062,25 +957,25 @@ impl Position {
             }
 
             MoveType::Promotion(p) => {
-                get_zobrist_number(Piece::Pawn, self.to_move, m.from)
-                    ^ get_zobrist_number(p, self.to_move, m.to)
+                constants::piece_zobrist(Piece::Pawn, self.to_move, m.from)
+                    ^ constants::piece_zobrist(p, self.to_move, m.to)
             }
 
             MoveType::PromotionCapture((p, c)) => {
-                get_zobrist_number(Piece::Pawn, self.to_move, m.from)
-                    ^ get_zobrist_number(p, self.to_move, m.to)
-                    ^ get_zobrist_number(c, self.to_move.other(), m.to)
+                constants::piece_zobrist(Piece::Pawn, self.to_move, m.from)
+                    ^ constants::piece_zobrist(p, self.to_move, m.to)
+                    ^ constants::piece_zobrist(c, self.to_move.other(), m.to)
             }
 
             MoveType::Capture(c) => {
-                get_zobrist_number(m.piece, self.to_move, m.from)
-                    ^ get_zobrist_number(m.piece, self.to_move, m.to)
-                    ^ get_zobrist_number(c, self.to_move.other(), m.to)
+                constants::piece_zobrist(m.piece, self.to_move, m.from)
+                    ^ constants::piece_zobrist(m.piece, self.to_move, m.to)
+                    ^ constants::piece_zobrist(c, self.to_move.other(), m.to)
             }
 
             MoveType::Normal => {
-                get_zobrist_number(m.piece, self.to_move, m.from)
-                    ^ get_zobrist_number(m.piece, self.to_move, m.to)
+                constants::piece_zobrist(m.piece, self.to_move, m.from)
+                    ^ constants::piece_zobrist(m.piece, self.to_move, m.to)
             }
 
             _ => 0,
@@ -1088,7 +983,7 @@ impl Position {
 
         //Unset the Zobrist en passant flag, if necessary
         if let Some(esq) = self.ply_info.ep_square {
-            self.zobrist ^= constants::ZOBRIST_ENPASSANT_NUMBERS[esq.file() as usize];
+            self.zobrist ^= constants::enpassant_zobrist(esq.file());
         }
 
         //Check if a new en passant flag is to be set
@@ -1096,7 +991,7 @@ impl Position {
             && m.from.relative(self.to_move).rank() == Rank::Second
             && m.to.relative(self.to_move).rank() == Rank::Fourth
         {
-            self.zobrist ^= constants::ZOBRIST_ENPASSANT_NUMBERS[m.to.file() as usize];
+            self.zobrist ^= constants::enpassant_zobrist(m.to.file());
             self.ply_info.ep_square = Some(ep_square(m.to.file()).relative(self.to_move));
         } else {
             self.ply_info.ep_square = None;
@@ -1108,11 +1003,11 @@ impl Position {
         //If the king was moves we lose all castling rights
         if m.piece == Piece::King {
             if self.ply_info.castling_rights[self.to_move as usize][0] {
-                self.zobrist ^= constants::ZOBRIST_CASTLING_NUMBERS[2 * self.to_move as usize];
+                self.zobrist ^= constants::castle_zobrist(Square::G1.relative(self.to_move));
             }
 
             if self.ply_info.castling_rights[self.to_move as usize][1] {
-                self.zobrist ^= constants::ZOBRIST_CASTLING_NUMBERS[2 * self.to_move as usize + 1];
+                self.zobrist ^= constants::castle_zobrist(Square::C1.relative(self.to_move));
             }
 
             self.ply_info.castling_rights[self.to_move as usize] = [false, false];
@@ -1121,25 +1016,26 @@ impl Position {
         //Check if white's rooks are moved _or_ captured
         if self.ply_info.castling_rights[0][1] && (m.to == Square::A1 || m.from == Square::A1) {
             self.ply_info.castling_rights[0][1] = false;
-            self.zobrist ^= constants::ZOBRIST_CASTLING_NUMBERS[1];
+            self.zobrist ^= constants::castle_zobrist(Square::C1);
         } else if self.ply_info.castling_rights[0][0]
             && (m.to == Square::H1 || m.from == Square::H1)
         {
             self.ply_info.castling_rights[0][0] = false;
-            self.zobrist ^= constants::ZOBRIST_CASTLING_NUMBERS[0];
+            self.zobrist ^= constants::castle_zobrist(Square::G1);
         }
 
         //Check if black's rooks are moved _or_ captured
         if self.ply_info.castling_rights[1][0] && (m.to == Square::H8 || m.from == Square::H8) {
             self.ply_info.castling_rights[1][0] = false;
-            self.zobrist ^= constants::ZOBRIST_CASTLING_NUMBERS[2];
+            self.zobrist ^= constants::castle_zobrist(Square::G8);
         } else if self.ply_info.castling_rights[1][1]
             && (m.to == Square::A8 || m.from == Square::A8)
         {
             self.ply_info.castling_rights[1][1] = false;
-            self.zobrist ^= constants::ZOBRIST_CASTLING_NUMBERS[3];
+            self.zobrist ^= constants::castle_zobrist(Square::C8);
         }
     }
+
     pub fn do_move(&mut self, m: Move) {
         //Commit zobrist hash to history stack
         self.history.push(self.zobrist);
@@ -1163,7 +1059,7 @@ impl Position {
         self.ply_info.king_attackers = BitBoard::EMPTY;
 
         self.to_move = self.to_move.other();
-        self.zobrist ^= constants::ZOBRIST_BLACK_NUMBER;
+        self.zobrist ^= constants::color_zobrist();
 
         if m.piece == Piece::Pawn || matches!(m.typ, MoveType::Capture(_)) {
             self.ply_info.rule_50_count = 0;
@@ -1204,11 +1100,11 @@ impl Position {
 
         //Unset the Zobrist en passant flag, if necessary
         if let Some(esq) = self.ply_info.ep_square {
-            self.zobrist ^= constants::ZOBRIST_ENPASSANT_NUMBERS[esq.file() as usize];
+            self.zobrist ^= constants::enpassant_zobrist(esq.file());
         }
 
         self.to_move = self.to_move.other();
-        self.zobrist ^= constants::ZOBRIST_BLACK_NUMBER;
+        self.zobrist ^= constants::color_zobrist();
 
         //Reset state information
         self.ply_info_history.push(self.ply_info);
@@ -1266,8 +1162,8 @@ impl Position {
     #[allow(dead_code)]
     pub fn piece_attacks(&self, p: Piece, c: Color, from: Square, target: Square) -> bool {
         match p {
-            Piece::Pawn => self.pawn_attacks(from, c).is_set(target),
-            Piece::Knight => self.knight_moves(from).is_set(target),
+            Piece::Pawn => constants::pawn_attacks(from, c).is_set(target),
+            Piece::Knight => constants::knight_moves(from).is_set(target),
             Piece::Bishop => self.bishop_moves(from).is_set(target),
             Piece::Rook => self.rook_moves(from).is_set(target),
             Piece::Queen => (self.rook_moves(from) | self.bishop_moves(from)).is_set(target),
@@ -1339,12 +1235,12 @@ impl Position {
         let mut occupation = self.board.occupation();
 
         //We initialize pawn and knight attacks, since they do not depend on the occupation.
-        let mut attackers = (self.pawn_attacks(target, Color::White)
+        let mut attackers = (constants::pawn_attacks(target, Color::White)
             & self.board.get_bb(Color::Black, Piece::Pawn))
-            | (self.pawn_attacks(target, Color::Black)
+            | (constants::pawn_attacks(target, Color::Black)
                 & self.board.get_bb(Color::White, Piece::Pawn));
 
-        attackers |= self.knight_moves(target)
+        attackers |= constants::knight_moves(target)
             & (self.board.get_bb(Color::White, Piece::Knight)
                 | self.board.get_bb(Color::Black, Piece::Knight));
 
@@ -1372,14 +1268,14 @@ impl Position {
 
             color = color.other();
 
-            attackers |= self.bishop_moves_for_occupation(target, occupation)
+            attackers |= constants::bishop_moves(target, occupation)
                 & (self.board.get_bb(Color::Black, Piece::Bishop)
                     | self.board.get_bb(Color::White, Piece::Bishop)
                     | self.board.get_bb(Color::Black, Piece::Queen)
                     | self.board.get_bb(Color::White, Piece::Queen))
                 & occupation;
 
-            attackers |= self.rook_moves_for_occupation(target, occupation)
+            attackers |= constants::rook_moves(target, occupation)
                 & (self.board.get_bb(Color::Black, Piece::Rook)
                     | self.board.get_bb(Color::White, Piece::Rook)
                     | self.board.get_bb(Color::Black, Piece::Queen)
@@ -1433,13 +1329,12 @@ impl Position {
         };
 
         match final_piece {
-            Piece::Knight => self.knight_moves(kpos).is_set(m.to),
+            Piece::Knight => constants::knight_moves(kpos).is_set(m.to),
             Piece::Bishop => self.bishop_moves(kpos).is_set(m.to),
             Piece::Rook => self.rook_moves(kpos).is_set(m.to),
             Piece::Queen => (self.rook_moves(kpos) | self.bishop_moves(kpos)).is_set(m.to),
             Piece::Pawn => {
-                let attacked_sqs =
-                    BitBoard::new(constants::PAWN_ATTACKS[self.to_move as usize][m.to]);
+                let attacked_sqs = constants::pawn_attacks(m.to, self.to_move);
                 attacked_sqs.is_set(kpos)
             }
             _ => false,
@@ -1519,3 +1414,4 @@ fn compress_and_decompress_move() {
         }
     }
 }
+

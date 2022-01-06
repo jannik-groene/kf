@@ -1,10 +1,10 @@
 use crate::{
     chess::{
-        get_neighbours, get_next_neighbours, BitBoard, Board, Color, File, Move, MoveList,
-        MoveType, Piece, Position, Square,
+        BitBoard, Board, Color, File, Move, MoveList, MoveType, Piece, Position, Square,
     },
     eval::{Bound, Eval, Value},
     piecetables,
+    constants,
 };
 
 #[allow(dead_code)]
@@ -59,10 +59,10 @@ fn pawn_attacks(pos: &Position) -> (BitBoard, BitBoard) {
     let mut pawn_attacks_black = BitBoard::EMPTY;
 
     for pawn in pos.board.get_bb(Color::White, Piece::Pawn) {
-        pawn_attacks_white |= pos.pawn_attacks(pawn, Color::White);
+        pawn_attacks_white |= constants::pawn_attacks(pawn, Color::White);
     }
     for pawn in pos.board.get_bb(Color::Black, Piece::Pawn) {
-        pawn_attacks_black |= pos.pawn_attacks(pawn, Color::Black);
+        pawn_attacks_black |= constants::pawn_attacks(pawn, Color::Black);
     }
 
     match pos.color() {
@@ -365,8 +365,8 @@ fn evaluate_king_safety(pos: &Position, moves_them: &MoveList, phase: i32) -> i3
     const SCALE: i32 = 32;
     let mut safety = 0;
     let king_pos = pos.board.get_bb(pos.color(), Piece::King).least_square();
-    let king_neighbours = get_neighbours(king_pos);
-    let king_next_neighbours = get_next_neighbours(king_pos);
+    let king_neighbours = constants::neighbours(king_pos);
+    let king_next_neighbours = constants::next_neighbours(king_pos);
     let mut attackers = BitBoard::EMPTY;
     for m in moves_them {
         if king_neighbours.is_set(m.to) {

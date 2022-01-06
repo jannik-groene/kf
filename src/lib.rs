@@ -10,3 +10,4 @@ mod piecetables;
 mod search;
 mod thread;
 mod tt;
+mod constants;
