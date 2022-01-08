@@ -229,15 +229,19 @@ impl MainThread {
         }
         drop(writeln!(handle));
     }
+    #[inline]
     pub fn send_info(&self, io: EngineIO) {
         drop(self.sender.send(io));
     }
+    #[inline]
     pub fn search_info(&self) -> &SearchInfo {
         &self.search_info
     }
+    #[inline]
     pub fn search_info_mut(&mut self) -> &mut SearchInfo {
         &mut self.search_info
     }
+    #[inline]
     pub fn uses_nnue(&self) -> bool {
         self.use_nnue
     }
