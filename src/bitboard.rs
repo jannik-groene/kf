@@ -320,6 +320,34 @@ impl File {
         assert!(f < 8);
         unsafe { std::mem::transmute(f) }
     }
+
+    #[inline]
+    pub fn ep_cap_square(self) -> Square {
+        match self {
+            File::A => Square::A4,
+            File::B => Square::B4,
+            File::C => Square::C4,
+            File::D => Square::D4,
+            File::E => Square::E4,
+            File::F => Square::F4,
+            File::G => Square::G4,
+            File::H => Square::H4,
+        }
+    }
+
+    #[inline]
+    pub fn ep_square(self) -> Square {
+        match self {
+            File::A => Square::A3,
+            File::B => Square::B3,
+            File::C => Square::C3,
+            File::D => Square::D3,
+            File::E => Square::E3,
+            File::F => Square::F3,
+            File::G => Square::G3,
+            File::H => Square::H3,
+        }
+    }
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]

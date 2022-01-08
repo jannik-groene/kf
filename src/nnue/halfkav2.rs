@@ -1,4 +1,4 @@
-use crate::chess::{ep_cap_square, Color, Move, MoveType, Piece, Position, Square};
+use crate::chess::{Color, Move, MoveType, Piece, Position, Square};
 use arrayvec::ArrayVec;
 use nnue::features::{EnumerateFeatures, Feature, MoveFeatures, Perspective};
 
@@ -65,9 +65,9 @@ impl MoveFeatures<HalfKAv2Feature> for Move {
             ),
             MoveType::Enpassant => {
                 let cap_square = if our_piece {
-                    ep_cap_square(t.file())
+                    t.file().ep_cap_square()
                 } else {
-                    ep_cap_square(t.file()).flipped()
+                    t.file().ep_cap_square().flipped()
                 };
                 (
                     vec![HalfKAv2Feature::new(ksq, self.piece, t, our_piece)],

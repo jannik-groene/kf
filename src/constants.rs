@@ -1,11 +1,11 @@
 include!(concat!(env!("OUT_DIR"), "/constants.rs"));
 
-use crate::bitboard::{BitBoard, Square, File};
+use crate::bitboard::{BitBoard, File, Square};
 use crate::chess::{Color, Piece};
 
 #[inline]
 pub const fn piece_zobrist(p: Piece, c: Color, sq: Square) -> u64 {
-    match (c,p) {
+    match (c, p) {
         (Color::White, Piece::King) => WHITE_KING_ZOBRIST[sq as usize],
         (Color::White, Piece::Queen) => WHITE_QUEEN_ZOBRIST[sq as usize],
         (Color::White, Piece::Bishop) => WHITE_BISHOP_ZOBRIST[sq as usize],
@@ -29,7 +29,7 @@ pub const fn castle_zobrist(ksq: Square) -> u64 {
         Square::G1 => CASTLING_ZOBRIST[1],
         Square::C8 => CASTLING_ZOBRIST[2],
         Square::G8 => CASTLING_ZOBRIST[3],
-        _ => panic!("Invalid castling Square")
+        _ => panic!("Invalid castling Square"),
     }
 }
 
@@ -46,63 +46,63 @@ pub const fn color_zobrist() -> u64 {
 #[inline]
 pub fn rook_moves(from: Square, occupation: BitBoard) -> BitBoard {
     BitBoard::new(
-        ROOK_ATTACKS[ROOK_ATTACK_OFFSETS[from as usize] + occupation.pext(ROOK_MASKS[from as usize])]
+        ROOK_ATTACKS
+            [ROOK_ATTACK_OFFSETS[from as usize] + occupation.pext(ROOK_MASKS[from as usize])],
     )
 }
 
 #[inline]
 pub fn bishop_moves(from: Square, occupation: BitBoard) -> BitBoard {
     BitBoard::new(
-        BISHOP_ATTACKS[BISHOP_ATTACK_OFFSETS[from as usize] + occupation.pext(BISHOP_MASKS[from as usize])]
+        BISHOP_ATTACKS
+            [BISHOP_ATTACK_OFFSETS[from as usize] + occupation.pext(BISHOP_MASKS[from as usize])],
     )
 }
 
 #[inline]
 pub const fn knight_moves(from: Square) -> BitBoard {
-    BitBoard::new(
-        KNIGHT_ATTACKS[from as usize]
-    )
+    BitBoard::new(KNIGHT_ATTACKS[from as usize])
 }
 
 #[inline]
 pub const fn king_moves(from: Square) -> BitBoard {
-    BitBoard::new(
-        NEIGHBOURS[from as usize]
-    )
+    BitBoard::new(NEIGHBOURS[from as usize])
 }
 
 #[inline]
 pub const fn pawn_attacks(from: Square, c: Color) -> BitBoard {
-    BitBoard::new(
-        PAWN_ATTACKS[c as usize][from as usize]
-    )
+    BitBoard::new(PAWN_ATTACKS[c as usize][from as usize])
 }
 
 #[inline]
 pub fn ray(a: Square, b: Square) -> BitBoard {
-    BitBoard::new(
-        RAYS[a as usize][b as usize]
-    )
+    BitBoard::new(RAYS[a as usize][b as usize])
 }
 
 #[inline]
 pub fn ray_between(from: Square, to: Square) -> BitBoard {
-    BitBoard::new(
-        CONNECTING_RAYS[from as usize][to as usize]
-    )
+    BitBoard::new(CONNECTING_RAYS[from as usize][to as usize])
 }
 
 #[inline]
 pub const fn neighbours(sq: Square) -> BitBoard {
-    BitBoard::new(
-        NEIGHBOURS[sq as usize]
-    )
+    BitBoard::new(NEIGHBOURS[sq as usize])
 }
 
 #[inline]
 pub const fn next_neighbours(sq: Square) -> BitBoard {
-    BitBoard::new(
-        NEXT_NEIGHBOURS[sq as usize]
-    )
+    BitBoard::new(NEXT_NEIGHBOURS[sq as usize])
 }
 
+#[inline]
+pub const fn piece_value(p: Piece) -> i32 {
+    match p {
+        Piece::Pawn => 100,
+        Piece::Bishop => 300,
+        Piece::Knight => 300,
+        Piece::Rook => 500,
+        Piece::Queen => 900,
+        Piece::King => 10000,
+        Piece::Any => 0,
+    }
+}

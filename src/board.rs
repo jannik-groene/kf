@@ -1,5 +1,5 @@
 use crate::bitboard::{BitBoard, Square};
-use crate::chess::{ep_cap_square, Color, Move, MoveType, Piece};
+use crate::chess::{Color, Move, MoveType, Piece};
 use std::fmt;
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
@@ -86,7 +86,7 @@ impl Board {
         None
     }
     #[inline]
-    pub fn king_square(&self, c: Color) -> Square{
+    pub fn king_square(&self, c: Color) -> Square {
         self.get_bb(c, Piece::King).least_square()
     }
     #[inline]
@@ -125,9 +125,11 @@ impl Board {
         self.unset(m.from, us, m.piece);
         match m.typ {
             MoveType::Capture(p) | MoveType::PromotionCapture((_, p)) => self.unset(m.to, them, p),
-            MoveType::Enpassant => {
-                self.unset(ep_cap_square(m.to.file()).relative(them), them, Piece::Pawn)
-            }
+            MoveType::Enpassant => self.unset(
+                m.to.file().ep_cap_square().relative(them),
+                them,
+                Piece::Pawn,
+            ),
             MoveType::Castle => self.move_castling_rooks(m.to),
             _ => {}
         }
@@ -170,9 +172,11 @@ impl Board {
         self.unset(m.to, us, our_piece);
         match m.typ {
             MoveType::Capture(p) | MoveType::PromotionCapture((_, p)) => self.set(m.to, them, p),
-            MoveType::Enpassant => {
-                self.set(ep_cap_square(m.to.file()).relative(them), them, Piece::Pawn)
-            }
+            MoveType::Enpassant => self.set(
+                m.to.file().ep_cap_square().relative(them),
+                them,
+                Piece::Pawn,
+            ),
             MoveType::Castle => self.undo_move_castling_rooks(m.to),
             _ => {}
         }

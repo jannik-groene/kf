@@ -4,6 +4,7 @@ use std::time::Instant;
 
 use crate::{
     chess::{Color, Move, MoveType, Piece, Position},
+    constants::piece_value,
     engine::EngineIO,
     eval::{Bound, Eval, Value},
     evaluate::{has_major_pieces, has_minor_pieces, is_material_draw, order_moves},
@@ -547,9 +548,9 @@ fn quiesce(thread: &mut impl Thread, mut alpha: Eval, beta: Eval, delta: i32, qp
         }
         cand_moves.sort_by_key(|m| match m.typ {
             MoveType::Capture(_) => thread.pos().see(*m),
-            MoveType::Promotion(p) => p.value() - Piece::Pawn.value(),
+            MoveType::Promotion(p) => piece_value(p) - piece_value(Piece::Pawn),
             MoveType::PromotionCapture((p_prom, p_cap)) => {
-                p_prom.value() + p_cap.value() - Piece::Pawn.value()
+                piece_value(p_prom) + piece_value(p_cap) - piece_value(Piece::Pawn)
             }
             _ => 0,
         });

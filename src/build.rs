@@ -3,7 +3,7 @@ use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 
-use bitintr::{Pext, Pdep};
+use bitintr::{Pdep, Pext};
 use rand::{self, Rng, SeedableRng};
 
 fn write_pawn_attacks(f: &mut File) {
@@ -33,15 +33,13 @@ fn write_pawn_attacks(f: &mut File) {
 }
 
 fn write_knight_attacks(f: &mut File) {
-    let moves = [6,15,17,10,-10,-17,-15,-6];
+    let moves = [6, 15, 17, 10, -10, -17, -15, -6];
 
     writeln!(f, "const KNIGHT_ATTACKS: [u64; 64] = [").unwrap();
     for sq in 0i32..64 {
         let mut attacks = 0u64;
         for m in moves {
-            if (0..64).contains(&(sq+m))
-                && ((sq + m) % 8 - sq % 8).abs() <= 2
-            {
+            if (0..64).contains(&(sq + m)) && ((sq + m) % 8 - sq % 8).abs() <= 2 {
                 attacks |= 1 << (sq + m);
             }
         }
@@ -51,26 +49,28 @@ fn write_knight_attacks(f: &mut File) {
 }
 
 fn write_neighbours(f: &mut File) {
-    let moves = [-1,7,8,9,1,-9,-8,-7];
+    let moves = [-1, 7, 8, 9, 1, -9, -8, -7];
     writeln!(f, "const NEIGHBOURS: [u64; 64] = [").unwrap();
     for sq in 0i32..64 {
         let mut attacks = 0u64;
         for m in moves {
-            if (0..64).contains(&(sq+m)) && ((sq+m) % 8 - sq % 8).abs() <= 1 {
-                attacks |= 1 << (sq+m);
+            if (0..64).contains(&(sq + m)) && ((sq + m) % 8 - sq % 8).abs() <= 1 {
+                attacks |= 1 << (sq + m);
             }
         }
         write!(f, "0x{:x},", attacks).unwrap();
     }
     writeln!(f, "\n];").unwrap();
 
-    let moves = [-2,6,14,15,16,17,18,10,2,-10,-18,-17,-16,-15,-14,-6];
+    let moves = [
+        -2, 6, 14, 15, 16, 17, 18, 10, 2, -10, -18, -17, -16, -15, -14, -6,
+    ];
     writeln!(f, "const NEXT_NEIGHBOURS: [u64; 64] = [").unwrap();
     for sq in 0i32..64 {
         let mut attacks = 0u64;
         for m in moves {
-            if (0..64).contains(&(sq+m)) && ((sq+m) % 8 - sq % 8).abs() <= 2 {
-                attacks |= 1 << (sq+m);
+            if (0..64).contains(&(sq + m)) && ((sq + m) % 8 - sq % 8).abs() <= 2 {
+                attacks |= 1 << (sq + m);
             }
         }
         write!(f, "0x{:x},", attacks).unwrap();
@@ -78,12 +78,13 @@ fn write_neighbours(f: &mut File) {
     writeln!(f, "\n];").unwrap();
 }
 
-const BORDER: u64 = 0b1111_1111_1000_0001_1000_0001_1000_0001_1000_0001_1000_0001_1000_0001_1111_1111;
+const BORDER: u64 =
+    0b1111_1111_1000_0001_1000_0001_1000_0001_1000_0001_1000_0001_1000_0001_1111_1111;
 
 fn go_in_direction(mut base: i32, dir: i32, blockers: u64) -> u64 {
     let mut attacks = 0;
-    while (0..64).contains(&(base+dir))
-        && ((base+dir) % 8 - base % 8).abs() <= 1
+    while (0..64).contains(&(base + dir))
+        && ((base + dir) % 8 - base % 8).abs() <= 1
         && (1 << base) & blockers == 0
     {
         attacks |= 1 << (base + dir);
@@ -93,7 +94,7 @@ fn go_in_direction(mut base: i32, dir: i32, blockers: u64) -> u64 {
 }
 
 fn write_bishop_attacks(f: &mut File) {
-    let dirs = [7,9,-7,-9];
+    let dirs = [7, 9, -7, -9];
 
     let mut masks = Vec::new();
     writeln!(f, "const BISHOP_MASKS: [u64; 64] = [").unwrap();
@@ -133,14 +134,14 @@ fn write_bishop_attacks(f: &mut File) {
 }
 
 fn write_rook_attacks(f: &mut File) {
-    let dirs = [-1,8,1,-8];
+    let dirs = [-1, 8, 1, -8];
     let borders: [u64; 4] = [0x0101010101010101, 0xff << 56, 0x8080808080808080, 0xff];
 
     let mut masks = Vec::new();
     writeln!(f, "const ROOK_MASKS: [u64; 64] = [").unwrap();
     for sq in 0..64 {
         let mut mask = 0;
-        for (d,b) in dirs.iter().zip(borders) {
+        for (d, b) in dirs.iter().zip(borders) {
             mask |= go_in_direction(sq, *d, 0) & !b;
         }
         write!(f, "0x{:x},", mask).unwrap();
@@ -178,17 +179,19 @@ fn write_rays(f: &mut File) {
     for a in 0..64 {
         writeln!(f, "[").unwrap();
         for b in 0..64 {
-            let (xa,ya) = (a % 8, a / 8);
-            let (xb,yb) = (b % 8, b / 8);
+            let (xa, ya) = (a % 8, a / 8);
+            let (xb, yb) = (b % 8, b / 8);
             let ray = if a == b {
                 0
             } else if xa == xb {
                 (1 << a) | go_in_direction(a, 8, 0) | go_in_direction(a, -8, 0)
             } else if ya == yb {
                 (1 << a) | go_in_direction(a, 1, 0) | go_in_direction(a, -1, 0)
-            } else if xa - xb == ya - yb { //diagonal
+            } else if xa - xb == ya - yb {
+                //diagonal
                 (1 << a) | go_in_direction(a, 9, 0) | go_in_direction(a, -9, 0)
-            } else if xa - xb == yb - ya { //anti-diagonal
+            } else if xa - xb == yb - ya {
+                //anti-diagonal
                 (1 << a) | go_in_direction(a, 7, 0) | go_in_direction(a, -7, 0)
             } else {
                 0
@@ -205,17 +208,19 @@ fn write_connecting_rays(f: &mut File) {
     for a in 0..64 {
         writeln!(f, "[").unwrap();
         for b in 0..64 {
-            let from = i32::min(a,b);
-            let to = i32::max(a,b);
+            let from = i32::min(a, b);
+            let to = i32::max(a, b);
             let ray = if from == to {
                 0
             } else if from % 8 == to % 8 {
                 go_in_direction(from, 8, 1 << (to - 8))
             } else if from / 8 == to / 8 {
                 go_in_direction(from, 1, 1 << (to - 1))
-            } else if from % 8 - to % 8 == from / 8 - to / 8 { //diagonal
+            } else if from % 8 - to % 8 == from / 8 - to / 8 {
+                //diagonal
                 go_in_direction(from, 9, 1 << (to - 9))
-            } else if from % 8 - to % 8 == to / 8 - from / 8 { //anti-diagonal
+            } else if from % 8 - to % 8 == to / 8 - from / 8 {
+                //anti-diagonal
                 go_in_direction(from, 7, 1 << (to - 7))
             } else {
                 0

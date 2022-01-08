@@ -1,10 +1,8 @@
 use crate::{
-    chess::{
-        BitBoard, Board, Color, File, Move, MoveList, MoveType, Piece, Position, Square,
-    },
+    chess::{BitBoard, Board, Color, File, Move, MoveList, MoveType, Piece, Position, Square},
+    constants,
     eval::{Bound, Eval, Value},
     piecetables,
-    constants,
 };
 
 #[allow(dead_code)]

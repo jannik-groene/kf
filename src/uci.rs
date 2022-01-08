@@ -172,7 +172,7 @@ impl UCIHandler for Engine {
         };
         if tokens.len() > offset && tokens[offset] == "moves" {
             for m in tokens[offset + 1..].iter() {
-                pos.do_move(Move::from_str(m, &pos));
+                pos.do_move(Move::from_str(m, pos.get_board()));
             }
         }
         self.set_position(pos)

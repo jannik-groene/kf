@@ -359,7 +359,7 @@ fn undo_moves() {
         "rnbq1bnr/pppkpPpp/8/8/8/3p4/PPPP1PPP/RNBQKBNR w KQ - 1 5",
     ))
     .unwrap();
-    let mov5 = chess::Move::from_str("f7g8q", &pos);
+    let mov5 = chess::Move::from_str("f7g8q", pos.get_board());
     pos.do_move(mov5);
     pos.undo_move();
     //random checks

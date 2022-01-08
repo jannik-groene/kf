@@ -1,9 +1,9 @@
-use std::fmt;
 use std::iter::Iterator;
 
 pub use crate::bitboard::{BitBoard, File, Rank, Square};
 pub use crate::board::Board;
 use crate::constants;
+pub use crate::moves::{CompressedMove, Move, MoveList, MoveType};
 
 //translate a fen symbol (kqbnrpKQBNRP) into a (Color, Piece) pair
 fn fen_to_type(c: char) -> Option<(Color, Piece)> {
@@ -21,34 +21,6 @@ fn fen_to_type(c: char) -> Option<(Color, Piece)> {
         'N' => Some((Color::White, Piece::Knight)),
         'P' => Some((Color::White, Piece::Pawn)),
         _ => None,
-    }
-}
-
-#[inline]
-pub fn ep_cap_square(file: File) -> Square {
-    match file {
-        File::A => Square::A4,
-        File::B => Square::B4,
-        File::C => Square::C4,
-        File::D => Square::D4,
-        File::E => Square::E4,
-        File::F => Square::F4,
-        File::G => Square::G4,
-        File::H => Square::H4,
-    }
-}
-
-#[inline]
-fn ep_square(file: File) -> Square {
-    match file {
-        File::A => Square::A3,
-        File::B => Square::B3,
-        File::C => Square::C3,
-        File::D => Square::D3,
-        File::E => Square::E3,
-        File::F => Square::F3,
-        File::G => Square::G3,
-        File::H => Square::H3,
     }
 }
 
@@ -79,50 +51,16 @@ pub fn from_fen(s: &str) -> Option<Board> {
     Some(board)
 }
 
-fn determine_move_type(
-    board: &Board,
-    from: Square,
-    to: Square,
-    piece: Piece,
-    promote: Option<Piece>,
-) -> MoveType {
-    match piece {
-        Piece::King => {
-            if piece == Piece::King && from == Square::E1 && (to == Square::G1 || to == Square::C1)
-            {
-                return MoveType::Castle;
-            }
-            if piece == Piece::King && from == Square::E8 && (to == Square::G8 || to == Square::C8)
-            {
-                return MoveType::Castle;
-            }
-        }
-        Piece::Pawn => {
-            if !board.occupation().is_set(to) && to.file() != from.file() {
-                return MoveType::Enpassant;
-            } else if promote.is_some() {
-                if board.occupation().is_set(to) {
-                    return MoveType::PromotionCapture((
-                        promote.unwrap(),
-                        board.piece_at(to).unwrap(),
-                    ));
-                } else {
-                    return MoveType::Promotion(promote.unwrap());
-                }
-            }
-        }
-        _ => {}
-    }
-    if board.occupation().is_set(to) {
-        MoveType::Capture(board.piece_at(to).unwrap())
-    } else {
-        MoveType::Normal
-    }
-}
-
 fn get_zobrist(board: &Board) -> u64 {
     let mut zobrist: u64 = 0;
-    let pieces = [Piece::King, Piece::Queen, Piece::Bishop, Piece::Knight, Piece::Rook, Piece::Pawn];
+    let pieces = [
+        Piece::King,
+        Piece::Queen,
+        Piece::Bishop,
+        Piece::Knight,
+        Piece::Rook,
+        Piece::Pawn,
+    ];
     for piece in pieces {
         for sq in board.get_bb(Color::White, piece) {
             zobrist ^= constants::piece_zobrist(piece, Color::White, sq);
@@ -135,132 +73,6 @@ fn get_zobrist(board: &Board) -> u64 {
 }
 
 #[derive(PartialEq, Clone, Copy, Debug)]
-pub enum MoveType {
-    Normal,
-    Capture(Piece),
-    Promotion(Piece),
-    PromotionCapture((Piece, Piece)),
-    Enpassant,
-    Castle,
-    Null,
-}
-
-#[derive(PartialEq, Clone, Copy, Debug)]
-pub struct Move {
-    pub piece: Piece,
-    pub from: Square,
-    pub to: Square,
-    pub typ: MoveType,
-}
-
-impl Move {
-    pub fn from_str(s: &str, pos: &Position) -> Move {
-        let mut chars = s.chars();
-        let mut from = chars.next().unwrap() as u8 - b'a';
-        from += 8 * (chars.next().unwrap() as u8 - b'1');
-        let mut to = chars.next().unwrap() as u8 - b'a';
-        to += 8 * (chars.next().unwrap() as u8 - b'1');
-        let piece = pos.board.piece_at(from.into()).unwrap();
-        let prom = match chars.next() {
-            Some('q') => Some(Piece::Queen),
-            Some('r') => Some(Piece::Rook),
-            Some('b') => Some(Piece::Bishop),
-            Some('n') => Some(Piece::Knight),
-            _ => None,
-        };
-        Move {
-            from: from.into(),
-            to: to.into(),
-            piece,
-            typ: determine_move_type(&pos.board, from.into(), to.into(), piece, prom),
-        }
-    }
-    pub fn compress(&self) -> CompressedMove {
-        let mut piece_and_type = self.piece as u16;
-        piece_and_type |= match self.typ {
-            MoveType::Normal => 0,
-            MoveType::Capture(p) => ((p as u16) << 3) | (1 << 9),
-            MoveType::Promotion(p) => ((p as u16) << 3) | (2 << 9),
-            MoveType::PromotionCapture((p, q)) => ((p as u16) << 3) | ((q as u16) << 6) | (3 << 9),
-            MoveType::Castle => 4 << 9,
-            MoveType::Enpassant => 5 << 9,
-            MoveType::Null => panic!("Cannot compress null move."),
-        };
-        CompressedMove {
-            piece_and_type,
-            from: self.from.into(),
-            to: self.to.into(),
-        }
-    }
-}
-
-#[derive(Copy, Clone, PartialEq, Default)]
-pub struct CompressedMove {
-    pub piece_and_type: u16,
-    pub to: u8,
-    pub from: u8,
-}
-
-impl CompressedMove {
-    pub fn decompress(&self) -> Option<Move> {
-        let piece = u16_to_piece(self.piece_and_type & 0b111);
-        let typ = match self.piece_and_type >> 9 {
-            0 => MoveType::Normal,
-            1 => MoveType::Capture(u16_to_piece((self.piece_and_type >> 3) & 0b111)),
-            2 => MoveType::Promotion(u16_to_piece((self.piece_and_type >> 3) & 0b111)),
-            3 => MoveType::PromotionCapture((
-                u16_to_piece((self.piece_and_type >> 3) & 0b111),
-                u16_to_piece((self.piece_and_type >> 6) & 0b111),
-            )),
-            4 => MoveType::Castle,
-            5 => MoveType::Enpassant,
-            _ => return None,
-        };
-        Some(Move {
-            from: self.from.into(),
-            to: self.to.into(),
-            piece,
-            typ,
-        })
-    }
-}
-
-pub type MoveList = arrayvec::ArrayVec<Move, 256>;
-
-fn display_promotion(m: &Move) -> String {
-    match m.typ {
-        MoveType::Promotion(Piece::Queen) => "q".to_string(),
-        MoveType::Promotion(Piece::Rook) => "r".to_string(),
-        MoveType::Promotion(Piece::Bishop) => "b".to_string(),
-        MoveType::Promotion(Piece::Knight) => "n".to_string(),
-        MoveType::PromotionCapture((Piece::Queen, _)) => "q".to_string(),
-        MoveType::PromotionCapture((Piece::Rook, _)) => "r".to_string(),
-        MoveType::PromotionCapture((Piece::Bishop, _)) => "b".to_string(),
-        MoveType::PromotionCapture((Piece::Knight, _)) => "n".to_string(),
-        _ => "".to_string(),
-    }
-}
-
-impl fmt::Display for Move {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}{}{}", self.from, self.to, display_promotion(self))
-    }
-}
-
-#[inline]
-fn u16_to_piece(p: u16) -> Piece {
-    match p {
-        0 => Piece::King,
-        1 => Piece::Queen,
-        2 => Piece::Bishop,
-        3 => Piece::Knight,
-        4 => Piece::Rook,
-        5 => Piece::Pawn,
-        _ => panic!("Tried to decompress invalid move."),
-    }
-}
-
-#[derive(PartialEq, Clone, Copy, Debug)]
 pub enum Piece {
     King,
     Queen,
@@ -269,20 +81,6 @@ pub enum Piece {
     Rook,
     Pawn,
     Any,
-}
-
-impl Piece {
-    pub fn value(self) -> i32 {
-        match self {
-            Self::Pawn => 100,
-            Self::Bishop => 300,
-            Self::Knight => 300,
-            Self::Rook => 500,
-            Self::Queen => 900,
-            Self::King => 10000,
-            Self::Any => 0,
-        }
-    }
 }
 
 #[derive(PartialEq, Clone, Copy, Debug)]
@@ -447,9 +245,36 @@ impl Position {
         Some(pos)
     }
 
+    //Create a new position in whch the move was applied
+    pub fn from_move(&self, m: Move) -> Position {
+        let mut pos = self.clone();
+        pos.do_move(m);
+        pos
+    }
+
     #[inline]
     pub fn get_board(&self) -> &Board {
         &self.board
+    }
+
+    #[inline]
+    pub fn is_threefold(&self) -> bool {
+        self.history.iter().filter(|x| **x == self.zobrist).count() > 1
+    }
+
+    #[inline]
+    pub fn is_repetition(&self) -> bool {
+        self.history.iter().filter(|x| **x == self.zobrist).count() > 0
+    }
+
+    #[inline]
+    pub fn rule_50_count(&self) -> u8 {
+        self.ply_info.rule_50_count
+    }
+
+    #[inline]
+    pub fn color(&self) -> Color {
+        self.to_move
     }
 
     #[inline]
@@ -564,24 +389,19 @@ impl Position {
 
         //calculate squares attacked by queens
         for queen in queens {
-            let attacked_r = constants::rook_moves(queen, occupation);
-            let attacked_b = constants::bishop_moves(queen, occupation);
+            let attacked = constants::rook_moves(queen, occupation)
+                | constants::bishop_moves(queen, occupation);
 
-            if !((attacked_r | attacked_b) & king_pos).is_empty() {
+            if !(attacked & king_pos).is_empty() {
                 self.ply_info.king_attackers |= queen.into();
             }
 
-            self.ply_info.pinned_pieces |= attacked_r
-                & rook_moves_from_king
+            self.ply_info.pinned_pieces |= attacked
+                & (rook_moves_from_king | bish_moves_from_king)
                 & self.board.occupation()
                 & constants::ray(king_square, queen);
 
-            self.ply_info.pinned_pieces |= attacked_b
-                & bish_moves_from_king
-                & self.board.occupation()
-                & constants::ray(king_square, queen);
-
-            self.ply_info.attacked_squares |= attacked_b | attacked_r;
+            self.ply_info.attacked_squares |= attacked;
         }
     }
 
@@ -644,8 +464,7 @@ impl Position {
                         occupation.unset(cap_sq);
                         occupation.unset(cand);
 
-                        let k_ray = pin_ray
-                            & constants::rook_moves(ksq, occupation);
+                        let k_ray = pin_ray & constants::rook_moves(ksq, occupation);
 
                         if !(k_ray & self.board.get_bb(self.to_move.other(), Piece::Rook))
                             .is_empty()
@@ -730,9 +549,7 @@ impl Position {
         for to in advances & check_mask {
             let from = to.shifted_by(-direction * 8);
 
-            if self.ply_info.pinned_pieces.is_set(from)
-                && !constants::ray(ksq, from).is_set(to)
-            {
+            if self.ply_info.pinned_pieces.is_set(from) && !constants::ray(ksq, from).is_set(to) {
                 continue;
             }
 
@@ -748,9 +565,7 @@ impl Position {
         for to in double_advances & check_mask {
             let from = to.shifted_by(-direction * 16);
 
-            if self.ply_info.pinned_pieces.is_set(from)
-                && !constants::ray(ksq, from).is_set(to)
-            {
+            if self.ply_info.pinned_pieces.is_set(from) && !constants::ray(ksq, from).is_set(to) {
                 continue;
             }
 
@@ -858,9 +673,10 @@ impl Position {
             self.ply_info.king_attackers
         //For any other piece we may also try to block
         } else if !self.ply_info.king_attackers.is_empty() {
-            constants::ray_between(self.ply_info.king_attackers.least_square(),
-                                           self.board.king_square(self.to_move))
-            | self.ply_info.king_attackers
+            constants::ray_between(
+                self.ply_info.king_attackers.least_square(),
+                self.board.king_square(self.to_move),
+            ) | self.ply_info.king_attackers
         } else {
             BitBoard::FULL
         };
@@ -904,83 +720,8 @@ impl Position {
     }
 
     #[inline]
-    pub fn color(&self) -> Color {
-        self.to_move
-    }
-
-    //Create a new position in whch the move was applied
-    pub fn from_move(&self, m: Move) -> Position {
-        let mut pos = self.clone();
-        pos.do_move(m);
-        pos
-    }
-
-    #[inline]
     fn update_zobrist(&mut self, m: Move) {
-        self.zobrist ^= match m.typ {
-            MoveType::Castle => match m.to {
-                Square::C1 => {
-                    constants::piece_zobrist(Piece::King, Color::White, Square::E1)
-                        ^ constants::piece_zobrist(Piece::King, Color::White, Square::C1)
-                        ^ constants::piece_zobrist(Piece::Rook, Color::White, Square::A1)
-                        ^ constants::piece_zobrist(Piece::Rook, Color::White, Square::D1)
-                }
-                Square::G1 => {
-                    constants::piece_zobrist(Piece::King, Color::White, Square::E1)
-                        ^ constants::piece_zobrist(Piece::King, Color::White, Square::G1)
-                        ^ constants::piece_zobrist(Piece::Rook, Color::White, Square::H1)
-                        ^ constants::piece_zobrist(Piece::Rook, Color::White, Square::F1)
-                }
-                Square::C8 => {
-                    constants::piece_zobrist(Piece::King, Color::Black, Square::E8)
-                        ^ constants::piece_zobrist(Piece::King, Color::Black, Square::C8)
-                        ^ constants::piece_zobrist(Piece::Rook, Color::Black, Square::A8)
-                        ^ constants::piece_zobrist(Piece::Rook, Color::Black, Square::D8)
-                }
-                Square::G8 => {
-                    constants::piece_zobrist(Piece::King, Color::Black, Square::E8)
-                        ^ constants::piece_zobrist(Piece::King, Color::Black, Square::G8)
-                        ^ constants::piece_zobrist(Piece::Rook, Color::Black, Square::H8)
-                        ^ constants::piece_zobrist(Piece::Rook, Color::Black, Square::F8)
-                }
-                _ => 0,
-            },
-
-            MoveType::Enpassant => {
-                constants::piece_zobrist(Piece::Pawn, self.to_move, m.from)
-                    ^ constants::piece_zobrist(Piece::Pawn, self.to_move, m.to)
-                    ^ constants::piece_zobrist(
-                        Piece::Pawn,
-                        self.to_move.other(),
-                        self.ply_info.ep_square.unwrap(),
-                    )
-            }
-
-            MoveType::Promotion(p) => {
-                constants::piece_zobrist(Piece::Pawn, self.to_move, m.from)
-                    ^ constants::piece_zobrist(p, self.to_move, m.to)
-            }
-
-            MoveType::PromotionCapture((p, c)) => {
-                constants::piece_zobrist(Piece::Pawn, self.to_move, m.from)
-                    ^ constants::piece_zobrist(p, self.to_move, m.to)
-                    ^ constants::piece_zobrist(c, self.to_move.other(), m.to)
-            }
-
-            MoveType::Capture(c) => {
-                constants::piece_zobrist(m.piece, self.to_move, m.from)
-                    ^ constants::piece_zobrist(m.piece, self.to_move, m.to)
-                    ^ constants::piece_zobrist(c, self.to_move.other(), m.to)
-            }
-
-            MoveType::Normal => {
-                constants::piece_zobrist(m.piece, self.to_move, m.from)
-                    ^ constants::piece_zobrist(m.piece, self.to_move, m.to)
-            }
-
-            _ => 0,
-        };
-
+        self.zobrist ^= m.zobrist(self.to_move);
         //Unset the Zobrist en passant flag, if necessary
         if let Some(esq) = self.ply_info.ep_square {
             self.zobrist ^= constants::enpassant_zobrist(esq.file());
@@ -992,7 +733,7 @@ impl Position {
             && m.to.relative(self.to_move).rank() == Rank::Fourth
         {
             self.zobrist ^= constants::enpassant_zobrist(m.to.file());
-            self.ply_info.ep_square = Some(ep_square(m.to.file()).relative(self.to_move));
+            self.ply_info.ep_square = Some(m.to.file().ep_square().relative(self.to_move));
         } else {
             self.ply_info.ep_square = None;
         }
@@ -1066,11 +807,6 @@ impl Position {
         } else {
             self.ply_info.rule_50_count += 1;
         }
-    }
-
-    #[allow(dead_code)]
-    pub fn get_castling_rights(&self) -> [[bool; 2]; 2] {
-        self.ply_info.castling_rights
     }
 
     #[inline]
@@ -1183,14 +919,6 @@ impl Position {
     }
 
     #[allow(dead_code)]
-    pub fn color_factor(&self) -> i32 {
-        match self.to_move {
-            Color::White => 1,
-            Color::Black => -1,
-        }
-    }
-
-    #[allow(dead_code)]
     pub fn hard_pins(&mut self) -> BitBoard {
         if self.ply_info.attacked_squares.is_empty() {
             self.generate_attack_table();
@@ -1204,24 +932,6 @@ impl Position {
         self.to_move = self.to_move.other();
         self.ply_info.attacked_squares = BitBoard::EMPTY;
     }
-
-    //TODO: Should this _really_ be here? But where else to put it?
-    //Helper for SEE
-    #[inline]
-    fn least_valuable_attacker(
-        &self,
-        mut attackers: BitBoard,
-        c: Color,
-    ) -> Option<(Square, Piece)> {
-        attackers &= self.board.get_color_bb(c);
-        attackers
-            .into_iter()
-            .map(|a| self.board.piece_at(a).map(|p| (a, p)))
-            .filter(|x| x.is_some())
-            .min_by_key(|x| x.unwrap().1.value())
-            .flatten()
-    }
-
     //X-ray attacks.
     //We ignore en passant here! Attackers are sorted by value!
     pub fn see(&self, m: Move) -> i32 {
@@ -1251,15 +961,15 @@ impl Position {
         let mut gain = Vec::with_capacity(10);
         let mut taker = m.piece;
 
-        gain.push(target_piece.value());
+        gain.push(constants::piece_value(target_piece));
 
         let mut from = m.from;
         loop {
             let last_gain = *gain.last().unwrap_or(&0);
 
-            gain.push(taker.value() - last_gain);
+            gain.push(constants::piece_value(taker) - last_gain);
 
-            if std::cmp::max(-last_gain, taker.value() - last_gain) < 0 {
+            if std::cmp::max(-last_gain, constants::piece_value(taker) - last_gain) < 0 {
                 break;
             }
 
@@ -1301,19 +1011,21 @@ impl Position {
         return *gain.last().unwrap();
     }
 
+    //TODO: Should this _really_ be here? But where else to put it?
+    //Helper for SEE
     #[inline]
-    pub fn is_threefold(&self) -> bool {
-        self.history.iter().filter(|x| **x == self.zobrist).count() > 1
-    }
-
-    #[inline]
-    pub fn is_repetition(&self) -> bool {
-        self.history.iter().filter(|x| **x == self.zobrist).count() > 0
-    }
-
-    #[inline]
-    pub fn rule_50_count(&self) -> u8 {
-        self.ply_info.rule_50_count
+    fn least_valuable_attacker(
+        &self,
+        mut attackers: BitBoard,
+        c: Color,
+    ) -> Option<(Square, Piece)> {
+        attackers &= self.board.get_color_bb(c);
+        attackers
+            .into_iter()
+            .map(|a| self.board.piece_at(a).map(|p| (a, p)))
+            .filter(|x| x.is_some())
+            .min_by_key(|x| constants::piece_value(x.unwrap().1))
+            .flatten()
     }
 
     #[inline]
@@ -1414,4 +1126,3 @@ fn compress_and_decompress_move() {
         }
     }
 }
-
