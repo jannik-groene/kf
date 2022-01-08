@@ -5,12 +5,11 @@ use std::sync::{Arc, RwLock};
 use crate::{
     chess::{Move, Position},
     engine::EngineIO,
-    eval::Eval,
-    evaluate::evaluate,
-    nnue::NNUEState,
+    evaluate::{evaluate, Eval, nnue::NNUEState},
     search::SearchInfo,
-    tt::TranspositionTable,
 };
+
+use super::tt::TranspositionTable;
 
 pub trait Thread {
     fn pos(&self) -> &Position;

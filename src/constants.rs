@@ -1,7 +1,6 @@
 include!(concat!(env!("OUT_DIR"), "/constants.rs"));
 
-use crate::bitboard::{BitBoard, File, Square};
-use crate::chess::{Color, Piece};
+use crate::chess::{Color, Piece, BitBoard, File, Square};
 
 #[inline]
 pub const fn piece_zobrist(p: Piece, c: Color, sq: Square) -> u64 {

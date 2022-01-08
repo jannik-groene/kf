@@ -175,7 +175,7 @@ impl Engine {
                 _ => "".to_string(),
             };
             let path = std::path::Path::new(&nnue_path);
-            crate::nnue::load_model(path).unwrap();
+            crate::evaluate::nnue::load_model(path).unwrap();
         }
         Engine {
             search,
@@ -235,7 +235,7 @@ impl Engine {
                 _ => unreachable!(),
             };
             let path = std::path::Path::new(&nnue_path);
-            crate::nnue::load_model(path).unwrap();
+            crate::evaluate::nnue::load_model(path).unwrap();
         }
     }
     pub fn reset_hash(&mut self) {

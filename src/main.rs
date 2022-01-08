@@ -1,17 +1,9 @@
 #![feature(portable_simd)]
-mod bitboard;
-mod board;
 mod chess;
 mod constants;
 mod engine;
-mod eval;
 mod evaluate;
-mod moves;
-mod nnue;
-mod piecetables;
 mod search;
-mod thread;
-mod tt;
 mod uci;
 
 use crate::{engine::Engine, uci::UCIHandler};

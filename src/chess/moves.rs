@@ -1,5 +1,5 @@
-use crate::bitboard::Square;
-use crate::board::Board;
+use super::bitboard::Square;
+use super::board::Board;
 use crate::chess::{Color, Piece};
 use crate::constants;
 use std::fmt;

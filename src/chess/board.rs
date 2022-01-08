@@ -1,4 +1,4 @@
-use crate::bitboard::{BitBoard, Square};
+use super::bitboard::{BitBoard, Square};
 use crate::chess::{Color, Move, MoveType, Piece};
 use std::fmt;
 

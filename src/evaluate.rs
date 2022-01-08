@@ -1,9 +1,12 @@
+mod eval;
+mod piecetables;
+pub mod nnue;
+
 use crate::{
     chess::{BitBoard, Board, Color, File, Move, MoveList, MoveType, Piece, Position, Square},
     constants,
-    eval::{Bound, Eval, Value},
-    piecetables,
 };
+pub use eval::{Bound, Eval, Value};
 
 #[allow(dead_code)]
 pub fn has_pawns(pos: &Position) -> bool {
@@ -163,8 +166,7 @@ fn evaluate_pawns(pos: &mut Position, phase: i32) -> i32 {
 fn evaluate_king_position(pos: &mut Position, phase: i32) -> i32 {
     let king_pos = pos
         .get_board()
-        .get_bb(pos.color(), Piece::King)
-        .least_square();
+        .king_square(pos.color());
     //In the late game stages we want an active king. Maybe want to keep it somewhat central?
     piece_table_value(Piece::King, pos.color(), king_pos, phase)
 }

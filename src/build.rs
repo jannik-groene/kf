@@ -150,7 +150,7 @@ fn write_rook_attacks(f: &mut File) {
     writeln!(f, "\n];").unwrap();
 
     let mut offsets = vec![0];
-    writeln!(f, "const ROOK_ATTACKS: [u64; 102400] = [").unwrap();
+    writeln!(f, "static ROOK_ATTACKS: [u64; 102400] = [").unwrap();
     for (sq, m) in masks.iter().enumerate() {
         let max = u64::MAX.pext(*m);
         for i in 0..=max {

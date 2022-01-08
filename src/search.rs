@@ -1,3 +1,6 @@
+mod tt;
+mod thread;
+
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
@@ -6,11 +9,10 @@ use crate::{
     chess::{Color, Move, MoveType, Piece, Position},
     constants::piece_value,
     engine::EngineIO,
-    eval::{Bound, Eval, Value},
-    evaluate::{has_major_pieces, has_minor_pieces, is_material_draw, order_moves},
-    thread::{HelperThread, MainThread, Thread},
-    tt::{TTEntry, TranspositionTable},
+    evaluate::{has_major_pieces, has_minor_pieces, is_material_draw, order_moves,Bound, Eval, Value},
 };
+use thread::{HelperThread, MainThread, Thread};
+use tt::{TTEntry, TranspositionTable};
 
 #[derive(Clone)]
 pub struct SearchInfo {

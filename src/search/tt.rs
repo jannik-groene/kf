@@ -1,6 +1,6 @@
 use crate::{
     chess::{CompressedMove, Move},
-    eval::{Bound, Eval, Value},
+    evaluate::{Bound, Eval, Value},
 };
 use std::sync::{Arc, RwLock};
 
