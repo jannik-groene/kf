@@ -5,7 +5,7 @@ use std::sync::{Arc, RwLock};
 use crate::{
     chess::{Move, Position},
     engine::EngineIO,
-    evaluate::{evaluate, Eval, nnue::NNUEState},
+    evaluate::{evaluate, nnue::NNUEState, Eval},
     search::SearchInfo,
 };
 

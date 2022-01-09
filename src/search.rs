@@ -1,5 +1,5 @@
-mod tt;
 mod thread;
+mod tt;
 
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, RwLock};
@@ -9,7 +9,9 @@ use crate::{
     chess::{Color, Move, MoveType, Piece, Position},
     constants::piece_value,
     engine::EngineIO,
-    evaluate::{has_major_pieces, has_minor_pieces, is_material_draw, order_moves,Bound, Eval, Value},
+    evaluate::{
+        has_major_pieces, has_minor_pieces, is_material_draw, order_moves, Bound, Eval, Value,
+    },
 };
 use thread::{HelperThread, MainThread, Thread};
 use tt::{TTEntry, TranspositionTable};

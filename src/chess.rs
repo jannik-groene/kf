@@ -1,13 +1,13 @@
 mod bitboard;
-mod moves;
 mod board;
+mod moves;
 
 use std::iter::Iterator;
 
-pub use moves::{CompressedMove, Move, MoveList, MoveType};
+use crate::constants;
 pub use bitboard::{BitBoard, File, Rank, Square};
 pub use board::Board;
-use crate::constants;
+pub use moves::{CompressedMove, Move, MoveList, MoveType};
 
 //translate a fen symbol (kqbnrpKQBNRP) into a (Color, Piece) pair
 fn fen_to_type(c: char) -> Option<(Color, Piece)> {

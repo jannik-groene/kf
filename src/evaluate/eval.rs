@@ -1,7 +1,7 @@
 use std::fmt::Display;
 use std::ops::{Add, Neg, Sub};
 
-#[derive(Clone, PartialEq, Copy, Eq)]
+#[derive(Clone, PartialEq, Copy, Eq, Debug)]
 pub enum Value {
     Mate(i32),
     Centis(i32),
