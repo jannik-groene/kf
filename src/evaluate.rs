@@ -459,7 +459,7 @@ fn evaluate_king_safety(pos: &Position, phase: i32, color: Color) -> i32 {
 
 pub fn evaluate(pos: &Position) -> Eval {
     let phase = phase_factor(pos);
-    let mut res = pos.material_balance() * 100 + 20;
+    let mut res = pos.material_balance() + 20;
     res += evaluate_mobility(pos, phase);
     if res.abs() > 900 {
         return Eval::new(Bound::Exact, Value::Centis(res));

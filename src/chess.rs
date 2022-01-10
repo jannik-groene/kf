@@ -876,45 +876,18 @@ impl Position {
         self.board.get_bb(c, p).count() as i32
     }
 
-    #[allow(dead_code)]
-    pub fn total_piece_count(&self) -> i32 {
-        self.board.occupation().count() as i32
-    }
-
     #[inline]
     fn material_count(&self, c: Color) -> i32 {
-        self.piece_count(c, Piece::Pawn)
-            + 3 * (self.piece_count(c, Piece::Bishop) + self.piece_count(c, Piece::Knight))
-            + 5 * self.piece_count(c, Piece::Rook)
-            + 9 * self.piece_count(c, Piece::Queen)
+        constants::piece_value(Piece::Pawn) * self.piece_count(c, Piece::Pawn)
+            + constants::piece_value(Piece::Bishop) * self.piece_count(c, Piece::Bishop)
+            + constants::piece_value(Piece::Knight) * self.piece_count(c, Piece::Knight)
+            + constants::piece_value(Piece::Rook) * self.piece_count(c, Piece::Rook)
+            + constants::piece_value(Piece::Queen) * self.piece_count(c, Piece::Queen)
     }
 
     #[inline]
     pub fn material_balance(&self) -> i32 {
         self.material_count(self.to_move) - self.material_count(self.to_move.other())
-    }
-
-    #[allow(dead_code)]
-    pub fn is_attacked(&self, sq: Square) -> bool {
-        self.ply_info.attacked_squares.is_set(sq)
-    }
-
-    #[allow(dead_code)]
-    pub fn piece_attacks(&self, p: Piece, c: Color, from: Square, target: Square) -> bool {
-        match p {
-            Piece::Pawn => constants::pawn_attacks(from, c).is_set(target),
-            Piece::Knight => constants::knight_moves(from).is_set(target),
-            Piece::Bishop => self.bishop_moves(from).is_set(target),
-            Piece::Rook => self.rook_moves(from).is_set(target),
-            Piece::Queen => (self.rook_moves(from) | self.bishop_moves(from)).is_set(target),
-            //TODO: King..
-            _ => false,
-        }
-    }
-
-    #[allow(dead_code)]
-    pub fn get_last_move(&self) -> Option<Move> {
-        self.move_history.last().copied()
     }
 
     #[inline]
@@ -930,12 +903,6 @@ impl Position {
         self.ply_info.pinned_pieces
     }
 
-    //Switch color for analysis
-    //Does NOT update Zobrist hash
-    pub fn switch_color(&mut self) {
-        self.to_move = self.to_move.other();
-        self.ply_info.attacked_squares = BitBoard::EMPTY;
-    }
     //X-ray attacks.
     //We ignore en passant here! Attackers are sorted by value!
     pub fn see(&self, m: Move) -> i32 {

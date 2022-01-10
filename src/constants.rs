@@ -97,11 +97,11 @@ pub const fn next_neighbours(sq: Square) -> BitBoard {
 pub const fn piece_value(p: Piece) -> i32 {
     match p {
         Piece::Pawn => 100,
-        Piece::Bishop => 300,
-        Piece::Knight => 300,
-        Piece::Rook => 500,
-        Piece::Queen => 900,
-        Piece::King => 10000,
+        Piece::Bishop => 330,
+        Piece::Knight => 350,
+        Piece::Rook => 530,
+        Piece::Queen => 1000,
+        Piece::King => 100000,
         Piece::Any => 0,
     }
 }
