@@ -285,6 +285,9 @@ impl Engine {
         println!("{:->1$}", "", numlen + 7);
         println!("Total  {}", total);
     }
+    pub fn eval(&self) -> crate::evaluate::Eval {
+        crate::evaluate::evaluate(&self.search.root_position())
+    }
 }
 
 impl Default for Engine {
