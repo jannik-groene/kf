@@ -1,3 +1,4 @@
+mod movepick;
 mod thread;
 mod tt;
 
@@ -10,7 +11,7 @@ use crate::{
     constants::piece_value,
     engine::EngineIO,
     evaluate::{
-        has_major_pieces, has_minor_pieces, is_material_draw, order_moves, Bound, Eval, Value,
+        has_major_pieces, has_minor_pieces, is_material_draw, Bound, Eval, Value,
     },
 };
 use thread::{HelperThread, MainThread, Thread};
@@ -256,10 +257,7 @@ fn is_tactical(pos: &Position, m: Move) -> bool {
 
 //Parameters:
 // thread: The search thread head.
-// depth: the depth to search to
-// ply; the current depth
-// depth_reduction: how far to reduce the search depth
-// extension: how many plys to extend the search due to only moves in the tree
+// depth: the depth information consisting of target depth and reductions/extension
 // null_moves: how many null moves have been performed in the current search
 // alpha: the alpha value of the current ab search
 // beta: the beta of the current ab search
@@ -323,7 +321,7 @@ fn search_step(
     }
 
     //Check if this is a terminal position
-    let mut moves = thread.pos_mut().get_moves();
+    let moves = thread.pos_mut().get_moves();
 
     if moves.is_empty() && thread.pos_mut().in_check() {
         return Eval::MATE_NOW;
@@ -355,7 +353,8 @@ fn search_step(
 
     //Try a null move to find a beta cutoff; search the first three plys fully.
     //Should maybe avoid in late game?
-    if null_moves < std::cmp::max(depth.target as u8 / 6 + 1, 2)
+    if  zw
+        && null_moves < std::cmp::max(depth.target as u8 / 6 + 1, 2)
         && (has_minor_pieces(thread.pos()) || has_major_pieces(thread.pos()))
         && !thread.pos_mut().in_check()
         && moves.len() > 2
@@ -378,14 +377,6 @@ fn search_step(
         }
     }
 
-    //Move ordering
-    order_moves(
-        &mut moves,
-        thread.pos(),
-        ttmove,
-        thread.get_killers(depth.current as u8),
-    );
-
     //Set up paramaters
     let mut score = Eval::MIN;
     let mut fail_low = true;
@@ -395,11 +386,14 @@ fn search_step(
         depth = depth.extend(1);
     }
 
-    for i in 0..moves.len() {
+    let killers = *thread.get_killers(depth.current as u8);
+    let move_picker = movepick::MovePicker::new(thread.pos_mut(), killers, ttmove);
+
+    for (i, m) in move_picker.enumerate() {
         //lmr reduction depth
         let lmr = ((depth_left as f64).sqrt() * (i as f64).sqrt() / 9.) as i16;
 
-        thread.do_move(moves[i]);
+        thread.do_move(m);
 
         let mut movescore = if i == 0 && !zw {
             -search_step(
@@ -414,7 +408,7 @@ fn search_step(
         } else if zw
             && depth_left > 2
             && !thread.pos_mut().in_check()
-            && !is_tactical(thread.pos(), moves[i])
+            && !is_tactical(thread.pos(), m)
         {
             -search_step(
                 thread,
@@ -428,7 +422,7 @@ fn search_step(
         } else {
             -search_step(
                 thread,
-                depth.reduce(lmr / 3).next(),
+                depth.next(),
                 null_moves,
                 true,
                 alpha.zero_window().neg_down(),
@@ -461,17 +455,17 @@ fn search_step(
 
             thread.tt_mut().set(
                 zh,
-                TTEntry::new(movescore.to_lowerbound(), depth_left, zh, moves[i]),
+                TTEntry::new(movescore.to_lowerbound(), depth_left, zh, m),
             );
-            if !matches!(moves[i].typ, MoveType::Capture(_)) && ttmove != Some(moves[i]) {
-                thread.register_killer(depth.current as u8, moves[i]);
+            if !matches!(m.typ, MoveType::Capture(_)) && ttmove != Some(m) {
+                thread.register_killer(depth.current as u8, m);
             }
             thread.invalidate_killers(depth.current as u8);
             return movescore.to_lowerbound();
         }
 
         if movescore > score {
-            bestmove = Some(moves[i]);
+            bestmove = Some(m);
             score = movescore;
             if score > alpha {
                 fail_low = false;
@@ -520,8 +514,12 @@ fn quiesce(thread: &mut impl Thread, mut alpha: Eval, beta: Eval, delta: i32, qp
     let mut cand_moves = thread.pos_mut().get_moves();
 
     //check for terminal position
-    if cand_moves.is_empty() && thread.pos_mut().in_check() {
-        return Eval::MATE_NOW;
+    if cand_moves.is_empty() {
+        if thread.pos_mut().in_check() {
+            return Eval::MATE_NOW;
+        } else {
+            return Eval::STALEMATE;
+        }
     }
 
     let static_eval = thread.evaluate();
@@ -550,7 +548,7 @@ fn quiesce(thread: &mut impl Thread, mut alpha: Eval, beta: Eval, delta: i32, qp
         if cand_moves.is_empty() {
             return static_eval;
         }
-        cand_moves.sort_by_key(|m| match m.typ {
+        cand_moves.sort_by_key(|m| -match m.typ {
             MoveType::Capture(_) => thread.pos().see(*m),
             MoveType::Promotion(p) => piece_value(p) - piece_value(Piece::Pawn),
             MoveType::PromotionCapture((p_prom, p_cap)) => {

@@ -16,16 +16,12 @@ pub fn has_pawns(pos: &Position) -> bool {
 
 #[inline]
 pub fn has_minor_pieces(pos: &Position) -> bool {
-    !(pos.board.get_piece_bb(Piece::Bishop)
-        | pos.board.get_piece_bb(Piece::Knight))
-    .is_empty()
+    !(pos.board.get_piece_bb(Piece::Bishop) | pos.board.get_piece_bb(Piece::Knight)).is_empty()
 }
 
 #[inline]
 pub fn has_major_pieces(pos: &Position) -> bool {
-    !(pos.board.get_piece_bb(Piece::Rook)
-        | pos.board.get_piece_bb(Piece::Queen))
-    .is_empty()
+    !(pos.board.get_piece_bb(Piece::Rook) | pos.board.get_piece_bb(Piece::Queen)).is_empty()
 }
 
 #[inline]
@@ -507,19 +503,6 @@ pub fn evaluate(pos: &Position) -> Eval {
     Eval::new(Bound::Exact, Value::Centis(res))
 }
 
-#[inline]
-pub fn order_moves(
-    movs: &mut MoveList,
-    pos: &Position,
-    hash_move: Option<Move>,
-    killers: &[Option<Move>; 2],
-) {
-    movs.sort_unstable_by_key(|m| match m.typ { MoveType::Capture(_) => -pos.see(*m), _ => 200 } - if killers[0].map_or(false, |k| k == *m) || killers[1].map_or(false, |k| k == *m) {0} else {1});
-    if let Some(mov) = hash_move {
-        movs.sort_by_key(|m| if *m == mov { 0 } else { 1 });
-    }
-}
-
 #[test]
 fn evaluate_start_pos() {
     let pos = Position::new();
@@ -529,16 +512,3 @@ fn evaluate_start_pos() {
     assert_eq!(eval.value(), Value::Centis(20));
 }
 
-#[test]
-fn bug_hunt() {
-    let pos = Position::from_fen(String::from(
-        "r6r/ppp1nkbp/3B2p1/4p3/1n2P3/2N3PP/qPP2PB1/2KR3R b - - 1 16",
-    ))
-    .unwrap();
-    println!("eval: {}", evaluate(&pos));
-    let pos2 = Position::from_fen(String::from(
-        "r6r/pp2nkbp/2nR2p1/4p3/4P3/4Q1PP/1PPKNPB1/q6R b - - 2 17",
-    ))
-    .unwrap();
-    println!("eval: {}", evaluate(&pos2));
-}
