@@ -921,9 +921,7 @@ impl Position {
             | (constants::pawn_attacks(target, Color::Black)
                 & self.board.get_bb(Color::White, Piece::Pawn));
 
-        attackers |= constants::knight_moves(target)
-            & (self.board.get_bb(Color::White, Piece::Knight)
-                | self.board.get_bb(Color::Black, Piece::Knight));
+        attackers |= constants::knight_moves(target) & self.board.get_piece_bb(Piece::Knight);
 
         attackers |= m.from.into();
 
@@ -950,17 +948,11 @@ impl Position {
             color = color.other();
 
             attackers |= constants::bishop_moves(target, occupation)
-                & (self.board.get_bb(Color::Black, Piece::Bishop)
-                    | self.board.get_bb(Color::White, Piece::Bishop)
-                    | self.board.get_bb(Color::Black, Piece::Queen)
-                    | self.board.get_bb(Color::White, Piece::Queen))
+                & (self.board.get_piece_bb(Piece::Bishop) | self.board.get_piece_bb(Piece::Queen))
                 & occupation;
 
             attackers |= constants::rook_moves(target, occupation)
-                & (self.board.get_bb(Color::Black, Piece::Rook)
-                    | self.board.get_bb(Color::White, Piece::Rook)
-                    | self.board.get_bb(Color::Black, Piece::Queen)
-                    | self.board.get_bb(Color::White, Piece::Queen))
+                & (self.board.get_piece_bb(Piece::Rook) | self.board.get_piece_bb(Piece::Queen))
                 & occupation; //Do not accidentally include already used pieces again
 
             let next = match self.least_valuable_attacker(attackers, color) {
@@ -972,31 +964,33 @@ impl Position {
             from = next.0;
         }
 
-        gain.reverse();
-
-        for d in 1..gain.len() - 1 {
-            let g = -std::cmp::max(-gain[d + 1], gain[d]);
-            gain[d + 1] = g;
+        for d in (1..gain.len() - 1).rev() {
+            gain[d - 1] = -std::cmp::max(-gain[d], gain[d - 1]);
         }
 
-        return *gain.last().unwrap();
+        gain[0]
     }
 
     //TODO: Should this _really_ be here? But where else to put it?
     //Helper for SEE
     #[inline]
-    fn least_valuable_attacker(
-        &self,
-        mut attackers: BitBoard,
-        c: Color,
-    ) -> Option<(Square, Piece)> {
-        attackers &= self.board.get_color_bb(c);
-        attackers
-            .into_iter()
-            .map(|a| self.board.piece_at(a).map(|p| (a, p)))
-            .filter(|x| x.is_some())
-            .min_by_key(|x| constants::piece_value(x.unwrap().1))
-            .flatten()
+    fn least_valuable_attacker(&self, attackers: BitBoard, c: Color) -> Option<(Square, Piece)> {
+        let pieces = [
+            Piece::Pawn,
+            Piece::Knight,
+            Piece::Bishop,
+            Piece::Rook,
+            Piece::Queen,
+        ];
+
+        for p in pieces {
+            let p_attackers = attackers & self.board.get_bb(c, p);
+            if !p_attackers.is_empty() {
+                return Some((p_attackers.least_square(), p));
+            }
+        }
+
+        None
     }
 
     #[inline]
