@@ -204,8 +204,7 @@ impl MainThread {
         let mut handle = stdout.lock();
         drop(write!(
             handle,
-            "info depth {} pv {}",
-            depth,
+            " pv {}",
             self.bestmove().unwrap()
         ));
         let mut pos = self.pos().from_move(self.bestmove().unwrap());

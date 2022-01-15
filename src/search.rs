@@ -22,7 +22,6 @@ pub struct SearchInfo {
     pub bestmove: Option<Move>,
     pub eval: Eval,
     pub depth: u8,
-    pub pv: Vec<Move>,
     pub nodes: u64,
     pub id: u64,
 }
@@ -33,7 +32,6 @@ impl SearchInfo {
             bestmove: None,
             eval: Eval::MIN,
             depth: 0,
-            pv: Vec::new(),
             nodes: 0,
             id,
         }
@@ -195,7 +193,7 @@ fn search(thread: &mut MainThread, depth: u8, mut alpha: Eval, mut beta: Eval) {
                 //Reset stop flag
                 *helper_stop_flag.write().unwrap() = false | *thread.stop_flag().read().unwrap();
             }
-            println!(
+            print!(
                 "info nodes {} nps {}",
                 thread.nodes(),
                 1000 * *thread.nodes() as u128 / now.elapsed().as_millis().clamp(1, u128::MAX)
@@ -203,8 +201,8 @@ fn search(thread: &mut MainThread, depth: u8, mut alpha: Eval, mut beta: Eval) {
             //We reached the target depth and stopped, so we update the external values
             match eval.bound() {
                 Bound::Exact => {
-                    println!(
-                        "info {} depth {} time {}",
+                    print!(
+                        " {} depth {} time {}",
                         eval,
                         d,
                         now.elapsed().as_millis()
@@ -219,7 +217,7 @@ fn search(thread: &mut MainThread, depth: u8, mut alpha: Eval, mut beta: Eval) {
                 }
                 Bound::Lower => {
                     println!(
-                        "info {} depth {} time {}",
+                        " {} depth {} time {}",
                         eval,
                         d,
                         now.elapsed().as_millis()
@@ -229,7 +227,7 @@ fn search(thread: &mut MainThread, depth: u8, mut alpha: Eval, mut beta: Eval) {
                 }
                 Bound::Upper => {
                     println!(
-                        "info {} depth {} time {}",
+                        " {} depth {} time {}",
                         eval,
                         d,
                         now.elapsed().as_millis()
