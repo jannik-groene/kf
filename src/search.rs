@@ -10,9 +10,7 @@ use crate::{
     chess::{Color, Move, MoveType, Piece, Position},
     constants::piece_value,
     engine::EngineIO,
-    evaluate::{
-        has_major_pieces, has_minor_pieces, is_material_draw, Bound, Eval, Value,
-    },
+    evaluate::{has_major_pieces, has_minor_pieces, is_material_draw, Bound, Eval, Value},
 };
 use thread::{HelperThread, MainThread, Thread};
 use tt::{TTEntry, TranspositionTable};
@@ -201,12 +199,7 @@ fn search(thread: &mut MainThread, depth: u8, mut alpha: Eval, mut beta: Eval) {
             //We reached the target depth and stopped, so we update the external values
             match eval.bound() {
                 Bound::Exact => {
-                    print!(
-                        " {} depth {} time {}",
-                        eval,
-                        d,
-                        now.elapsed().as_millis()
-                    );
+                    print!(" {} depth {} time {}", eval, d, now.elapsed().as_millis());
                     thread.print_pv(d);
                     thread.search_info_mut().eval = eval;
                     thread.search_info_mut().bestmove = thread.bestmove();
@@ -216,22 +209,12 @@ fn search(thread: &mut MainThread, depth: u8, mut alpha: Eval, mut beta: Eval) {
                     break;
                 }
                 Bound::Lower => {
-                    println!(
-                        " {} depth {} time {}",
-                        eval,
-                        d,
-                        now.elapsed().as_millis()
-                    );
+                    println!(" {} depth {} time {}", eval, d, now.elapsed().as_millis());
                     fail_highs += 1;
                     beta = eval.aspiration_higher(fail_highs);
                 }
                 Bound::Upper => {
-                    println!(
-                        " {} depth {} time {}",
-                        eval,
-                        d,
-                        now.elapsed().as_millis()
-                    );
+                    println!(" {} depth {} time {}", eval, d, now.elapsed().as_millis());
                     fail_lows += 1;
                     alpha = eval.aspiration_lower(fail_lows);
                 }
@@ -351,7 +334,7 @@ fn search_step(
 
     //Try a null move to find a beta cutoff; search the first three plys fully.
     //Should maybe avoid in late game?
-    if  zw
+    if zw
         && null_moves < std::cmp::max(depth.target as u8 / 6 + 1, 2)
         && (has_minor_pieces(thread.pos()) || has_major_pieces(thread.pos()))
         && !thread.pos_mut().in_check()

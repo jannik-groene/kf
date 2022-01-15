@@ -202,11 +202,7 @@ impl MainThread {
         }
         let stdout = std::io::stdout();
         let mut handle = stdout.lock();
-        drop(write!(
-            handle,
-            " pv {}",
-            self.bestmove().unwrap()
-        ));
+        drop(write!(handle, " pv {}", self.bestmove().unwrap()));
         let mut pos = self.pos().from_move(self.bestmove().unwrap());
         let mut index = 1;
         loop {

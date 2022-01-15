@@ -3,7 +3,7 @@ pub mod nnue;
 mod piecetables;
 
 use crate::{
-    chess::{BitBoard, Board, Color, File, Move, MoveList, MoveType, Piece, Position, Square},
+    chess::{BitBoard, Board, Color, File, Piece, Position, Square},
     constants,
 };
 pub use eval::{Bound, Eval, Value};
@@ -511,4 +511,3 @@ fn evaluate_start_pos() {
     //everything should be equal up to the tempo
     assert_eq!(eval.value(), Value::Centis(20));
 }
-

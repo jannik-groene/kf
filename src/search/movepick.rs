@@ -6,7 +6,6 @@ use std::iter::Iterator;
 enum MovePickingStage {
     TtMove,
     WinningCaptures,
-    EvenCaptures,
     Killers,
     Quiets,
     LosingCaptures,
@@ -14,7 +13,7 @@ enum MovePickingStage {
 }
 
 //Threshold after which a trade is considered winning in SEE
-const WINNING_THRESHOLD: i32 = piece_value(Piece::Pawn);
+//const WINNING_THRESHOLD: i32 = piece_value(Piece::Pawn);
 //Threshold after which a trade is considered even in SEE
 const EVEN_THRESHOLD: i32 = piece_value(Piece::Knight) - piece_value(Piece::Bishop);
 
@@ -72,7 +71,7 @@ impl Iterator for MovePicker {
                     self.next()
                 }
             }
-            MovePickingStage::WinningCaptures | MovePickingStage::EvenCaptures => {
+            MovePickingStage::WinningCaptures => {
                 if let Some((i, _)) = self
                     .moves
                     .iter()
@@ -152,9 +151,7 @@ impl Iterator for MovePicker {
                     None
                 }
             }
-            MovePickingStage::Finished => {
-                None
-            }
+            MovePickingStage::Finished => None,
         }
     }
 }
@@ -193,8 +190,7 @@ mod tests {
                 "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 0",
             ))
             .unwrap(),
-            Position::from_fen(String::from("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 0"))
-                .unwrap(),
+            Position::from_fen(String::from("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 0")).unwrap(),
             Position::from_fen(String::from(
                 "r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1",
             ))
