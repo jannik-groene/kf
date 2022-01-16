@@ -2,30 +2,39 @@ use crate::{
     chess::{CompressedMove, Move},
     evaluate::{Bound, Eval, Value},
 };
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+
+use parking_lot::{Mutex, const_mutex};
 
 #[derive(Clone)]
 pub struct TranspositionTable {
     //We run with two buckets. One replace on depth, on always replace
-    hash: Arc<RwLock<Vec<(TTEntry, TTEntry)>>>,
+    hash: Arc<Vec<Mutex<(TTEntry, TTEntry)>>>,
     size: usize,
 }
 
 impl TranspositionTable {
     pub fn new(size: usize) -> Self {
-        let mut hash_vec = vec![(TTEntry::UNCHECKED, TTEntry::UNCHECKED); size];
+        let mut hash_vec = Vec::with_capacity(size);
+        for _ in 0..size {
+            hash_vec.push(const_mutex((TTEntry::UNCHECKED, TTEntry::UNCHECKED)));
+        }
         hash_vec.shrink_to_fit();
         TranspositionTable {
             size,
-            hash: Arc::new(RwLock::new(hash_vec)),
+            hash: Arc::new(hash_vec),
         }
+    }
+    #[inline]
+    pub fn size(&self) -> usize {
+        self.size
     }
     #[inline]
     pub fn get(&self, zobrist_key: u64) -> Option<TTEntry> {
         if self.size == 0 {
             return None;
         }
-        let entry = self.hash.read().unwrap()[zobrist_key as usize % self.size];
+        let entry = self.hash[zobrist_key as usize % self.size].lock();
         if entry.0.depth != 0 && entry.0.zobrist_hash == zobrist_key {
             Some(entry.0)
         } else if entry.1.depth != 0 && entry.1.zobrist_hash == zobrist_key {
@@ -40,8 +49,7 @@ impl TranspositionTable {
         if self.size == 0 || matches!(entry.eval.value(), Value::Infty | Value::NegInfty) {
             return;
         }
-        let mut hash = self.hash.write().unwrap();
-        let hash_entry = hash[zobrist_key as usize % self.size];
+        let mut hash_entry = self.hash[zobrist_key as usize % self.size].lock();
         //Mate scores may be seen as having infinite depth
         if (hash_entry.0.depth < entry.depth
             || (matches!(entry.eval.value(), Value::Mate(_)) && entry.eval > hash_entry.0.eval))
@@ -49,18 +57,10 @@ impl TranspositionTable {
                 || entry.eval.bound() == Bound::Exact
                 || hash_entry.0.eval().bound() != Bound::Exact)
         {
-            hash.get_mut(zobrist_key as usize % self.size).unwrap().0 = entry;
+            hash_entry.0 = entry;
         } else {
-            hash.get_mut(zobrist_key as usize % self.size).unwrap().1 = entry;
+            hash_entry.1 = entry;
         }
-    }
-    pub fn reset(&mut self) {
-        self.hash = Arc::new(RwLock::new(Vec::new()));
-        self.hash = Arc::new(RwLock::new(vec![
-            (TTEntry::UNCHECKED, TTEntry::UNCHECKED);
-            self.size
-        ]));
-        self.hash.write().unwrap().shrink_to_fit();
     }
 }
 

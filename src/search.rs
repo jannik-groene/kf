@@ -99,7 +99,8 @@ impl SearchManager {
         self.pos.color()
     }
     pub fn reset_hash(&mut self) {
-        self.tt.reset();
+        let size = self.tt.size();
+        self.tt = TranspositionTable::new(size);
     }
     pub fn root_position(&self) -> Position {
         self.pos.clone()
@@ -372,7 +373,7 @@ fn search_step(
 
     for (i, m) in move_picker.enumerate() {
         //lmr reduction depth
-        let lmr = ((depth_left as f64).sqrt() * (i as f64).sqrt() / 9.) as i16;
+        let lmr = ((depth_left as f64).sqrt() * (i as f64).sqrt() / 7.) as i16;
 
         thread.do_move(m);
 
@@ -403,7 +404,7 @@ fn search_step(
         } else {
             -search_step(
                 thread,
-                depth.next(),
+                depth.reduce(lmr/3).next(),
                 null_moves,
                 true,
                 alpha.zero_window().neg_down(),
