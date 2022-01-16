@@ -1032,7 +1032,7 @@ fn simple_sse() {
         typ: MoveType::Capture(Piece::Pawn),
         piece: Piece::Rook,
     };
-    assert!(pos.see(mov) == 100);
+    assert_eq!(pos.see(mov), constants::piece_value(Piece::Pawn));
     let pos2 = Position::from_fen(String::from(
         "1k1r3q/1ppn3p/p4b2/4p3/8/P2N2P1/1PP1R1BP/2K1Q3 w - - 0 0",
     ))
@@ -1043,7 +1043,7 @@ fn simple_sse() {
         typ: MoveType::Capture(Piece::Pawn),
         piece: Piece::Knight,
     };
-    assert!(pos2.see(mov2) == -200);
+    assert_eq!(pos2.see(mov2), constants::piece_value(Piece::Pawn) - constants::piece_value(Piece::Knight));
 }
 
 #[test]
