@@ -5,6 +5,7 @@ mod tt;
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
+use std::io::Write;
 
 use crate::{
     chess::{Color, Move, MoveType, Piece, Position},
@@ -192,16 +193,18 @@ fn search(thread: &mut MainThread, depth: u8, mut alpha: Eval, mut beta: Eval) {
                 //Reset stop flag
                 *helper_stop_flag.write().unwrap() = false | *thread.stop_flag().read().unwrap();
             }
-            print!(
+            let stdout = std::io::stdout();
+            let mut handle = stdout.lock();
+            drop(write!(handle,
                 "info nodes {} nps {}",
                 thread.nodes(),
                 1000 * *thread.nodes() as u128 / now.elapsed().as_millis().clamp(1, u128::MAX)
-            );
+            ));
             //We reached the target depth and stopped, so we update the external values
             match eval.bound() {
                 Bound::Exact => {
-                    print!(" {} depth {} time {}", eval, d, now.elapsed().as_millis());
-                    thread.print_pv(d);
+                    drop(write!(handle, " {} depth {} time {}", eval, d, now.elapsed().as_millis()));
+                    thread.print_pv(d, &mut handle);
                     thread.search_info_mut().eval = eval;
                     thread.search_info_mut().bestmove = thread.bestmove();
                     thread.send_info(EngineIO::SearchUpdate(thread.search_info().clone()));
@@ -210,12 +213,12 @@ fn search(thread: &mut MainThread, depth: u8, mut alpha: Eval, mut beta: Eval) {
                     break;
                 }
                 Bound::Lower => {
-                    println!(" {} depth {} time {}", eval, d, now.elapsed().as_millis());
+                    drop(writeln!(handle, " {} depth {} time {}", eval, d, now.elapsed().as_millis()));
                     fail_highs += 1;
                     beta = eval.aspiration_higher(fail_highs);
                 }
                 Bound::Upper => {
-                    println!(" {} depth {} time {}", eval, d, now.elapsed().as_millis());
+                    drop(writeln!(handle, " {} depth {} time {}", eval, d, now.elapsed().as_millis()));
                     fail_lows += 1;
                     alpha = eval.aspiration_lower(fail_lows);
                 }

@@ -196,12 +196,10 @@ impl MainThread {
     pub fn bestmove(&self) -> Option<Move> {
         self.bestmove
     }
-    pub fn print_pv(&self, depth: u8) {
+    pub fn print_pv(&self, depth: u8, handle: &mut std::io::StdoutLock) {
         if self.bestmove().is_none() {
             return;
         }
-        let stdout = std::io::stdout();
-        let mut handle = stdout.lock();
         drop(write!(handle, " pv {}", self.bestmove().unwrap()));
         let mut pos = self.pos().from_move(self.bestmove().unwrap());
         let mut index = 1;
