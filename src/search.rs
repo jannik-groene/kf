@@ -376,7 +376,7 @@ fn search_step(
 
     for (i, m) in move_picker.enumerate() {
         //lmr reduction depth
-        let lmr = ((depth_left as f64).sqrt() * (i as f64).sqrt() / 7.) as i16;
+        let lmr = ((depth_left as f64).sqrt() * (i as f64).sqrt() / 5.) as i16;
 
         thread.do_move(m);
 
@@ -391,7 +391,7 @@ fn search_step(
             )
         //Apply lmr at sufficiently high depths on non-PV nodes
         } else if zw
-            && depth_left > 2
+            && depth.current > 2
             && !thread.pos_mut().in_check()
             && !is_tactical(thread.pos(), m)
         {
