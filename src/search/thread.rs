@@ -37,6 +37,9 @@ pub trait Thread {
     fn do_null_move(&mut self);
     fn undo_null_move(&mut self);
 
+    fn is_threefold(&self) -> bool;
+    fn is_repetition(&self) -> bool;
+
     fn evaluate(&mut self) -> Eval;
 
     //save and retrieve killer moves
@@ -47,6 +50,7 @@ pub trait Thread {
 
 pub struct MainThread {
     pos: Position,
+    history: Vec<Position>,
     nodes: u64,
     threads: usize,
     tt: TranspositionTable,
@@ -102,27 +106,37 @@ impl Thread for MainThread {
     }
     #[inline]
     fn do_move(&mut self, m: Move) {
-        self.pos.do_move(m);
         if self.use_nnue {
             self.nnue.do_move(m, &self.pos);
         }
+        self.history.push(self.pos.clone());
+        self.pos.do_move(m);
         self.nodes += 1;
     }
     #[inline]
     fn undo_move(&mut self) {
-        self.pos.undo_move();
+        self.pos = self.history.pop().unwrap();
         if self.use_nnue {
             self.nnue.undo_move();
         }
     }
     #[inline]
     fn do_null_move(&mut self) {
+        self.history.push(self.pos.clone());
         self.pos.do_null_move();
         self.nodes += 1;
     }
     #[inline]
     fn undo_null_move(&mut self) {
-        self.pos.undo_null_move();
+        self.pos = self.history.pop().unwrap();
+    }
+    #[inline]
+    fn is_threefold(&self) -> bool {
+        self.history.iter().filter(|x| x.zobrist_hash() == self.pos.zobrist_hash()).count() > 1
+    }
+    #[inline]
+    fn is_repetition(&self) -> bool {
+        self.history.iter().filter(|x| x.zobrist_hash() == self.pos.zobrist_hash()).count() > 1
     }
     #[inline]
     fn evaluate(&mut self) -> Eval {
@@ -180,6 +194,7 @@ impl MainThread {
         let nnue = NNUEState::new(&pos);
         MainThread {
             pos,
+            history: Vec::new(),
             nodes: 0,
             threads,
             tt,
@@ -241,6 +256,7 @@ impl MainThread {
 
 pub struct HelperThread {
     pos: Position,
+    history: Vec<Position>,
     nodes: u64,
     tt: TranspositionTable,
     stop_flag: Arc<RwLock<bool>>,
@@ -259,6 +275,7 @@ impl HelperThread {
         let nnue = NNUEState::new(&pos);
         HelperThread {
             pos,
+            history: Vec::new(),
             nodes: 0,
             tt,
             stop_flag,
@@ -307,24 +324,34 @@ impl Thread for HelperThread {
         if self.use_nnue {
             self.nnue.do_move(m, &self.pos);
         }
+        self.history.push(self.pos.clone());
         self.pos.do_move(m);
         self.nodes += 1;
     }
     #[inline]
     fn undo_move(&mut self) {
-        self.pos.undo_move();
+        self.pos = self.history.pop().unwrap();
         if self.use_nnue {
             self.nnue.undo_move();
         }
     }
     #[inline]
     fn do_null_move(&mut self) {
+        self.history.push(self.pos.clone());
         self.pos.do_null_move();
         self.nodes += 1;
     }
     #[inline]
     fn undo_null_move(&mut self) {
-        self.pos.undo_null_move();
+        self.pos = self.history.pop().unwrap();
+    }
+    #[inline]
+    fn is_threefold(&self) -> bool {
+        self.history.iter().filter(|x| x.zobrist_hash() == self.pos.zobrist_hash()).count() > 1
+    }
+    #[inline]
+    fn is_repetition(&self) -> bool {
+        self.history.iter().filter(|x| x.zobrist_hash() == self.pos.zobrist_hash()).count() > 0
     }
     #[inline]
     fn evaluate(&mut self) -> Eval {

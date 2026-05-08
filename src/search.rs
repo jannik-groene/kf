@@ -260,7 +260,7 @@ fn search_step(
     }
 
     //Repeated positions are draws
-    if thread.pos().is_threefold() {
+    if thread.is_threefold() {
         return Eval::DRAW;
     }
 
@@ -278,9 +278,9 @@ fn search_step(
         ttmove = entry.mov();
 
         //make sure we do not return a repetition from tt, allowing a threefold
-        thread.pos_mut().do_move(ttmove.unwrap());
-        let threefold = thread.pos().is_repetition();
-        thread.pos_mut().undo_move();
+        thread.do_move(ttmove.unwrap());
+        let threefold = thread.is_repetition();
+        thread.undo_move();
 
         //see if we have a TT-hit
         if entry.depth() as i16 >= depth.remaining() && !threefold && zw {

@@ -117,11 +117,8 @@ struct PlyInfo {
 pub struct Position {
     pub board: Board,
     ply_info: PlyInfo,
-    ply_info_history: Vec<PlyInfo>,
-    move_history: Vec<Move>,
     to_move: Color,
     zobrist: u64,      //Zobrist-Hash
-    history: Vec<u64>, //zobrist hashes of all positions reached BEFORE the current
 }
 
 impl Default for Position {
@@ -142,7 +139,6 @@ impl Position {
 
         Position {
             board,
-            move_history: Vec::with_capacity(20),
             to_move: Color::White,
             ply_info: PlyInfo {
                 castling_rights: [[true, true], [true, true]],
@@ -152,9 +148,7 @@ impl Position {
                 pinned_pieces: BitBoard::EMPTY,
                 ep_square: None,
             },
-            ply_info_history: Vec::new(),
             zobrist,
-            history: Vec::new(),
         }
     }
 
@@ -166,7 +160,6 @@ impl Position {
 
         let mut pos = Position {
             board: b,
-            move_history: Vec::with_capacity(20),
             to_move: Color::White,
             ply_info: PlyInfo {
                 castling_rights: [[true, true], [true, true]],
@@ -176,9 +169,7 @@ impl Position {
                 pinned_pieces: BitBoard::EMPTY,
                 ep_square: None,
             },
-            ply_info_history: Vec::new(),
             zobrist: 0,
-            history: Vec::new(),
         };
 
         pos.zobrist = get_zobrist(&b);
@@ -229,12 +220,6 @@ impl Position {
                     let sq = Square::from_string(p);
                     pos.ply_info.ep_square = Some(sq);
                     pos.zobrist ^= constants::enpassant_zobrist(sq.file());
-                    pos.move_history.push(Move {
-                        piece: Piece::Pawn,
-                        from: sq.advance(pos.to_move),
-                        to: sq.advance(pos.to_move.other()),
-                        typ: MoveType::Normal,
-                    });
                 }
             }
         }
@@ -259,16 +244,6 @@ impl Position {
     #[inline]
     pub fn get_board(&self) -> &Board {
         &self.board
-    }
-
-    #[inline]
-    pub fn is_threefold(&self) -> bool {
-        self.history.iter().filter(|x| **x == self.zobrist).count() > 1
-    }
-
-    #[inline]
-    pub fn is_repetition(&self) -> bool {
-        self.history.iter().filter(|x| **x == self.zobrist).count() > 0
     }
 
     #[inline]
@@ -782,12 +757,6 @@ impl Position {
     }
 
     pub fn do_move(&mut self, m: Move) {
-        //Commit zobrist hash to history stack
-        self.history.push(self.zobrist);
-
-        //Store info over the current ply
-        self.ply_info_history.push(self.ply_info);
-
         //Actually do the move on the board
         self.board.do_move(m);
 
@@ -795,8 +764,6 @@ impl Position {
         self.update_zobrist(m);
 
         self.update_castling_rights(m);
-
-        self.move_history.push(m);
 
         //Adjust other state information
         self.ply_info.attacked_squares = BitBoard::EMPTY;
@@ -813,31 +780,7 @@ impl Position {
         }
     }
 
-    #[inline]
-    pub fn undo_move(&mut self) {
-        //remove move from history stack
-        self.zobrist = self.history.pop().unwrap();
-        self.ply_info = self.ply_info_history.pop().unwrap();
-        let m = self
-            .move_history
-            .pop()
-            .unwrap_or_else(|| panic!("No move to undo!"));
-        self.board.undo_move(m);
-        self.to_move = self.to_move.other();
-    }
-
     pub fn do_null_move(&mut self) {
-        //TODO: likely unnecessary, but maybe good as a sentinel for null moves which are not
-        //      properly undone?
-        self.move_history.push(Move {
-            typ: MoveType::Null,
-            piece: Piece::Any,
-            to: Square::A1,
-            from: Square::A1,
-        });
-
-        self.history.push(self.zobrist);
-
         //Unset the Zobrist en passant flag, if necessary
         if let Some(esq) = self.ply_info.ep_square {
             self.zobrist ^= constants::enpassant_zobrist(esq.file());
@@ -847,7 +790,6 @@ impl Position {
         self.zobrist ^= constants::color_zobrist();
 
         //Reset state information
-        self.ply_info_history.push(self.ply_info);
         self.ply_info.attacked_squares = BitBoard::EMPTY;
         self.ply_info.pinned_pieces = BitBoard::EMPTY;
         self.ply_info.king_attackers = BitBoard::EMPTY;
@@ -855,13 +797,6 @@ impl Position {
         self.ply_info.ep_square = None;
     }
 
-    #[inline]
-    pub fn undo_null_move(&mut self) {
-        self.move_history.pop();
-        self.zobrist = self.history.pop().unwrap();
-        self.to_move = self.to_move.other();
-        self.ply_info = self.ply_info_history.pop().unwrap();
-    }
 
     #[inline]
     pub fn in_check(&mut self) -> bool {
