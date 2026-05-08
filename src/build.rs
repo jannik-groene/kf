@@ -3,7 +3,7 @@ use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 
-use bitintr::{Pdep, Pext};
+use std::arch::x86_64::{_pext_u64,_pdep_u64};
 use rand::{self, Rng, SeedableRng};
 
 fn write_pawn_attacks(f: &mut File) {
@@ -93,6 +93,7 @@ fn go_in_direction(mut base: i32, dir: i32, blockers: u64) -> u64 {
     attacks
 }
 
+
 fn write_bishop_attacks(f: &mut File) {
     let dirs = [7, 9, -7, -9];
 
@@ -111,17 +112,19 @@ fn write_bishop_attacks(f: &mut File) {
     let mut offsets = vec![0];
     writeln!(f, "const BISHOP_ATTACKS: [u64; 5248] = [").unwrap();
     for (sq, m) in masks.iter().enumerate() {
-        let max = u64::MAX.pext(*m);
-        for i in 0..=max {
-            let mut attacks = 0;
-            let blockers = i.pdep(*m);
-            for d in dirs {
-                attacks |= go_in_direction(sq as i32, d, blockers);
+        #[cfg(target_feature="bmi2")] {
+            let max = unsafe { _pext_u64(u64::MAX, *m) };
+            for i in 0..=max {
+                let mut attacks = 0;
+                let blockers = unsafe { _pdep_u64(i, *m) };
+                for d in dirs {
+                    attacks |= go_in_direction(sq as i32, d, blockers);
+                }
+                write!(f, "0x{:x},", attacks).unwrap();
             }
-            write!(f, "0x{:x},", attacks).unwrap();
+            writeln!(f).unwrap();
+            offsets.push(offsets.last().unwrap_or(&0) + max + 1);
         }
-        writeln!(f).unwrap();
-        offsets.push(offsets.last().unwrap_or(&0) + max + 1);
     }
     writeln!(f, "\n];").unwrap();
 
@@ -152,17 +155,19 @@ fn write_rook_attacks(f: &mut File) {
     let mut offsets = vec![0];
     writeln!(f, "static ROOK_ATTACKS: [u64; 102400] = [").unwrap();
     for (sq, m) in masks.iter().enumerate() {
-        let max = u64::MAX.pext(*m);
-        for i in 0..=max {
-            let mut attacks = 0;
-            let blockers = i.pdep(*m);
-            for d in dirs {
-                attacks |= go_in_direction(sq as i32, d, blockers);
+        #[cfg(target_feature="bmi2")] {
+            let max = unsafe { _pext_u64(u64::MAX, *m) };
+            for i in 0..=max {
+                let mut attacks = 0;
+                let blockers = unsafe { _pdep_u64(i, *m) };
+                for d in dirs {
+                    attacks |= go_in_direction(sq as i32, d, blockers);
+                }
+                write!(f, "0x{:x},", attacks).unwrap();
             }
-            write!(f, "0x{:x},", attacks).unwrap();
+            writeln!(f).unwrap();
+            offsets.push(offsets.last().unwrap_or(&0) + max + 1);
         }
-        writeln!(f).unwrap();
-        offsets.push(offsets.last().unwrap_or(&0) + max + 1);
     }
     writeln!(f, "\n];").unwrap();
 

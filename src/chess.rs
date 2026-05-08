@@ -7,7 +7,7 @@ use std::iter::Iterator;
 use crate::constants;
 pub use bitboard::{BitBoard, File, Rank, Square};
 pub use board::Board;
-pub use moves::{CompressedMove, Move, MoveList, MoveType};
+pub use moves::{Move, MoveList, MoveType};
 
 //translate a fen symbol (kqbnrpKQBNRP) into a (Color, Piece) pair
 fn fen_to_type(c: char) -> Option<(Color, Piece)> {
@@ -1063,7 +1063,7 @@ fn compress_and_decompress_move() {
             piece: *p,
             typ: MoveType::Normal,
         };
-        let m2 = m.compress().decompress();
+        let m2 = Move::decompress(m.compress());
         assert!(m == m2.unwrap());
     }
     for p in pieces.iter() {
@@ -1074,7 +1074,7 @@ fn compress_and_decompress_move() {
                 piece: Piece::Pawn,
                 typ: MoveType::PromotionCapture((*p, *q)),
             };
-            let m2 = m.compress().decompress();
+            let m2 = Move::decompress(m.compress());
             assert!(m == m2.unwrap());
         }
     }
@@ -1086,7 +1086,7 @@ fn compress_and_decompress_move() {
                 piece: *p,
                 typ: MoveType::Capture(*q),
             };
-            let m2 = m.compress().decompress();
+            let m2 = Move::decompress(m.compress());
             assert!(m == m2.unwrap());
         }
     }

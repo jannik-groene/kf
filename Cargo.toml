@@ -27,14 +27,12 @@ debug = true
 
 [dependencies]
 rand = "0.8.4"
-bitintr = { version = "0.3.0" }
 arrayvec = { version = "0.7.2" }
 lazy_static = "1.4.0"
 nnue = {path="../nnue"}
-parking_lot = { version = "0.11.2" }
+parking_lot = { version = "0.12.5" }
 
 [build-dependencies]
-bitintr = { version = "0.3.0" }
 rand = { version = "0.8.4", features = ["small_rng"] }
 
 [dev-dependencies]

@@ -1,7 +1,7 @@
 use crate::chess::Color;
-use bitintr::Pext;
 use std::fmt;
 use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Index, Not};
+use std::arch::x86_64::_pext_u64;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct BitBoard {
@@ -160,7 +160,7 @@ impl BitBoard {
     }
     #[inline]
     pub fn pext(self, mask: u64) -> usize {
-        self.bits.pext(mask) as usize
+        unsafe {_pext_u64(self.bits,mask) as usize}
     }
 }
 

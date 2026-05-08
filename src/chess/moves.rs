@@ -54,24 +54,48 @@ impl Move {
         }
     }
 
-    pub fn compress(&self) -> CompressedMove {
-        let mut piece_and_type = self.piece as u16;
+    pub fn decompress(m: u32) -> Option<Move> {
+        let from = m & 0b111111;
+        let to = (m >> 6) & 0b111111;
+        let piece_and_type = m >> 12;
+
+        let piece = u32_to_piece(piece_and_type & 0b111);
+
+        let typ = match piece_and_type >> 9 {
+            0 => MoveType::Normal,
+            1 => MoveType::Capture(u32_to_piece((piece_and_type >> 3) & 0b111)),
+            2 => MoveType::Promotion(u32_to_piece((piece_and_type >> 3) & 0b111)),
+            3 => MoveType::PromotionCapture((
+                u32_to_piece((piece_and_type >> 3) & 0b111),
+                u32_to_piece((piece_and_type >> 6) & 0b111),
+            )),
+            4 => MoveType::Castle,
+            5 => MoveType::Enpassant,
+            _ => return None,
+        };
+
+        Some(Move {
+            from: from.into(),
+            to: to.into(),
+            piece,
+            typ,
+        })
+    }
+
+    pub fn compress(&self) -> u32 {
+        let mut piece_and_type = self.piece as u32;
 
         piece_and_type |= match self.typ {
             MoveType::Normal => 0,
-            MoveType::Capture(p) => ((p as u16) << 3) | (1 << 9),
-            MoveType::Promotion(p) => ((p as u16) << 3) | (2 << 9),
-            MoveType::PromotionCapture((p, q)) => ((p as u16) << 3) | ((q as u16) << 6) | (3 << 9),
+            MoveType::Capture(p) => ((p as u32) << 3) | (1 << 9),
+            MoveType::Promotion(p) => ((p as u32) << 3) | (2 << 9),
+            MoveType::PromotionCapture((p, q)) => ((p as u32) << 3) | ((q as u32) << 6) | (3 << 9),
             MoveType::Castle => 4 << 9,
             MoveType::Enpassant => 5 << 9,
             MoveType::Null => panic!("Cannot compress null move."),
         };
 
-        CompressedMove {
-            piece_and_type,
-            from: self.from.into(),
-            to: self.to.into(),
-        }
+        (piece_and_type << 12) ^ <Square as Into<u32>>::into(self.from) ^ (<Square as Into<u32>>::into(self.to) << 6)
     }
 
     //Get the zobrist number associated to the given move
@@ -207,41 +231,9 @@ fn display_promotion(m: &Move) -> String {
     }
 }
 
-#[derive(Copy, Clone, PartialEq, Default)]
-pub struct CompressedMove {
-    pub piece_and_type: u16,
-    pub to: u8,
-    pub from: u8,
-}
-
-impl CompressedMove {
-    pub fn decompress(&self) -> Option<Move> {
-        let piece = u16_to_piece(self.piece_and_type & 0b111);
-
-        let typ = match self.piece_and_type >> 9 {
-            0 => MoveType::Normal,
-            1 => MoveType::Capture(u16_to_piece((self.piece_and_type >> 3) & 0b111)),
-            2 => MoveType::Promotion(u16_to_piece((self.piece_and_type >> 3) & 0b111)),
-            3 => MoveType::PromotionCapture((
-                u16_to_piece((self.piece_and_type >> 3) & 0b111),
-                u16_to_piece((self.piece_and_type >> 6) & 0b111),
-            )),
-            4 => MoveType::Castle,
-            5 => MoveType::Enpassant,
-            _ => return None,
-        };
-
-        Some(Move {
-            from: self.from.into(),
-            to: self.to.into(),
-            piece,
-            typ,
-        })
-    }
-}
 
 #[inline]
-fn u16_to_piece(p: u16) -> Piece {
+fn u32_to_piece(p: u32) -> Piece {
     match p {
         0 => Piece::King,
         1 => Piece::Queen,

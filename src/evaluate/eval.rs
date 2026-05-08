@@ -218,6 +218,39 @@ impl Eval {
     pub fn bound(&self) -> Bound {
         self.bound
     }
+
+    pub fn pack_for_tt(&self) -> u64 {
+        let btype = match self.bound {
+            Bound::Lower => 0,
+            Bound::Upper => 1,
+            Bound::Exact => 2,
+        };
+        let (kind,value) = match self.value {
+            Value::Centis(c) => (0,c),
+            Value::Mate(n)   => (1,n),
+            Value::Infty     => (2,0),
+            Value::NegInfty  => (3,0),
+        };
+        btype ^ (kind << 2) ^ ((value as u64) << 4)
+    }
+
+    pub fn from_packed(val: u64) -> Eval {
+        let bound = match val & 0b11 {
+            0 => Bound::Lower,
+            1 => Bound::Upper,
+            _ => Bound::Exact,
+        };
+        let value = match (val >> 2) & 0b11 {
+            0 => Value::Centis((val >> 4) as i32),
+            1 => Value::Mate((val >> 4) as i32),
+            2 => Value::Infty,
+            _ => Value::NegInfty,
+        };
+        Eval {
+            bound,
+            value,
+        }
+    }
 }
 
 impl Display for Eval {

@@ -1,28 +1,32 @@
 use crate::{
-    chess::{CompressedMove, Move},
+    chess::Move,
     evaluate::{Bound, Eval, Value},
 };
 use std::sync::Arc;
+use std::cell::UnsafeCell;
 
 use parking_lot::{Mutex, const_mutex};
 
 #[derive(Clone)]
 pub struct TranspositionTable {
     //We run with two buckets. One replace on depth, on always replace
-    hash: Arc<Vec<Mutex<(TTEntry, TTEntry)>>>,
+    hash: Arc<UnsafeCell<Vec<(TTEntry, TTEntry)>>>,
     size: usize,
 }
+
+unsafe impl Send for TranspositionTable {}
+unsafe impl Sync for TranspositionTable {}
 
 impl TranspositionTable {
     pub fn new(size: usize) -> Self {
         let mut hash_vec = Vec::with_capacity(size);
         for _ in 0..size {
-            hash_vec.push(const_mutex((TTEntry::UNCHECKED, TTEntry::UNCHECKED)));
+            hash_vec.push((TTEntry::UNCHECKED, TTEntry::UNCHECKED));
         }
         hash_vec.shrink_to_fit();
         TranspositionTable {
             size,
-            hash: Arc::new(hash_vec),
+            hash: Arc::new(UnsafeCell::new(hash_vec)),
         }
     }
     #[inline]
@@ -34,10 +38,10 @@ impl TranspositionTable {
         if self.size == 0 {
             return None;
         }
-        let entry = self.hash[zobrist_key as usize % self.size].lock();
-        if entry.0.depth != 0 && entry.0.zobrist_hash == zobrist_key {
+        let entry = unsafe { (& *self.hash.get())[zobrist_key as usize % self.size] };
+        if entry.0.zobrist_hash ^ entry.0.depth_and_move ^ entry.0.eval == zobrist_key && entry.0.depth() != 0 {
             Some(entry.0)
-        } else if entry.1.depth != 0 && entry.1.zobrist_hash == zobrist_key {
+        } else if entry.1.zobrist_hash ^ entry.1.depth_and_move ^ entry.1.eval == zobrist_key && entry.1.depth() != 0 {
             Some(entry.1)
         } else {
             None
@@ -46,62 +50,57 @@ impl TranspositionTable {
     #[inline]
     pub fn set(&mut self, zobrist_key: u64, entry: TTEntry) {
         //do not commit invalid scores or low depths to the hashtable
-        if self.size == 0 || matches!(entry.eval.value(), Value::Infty | Value::NegInfty) {
+        if self.size == 0 || matches!(entry.eval().value(), Value::Infty | Value::NegInfty) {
             return;
         }
-        let mut hash_entry = self.hash[zobrist_key as usize % self.size].lock();
+        let hash_entry = unsafe { (& *self.hash.get())[zobrist_key as usize % self.size] };
         //Mate scores may be seen as having infinite depth
-        if (hash_entry.0.depth < entry.depth
-            || (matches!(entry.eval.value(), Value::Mate(_)) && entry.eval > hash_entry.0.eval))
-            && (hash_entry.0.depth + 5 < entry.depth
-                || entry.eval.bound() == Bound::Exact
+        if (hash_entry.0.depth() < entry.depth()
+            || (matches!(entry.eval().value(), Value::Mate(_)) && entry.eval() > hash_entry.0.eval()))
+            && (hash_entry.0.depth() + 2 < entry.depth()
+                || entry.eval().bound() == Bound::Exact
                 || hash_entry.0.eval().bound() != Bound::Exact)
         {
-            hash_entry.0 = entry;
+            unsafe { (&mut *self.hash.get())[zobrist_key as usize % self.size].0 = entry; }
         } else {
-            hash_entry.1 = entry;
+            unsafe { (&mut *self.hash.get())[zobrist_key as usize % self.size].1 = entry; }
         }
     }
 }
 
 #[derive(Clone, PartialEq, Copy)]
 pub struct TTEntry {
-    eval: Eval,
-    depth: u8,
     zobrist_hash: u64,
-    mov: CompressedMove,
+    depth_and_move: u64,
+    eval: u64
 }
 
 impl TTEntry {
     const UNCHECKED: TTEntry = TTEntry {
-        eval: Eval::MIN,
-        depth: 0,
         zobrist_hash: 0,
-        mov: CompressedMove {
-            to: 0,
-            from: 0,
-            piece_and_type: 0,
-        },
+        depth_and_move: 0,
+        eval: 0,
     };
     #[inline]
     pub fn mov(&self) -> Option<Move> {
-        self.mov.decompress()
+        Move::decompress(((self.depth_and_move >> 8) & 0xffffffff) as u32)
     }
     pub fn new(eval: Eval, depth: u8, zobrist_hash: u64, mov: Move) -> TTEntry {
+        let dam = ((mov.compress() << 8) ^ depth as u32) as u64;
+        let ev = eval.pack_for_tt();
         TTEntry {
-            eval,
-            depth,
-            zobrist_hash,
-            mov: mov.compress(),
+            zobrist_hash: zobrist_hash ^ dam ^ ev,
+            depth_and_move: dam,
+            eval: ev,
         }
     }
     #[inline]
     pub fn eval(&self) -> Eval {
-        self.eval
+        Eval::from_packed(self.eval)
     }
     #[inline]
     pub fn depth(&self) -> u8 {
-        self.depth
+        (self.depth_and_move & 0xff) as u8
     }
 }
 

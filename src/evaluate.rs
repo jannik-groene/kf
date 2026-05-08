@@ -1,6 +1,7 @@
 mod eval;
 pub mod nnue;
 mod piecetables;
+mod endgames;
 
 use crate::{
     chess::{BitBoard, Board, Color, File, Piece, Position, Square},
