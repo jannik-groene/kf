@@ -175,16 +175,14 @@ mod tests {
         let mut count = 0;
         let picker = super::MovePicker::new(pos, [None, None], None);
         for m in picker {
-            pos.do_move(m);
-            count += perft_step(pos, depth - 1);
-            pos.undo_move();
+            count += perft_step(&mut pos.from_move(m), depth - 1);
         }
         count
     }
 
     #[test]
     fn perft_movepicker() {
-        let mut positions = vec![
+        let mut positions = [
             Position::new(),
             Position::from_fen(String::from(
                 "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 0",
