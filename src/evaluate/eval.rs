@@ -299,60 +299,60 @@ impl Neg for Eval {
 
 impl Ord for Eval {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.partial_cmp(other).unwrap()
-    }
-}
-
-impl PartialOrd for Eval {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         match self.value {
             Value::Mate(m) => match other.value {
                 Value::Mate(m2) => {
                     //Note that we have m2.cmp(m), since mate in 3 plys is better than mate in
                     //5 plys
                     if m % 2 == 1 && m2 % 2 == 1 {
-                        Some(m2.cmp(&m))
+                        m2.cmp(&m)
                     } else if m % 2 == 1 && m2 % 2 == 0 {
-                        Some(std::cmp::Ordering::Greater)
+                        std::cmp::Ordering::Greater
                     } else if m % 2 == 0 && m2 % 2 == 1 {
-                        Some(std::cmp::Ordering::Less)
+                        std::cmp::Ordering::Less
                     }
                     //If we get mated, a long time off is best!
                     else {
-                        Some(m.cmp(&m2))
+                        m.cmp(&m2)
                     }
                 }
-                Value::Infty => Some(std::cmp::Ordering::Less),
-                Value::NegInfty => Some(std::cmp::Ordering::Greater),
+                Value::Infty => std::cmp::Ordering::Less,
+                Value::NegInfty => std::cmp::Ordering::Greater,
                 Value::Centis(_) => {
                     if m % 2 == 1 {
-                        Some(std::cmp::Ordering::Greater)
+                        std::cmp::Ordering::Greater
                     } else {
-                        Some(std::cmp::Ordering::Less)
+                        std::cmp::Ordering::Less
                     }
                 }
             },
             Value::Infty => match other.value {
-                Value::Infty => Some(std::cmp::Ordering::Equal),
-                _ => Some(std::cmp::Ordering::Greater),
+                Value::Infty => std::cmp::Ordering::Equal,
+                _ => std::cmp::Ordering::Greater,
             },
             Value::NegInfty => match other.value {
-                Value::NegInfty => Some(std::cmp::Ordering::Equal),
-                _ => Some(std::cmp::Ordering::Less),
+                Value::NegInfty => std::cmp::Ordering::Equal,
+                _ => std::cmp::Ordering::Less,
             },
             Value::Centis(c) => match other.value {
                 Value::Mate(m) => {
                     if m % 2 == 1 {
-                        Some(std::cmp::Ordering::Less)
+                        std::cmp::Ordering::Less
                     } else {
-                        Some(std::cmp::Ordering::Greater)
+                        std::cmp::Ordering::Greater
                     }
                 }
-                Value::Infty => Some(std::cmp::Ordering::Less),
-                Value::NegInfty => Some(std::cmp::Ordering::Greater),
-                Value::Centis(c2) => Some(c.cmp(&c2)),
+                Value::Infty => std::cmp::Ordering::Less,
+                Value::NegInfty => std::cmp::Ordering::Greater,
+                Value::Centis(c2) => c.cmp(&c2),
             },
         }
+    }
+}
+
+impl PartialOrd for Eval {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
     }
 }
 
