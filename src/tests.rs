@@ -1,5 +1,5 @@
 use crate::chess;
-use rand::{seq::SliceRandom, thread_rng};
+//use rand::{seq::SliceRandom, thread_rng};
 
 #[test]
 fn read_start_fen() {
@@ -147,7 +147,7 @@ fn simple_pinned_pawn_attack() {
     let mut pos =
         chess::Position::from_fen(String::from("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 2"))
             .unwrap();
-    pos.do_move(chess::Move {
+    pos = pos.from_move(chess::Move {
         from: 12u8.into(),
         to: 28u8.into(),
         piece: chess::Piece::Pawn,
@@ -235,9 +235,19 @@ fn do_perft(pos: &mut chess::Position, depth: usize) -> usize {
     }
 }
 
+
+#[test]
+#[ignore]
+fn perft_7() {
+    let mut pos = chess::Position::new();
+    let res = do_perft(&mut pos, 7);
+    assert_eq!(res, 3_195_901_860);
+//6    assert_eq!(res, 119_060_324);
+}
+
 #[test]
 fn move_count_test() {
-    let mut positions = vec![
+    let positions = [
         //Position 1
         //WORKS TO DEPTH 6!
         chess::Position::new(),
@@ -280,95 +290,95 @@ fn move_count_test() {
     ];
     //Choose a test depth between 1 and 6, depth 6 takes about 40 minutes
     let depth: usize = 4;
-    for (pos, res) in positions.iter_mut().zip(results.iter()) {
-        assert_eq!(do_perft(pos, depth), res[depth]);
+    for (pos, res) in positions.iter().zip(results.iter()) {
+        assert_eq!(do_perft(&mut pos.clone(), depth), res[depth]);
     }
 }
 
-fn do_and_undo_random_moves(pos: &mut chess::Position, count: usize) {
-    let moves = pos.get_moves();
-    if !moves.is_empty() && count > 0 {
-        let m = *pos.get_moves().choose(&mut thread_rng()).unwrap();
-        let zobrist = pos.zobrist_hash();
-        pos.do_move(m);
-        do_and_undo_random_moves(pos, count - 1);
-        pos.undo_move();
-        println!("{},{:?}", m, m.typ);
-        println!("0x{:016x},0x{:016x}", zobrist, pos.zobrist_hash());
-        assert_eq!(pos.zobrist_hash(), zobrist);
-    }
-}
+//fn do_and_undo_random_moves(pos: &mut chess::Position, count: usize) {
+//    let moves = pos.get_moves();
+//    if !moves.is_empty() && count > 0 {
+//        let m = *pos.get_moves().choose(&mut thread_rng()).unwrap();
+//        let zobrist = pos.zobrist_hash();
+//        pos.do_move(m);
+//        do_and_undo_random_moves(pos, count - 1);
+//        pos.undo_move();
+//        println!("{},{:?}", m, m.typ);
+//        println!("0x{:016x},0x{:016x}", zobrist, pos.zobrist_hash());
+//        assert_eq!(pos.zobrist_hash(), zobrist);
+//    }
+//}
 
-#[test]
-fn undo_moves() {
-    //Undo normal move
-    let mut pos = chess::Position::new();
-    let mov1 = chess::Move {
-        from: 1u8.into(),
-        to: 16u8.into(),
-        piece: chess::Piece::Knight,
-        typ: chess::MoveType::Normal,
-    };
-    let mut pos2 = pos.from_move(mov1);
-    pos2.undo_move();
-    assert!(*pos.get_board() == *pos2.get_board());
-    //Undo capture move
-    pos = chess::Position::from_fen(String::from(
-        "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1",
-    ))
-    .unwrap();
-    let mov2 = chess::Move {
-        from: 21u8.into(),
-        to: 45u8.into(),
-        piece: chess::Piece::Queen,
-        typ: chess::MoveType::Capture(chess::Piece::Knight),
-    };
-    pos2 = pos.from_move(mov2);
-    pos2.undo_move();
-    assert!(*pos.get_board() == *pos2.get_board());
-    //Undo enpassant
-    pos = chess::Position::from_fen(String::from(
-        "rnbqkbnr/pp3ppp/8/2pPp3/5P2/8/PPPP2PP/RNBQKBNR w KQkq c6 0 4",
-    ))
-    .unwrap();
-    let mov3 = chess::Move {
-        from: 35u8.into(),
-        to: 42u8.into(),
-        piece: chess::Piece::Pawn,
-        typ: chess::MoveType::Enpassant,
-    };
-    pos2 = pos.from_move(mov3);
-    pos2.undo_move();
-    assert!(*pos.get_board() == *pos2.get_board());
-    //Undo castling
-    pos = chess::Position::from_fen(String::from(
-        "rn1qk2r/1p2bppp/p2pbn2/4p3/4P3/1NN1BP2/PPPQ2PP/R3KB1R b KQkq - 2 9",
-    ))
-    .unwrap();
-    let mov4 = chess::Move {
-        from: 60u8.into(),
-        to: 62u8.into(),
-        piece: chess::Piece::King,
-        typ: chess::MoveType::Castle,
-    };
-    pos2 = pos.from_move(mov4);
-    pos2.undo_move();
-    assert!(*pos.get_board() == *pos2.get_board());
-    //pawn promotion and capture
-    pos = chess::Position::from_fen(String::from(
-        "rnbq1bnr/pppkpPpp/8/8/8/3p4/PPPP1PPP/RNBQKBNR w KQ - 1 5",
-    ))
-    .unwrap();
-    let mov5 = chess::Move::from_str("f7g8q", pos.get_board());
-    pos.do_move(mov5);
-    pos.undo_move();
-    //random checks
-    for _ in 0..10000 {
-        pos = chess::Position::new();
-        do_and_undo_random_moves(&mut pos, 40);
-        assert!(*pos.get_board() == chess::Board::new());
-    }
-}
+//#[test]
+//fn undo_moves() {
+//    //Undo normal move
+//    let mut pos = chess::Position::new();
+//    let mov1 = chess::Move {
+//        from: 1u8.into(),
+//        to: 16u8.into(),
+//        piece: chess::Piece::Knight,
+//        typ: chess::MoveType::Normal,
+//    };
+//    let mut pos2 = pos.from_move(mov1);
+//    pos2.undo_move();
+//    assert!(*pos.get_board() == *pos2.get_board());
+//    //Undo capture move
+//    pos = chess::Position::from_fen(String::from(
+//        "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1",
+//    ))
+//    .unwrap();
+//    let mov2 = chess::Move {
+//        from: 21u8.into(),
+//        to: 45u8.into(),
+//        piece: chess::Piece::Queen,
+//        typ: chess::MoveType::Capture(chess::Piece::Knight),
+//    };
+//    pos2 = pos.from_move(mov2);
+//    pos2.undo_move();
+//    assert!(*pos.get_board() == *pos2.get_board());
+//    //Undo enpassant
+//    pos = chess::Position::from_fen(String::from(
+//        "rnbqkbnr/pp3ppp/8/2pPp3/5P2/8/PPPP2PP/RNBQKBNR w KQkq c6 0 4",
+//    ))
+//    .unwrap();
+//    let mov3 = chess::Move {
+//        from: 35u8.into(),
+//        to: 42u8.into(),
+//        piece: chess::Piece::Pawn,
+//        typ: chess::MoveType::Enpassant,
+//    };
+//    pos2 = pos.from_move(mov3);
+//    pos2.undo_move();
+//    assert!(*pos.get_board() == *pos2.get_board());
+//    //Undo castling
+//    pos = chess::Position::from_fen(String::from(
+//        "rn1qk2r/1p2bppp/p2pbn2/4p3/4P3/1NN1BP2/PPPQ2PP/R3KB1R b KQkq - 2 9",
+//    ))
+//    .unwrap();
+//    let mov4 = chess::Move {
+//        from: 60u8.into(),
+//        to: 62u8.into(),
+//        piece: chess::Piece::King,
+//        typ: chess::MoveType::Castle,
+//    };
+//    pos2 = pos.from_move(mov4);
+//    pos2.undo_move();
+//    assert!(*pos.get_board() == *pos2.get_board());
+//    //pawn promotion and capture
+//    pos = chess::Position::from_fen(String::from(
+//        "rnbq1bnr/pppkpPpp/8/8/8/3p4/PPPP1PPP/RNBQKBNR w KQ - 1 5",
+//    ))
+//    .unwrap();
+//    let mov5 = chess::Move::from_str("f7g8q", pos.get_board());
+//    pos.do_move(mov5);
+//    pos.undo_move();
+//    //random checks
+//    for _ in 0..10000 {
+//        pos = chess::Position::new();
+//        do_and_undo_random_moves(&mut pos, 40);
+//        assert!(*pos.get_board() == chess::Board::new());
+//    }
+//}
 
 //#[test]
 //fn mate_in_three_test() {

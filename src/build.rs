@@ -4,7 +4,7 @@ use std::io::Write;
 use std::path::Path;
 
 use std::arch::x86_64::{_pext_u64,_pdep_u64};
-use rand::{self, Rng, SeedableRng};
+use rand::{self, Rng, RngCore, SeedableRng, rngs::SmallRng};
 
 fn write_pawn_attacks(f: &mut File) {
     writeln!(f, "const PAWN_ATTACKS: [[u64; 64]; 2] = [[").unwrap();
@@ -238,13 +238,13 @@ fn write_connecting_rays(f: &mut File) {
 }
 
 fn write_zobrist_numbers(f: &mut File) {
-    let mut rng = rand::rngs::SmallRng::seed_from_u64(31415926);
+    let mut rng = SmallRng::seed_from_u64(31415926);
 
     for piece in ["KING", "QUEEN", "BISHOP", "KNIGHT", "ROOK", "PAWN"] {
         for color in ["WHITE", "BLACK"] {
             writeln!(f, "const {}_{}_ZOBRIST: [u64; 64] = [", color, piece).unwrap();
             for _ in 0..64 {
-                write!(f, "0x{:x},", rng.gen::<u64>()).unwrap();
+                write!(f, "0x{:x},", rng.next_u64()).unwrap();
             }
             writeln!(f, "];\n").unwrap();
         }
@@ -252,17 +252,17 @@ fn write_zobrist_numbers(f: &mut File) {
 
     writeln!(f, "const CASTLING_ZOBRIST: [u64; 4] = [").unwrap();
     for _ in 0..4 {
-        write!(f, "0x{:x},", rng.gen::<u64>()).unwrap();
+        write!(f, "0x{:x},", rng.next_u64()).unwrap();
     }
     writeln!(f, "\n];").unwrap();
 
     writeln!(f, "const ENPASSANT_ZOBRIST: [u64; 8] = [").unwrap();
     for _ in 0..8 {
-        write!(f, "0x{:x},", rng.gen::<u64>()).unwrap();
+        write!(f, "0x{:x},", rng.next_u64()).unwrap();
     }
     writeln!(f, "\n];").unwrap();
 
-    writeln!(f, "const COLOR_ZOBRIST: u64 = 0x{:x};", rng.gen::<u64>()).unwrap();
+    writeln!(f, "const COLOR_ZOBRIST: u64 = 0x{:x};", rng.next_u64()).unwrap();
 }
 
 fn main() {

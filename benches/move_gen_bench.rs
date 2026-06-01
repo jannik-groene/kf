@@ -21,7 +21,7 @@ fn attack_gen_in_opening(c: &mut Criterion<CyclesPerByte>) {
 }
 
 fn do_move_en_passant(c: &mut Criterion<CyclesPerByte>) {
-    let mut pos = chess::Position::from_fen(String::from(
+    let pos = chess::Position::from_fen(String::from(
         "rnbqkbnr/pp3ppp/8/2pPp3/5P2/8/PPPP2PP/RNBQKBNR w KQkq c6 0 4",
     ))
     .unwrap();
@@ -33,8 +33,7 @@ fn do_move_en_passant(c: &mut Criterion<CyclesPerByte>) {
     };
     c.bench_function("do_move_en_passant", |b| {
         b.iter(|| {
-            pos.do_move(m);
-            pos.undo_move();
+            pos.from_move(m);
         })
     });
 }
@@ -47,9 +46,7 @@ fn perft_step(pos: &mut chess::Position, d: u8) -> usize {
     } else {
         let mut total = 0;
         for m in pos.get_moves() {
-            pos.do_move(m);
-            total += perft_step(pos, d - 1);
-            pos.undo_move();
+            total += perft_step(&mut pos.from_move(m), d - 1);
         }
         total
     }
