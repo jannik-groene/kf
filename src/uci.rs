@@ -120,7 +120,7 @@ impl UCIHandler for Engine {
         }
     }
     fn handle_input(&mut self, s: String) {
-        let tokens: Vec<&str> = s.trim().split_whitespace().collect();
+        let tokens: Vec<&str> = s.split_whitespace().collect();
         match tokens[0] {
             "uci" => self.handle_uci(),
             "debug" => self.handle_debug(tokens),
@@ -167,8 +167,8 @@ impl UCIHandler for Engine {
         let (offset, mut pos) = if tokens[1] == "startpos" {
             (2, Position::new())
         } else if tokens[1] == "fen" {
-            let fen = tokens[2..=7].join(" ");
-            (8, Position::from_fen(fen).unwrap())
+            let fen_tokens: Vec<&str> = tokens.iter().skip(2).take_while(|&s| *s != "moves").copied().collect();
+            (2+fen_tokens.len(), Position::from_fen(fen_tokens[0..].join(" ")).unwrap())
         } else {
             return;
         };
