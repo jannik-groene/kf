@@ -1,7 +1,7 @@
 use crate::chess::Color;
 use std::fmt;
 use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Index, Not};
-use std::arch::x86_64::_pext_u64;
+use std::arch::x86_64::{_pext_u64, _blsr_u64};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct BitBoard {
@@ -176,7 +176,9 @@ impl Iterator for BitBoardIterator {
             None
         } else {
             let sq = self.board.least_square();
-            self.board.bits &= self.board.bits.wrapping_sub(1);
+            unsafe {
+                self.board.bits = _blsr_u64(self.board.bits);
+            }
             Some(sq)
         }
     }
@@ -236,7 +238,7 @@ from_square!(u8 u16 u32 u64 usize);
 
 impl Square {
     pub fn new<T: Into<u8>>(t: T) -> Square {
-        let sq = t.into() as u8;
+        let sq = t.into();
         assert!(sq < 64);
         unsafe { std::mem::transmute(sq) }
     }
@@ -316,7 +318,7 @@ pub enum File {
 
 impl File {
     pub fn new<T: Into<u8>>(t: T) -> File {
-        let f = t.into() as u8;
+        let f = t.into();
         assert!(f < 8);
         unsafe { std::mem::transmute(f) }
     }
@@ -364,7 +366,7 @@ pub enum Rank {
 
 impl Rank {
     pub fn new<T: Into<u8>>(t: T) -> Rank {
-        let r = t.into() as u8;
+        let r = t.into();
         assert!(r < 8);
         unsafe { std::mem::transmute(r) }
     }

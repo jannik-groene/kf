@@ -401,16 +401,19 @@ impl Position {
             }
 
             for m in pmoves {
-                moves.push(Move {
-                    from: pos,
-                    to: m,
-                    piece: p,
-                    typ: if !self.board.occupation().is_set(m) {
-                        MoveType::Normal
-                    } else {
-                        MoveType::Capture(self.board.piece_at(m).unwrap())
-                    },
-                });
+                //SAFETY: The ArrayVec capacity exceeds the maximal move number of 218
+                unsafe {
+                    moves.push_unchecked(Move {
+                        from: pos,
+                        to: m,
+                        piece: p,
+                        typ: if !self.board.occupation().is_set(m) {
+                            MoveType::Normal
+                        } else {
+                            MoveType::Capture(self.board.piece_at(m).unwrap())
+                        },
+                    });
+                }
             }
         }
     }
@@ -454,12 +457,14 @@ impl Position {
                         }
                     }
 
-                    moves.push(Move {
-                        from: cand,
-                        to: esq,
-                        piece: Piece::Pawn,
-                        typ: MoveType::Enpassant,
-                    });
+                    unsafe {
+                        moves.push_unchecked(Move {
+                            from: cand,
+                            to: esq,
+                            piece: Piece::Pawn,
+                            typ: MoveType::Enpassant,
+                        });
+                    }
                 }
             }
         }
@@ -484,12 +489,14 @@ impl Position {
                 & KING_CASTLE_MASK[self.to_move as usize])
                 .is_empty()
         {
-            moves.push(Move {
-                from: Square::E1.relative(self.to_move),
-                to: Square::G1.relative(self.to_move),
-                piece: Piece::King,
-                typ: MoveType::Castle,
-            });
+            unsafe {
+                moves.push_unchecked(Move {
+                    from: Square::E1.relative(self.to_move),
+                    to: Square::G1.relative(self.to_move),
+                    piece: Piece::King,
+                    typ: MoveType::Castle,
+                });
+            }
         }
 
         //Check for queenside castling.
@@ -532,12 +539,14 @@ impl Position {
                 continue;
             }
 
-            moves.push(Move {
-                piece: Piece::Pawn,
-                from,
-                to,
-                typ: MoveType::Normal,
-            });
+            unsafe {
+                moves.push_unchecked(Move {
+                    piece: Piece::Pawn,
+                    from,
+                    to,
+                    typ: MoveType::Normal,
+                });
+            }
         }
 
         //Push double pawn advances
@@ -548,12 +557,14 @@ impl Position {
                 continue;
             }
 
-            moves.push(Move {
-                piece: Piece::Pawn,
-                from,
-                to,
-                typ: MoveType::Normal,
-            });
+            unsafe {
+                moves.push_unchecked(Move {
+                    piece: Piece::Pawn,
+                    from,
+                    to,
+                    typ: MoveType::Normal,
+                });
+            }
         }
 
         //Push pawn promotions
@@ -565,12 +576,14 @@ impl Position {
             }
 
             for p in PROMOTION_PIECES {
-                moves.push(Move {
-                    piece: Piece::Pawn,
-                    from,
-                    to,
-                    typ: MoveType::Promotion(p),
-                });
+                unsafe {
+                    moves.push_unchecked(Move {
+                        piece: Piece::Pawn,
+                        from,
+                        to,
+                        typ: MoveType::Promotion(p),
+                    });
+                }
             }
         }
 
@@ -589,20 +602,24 @@ impl Position {
 
                 if m.rank().relative(self.to_move) == Rank::Eighth {
                     for p in PROMOTION_PIECES {
-                        moves.push(Move {
+                        unsafe {
+                            moves.push_unchecked(Move {
+                                from: pawn,
+                                to: m,
+                                piece: Piece::Pawn,
+                                typ: MoveType::PromotionCapture((p, cap)),
+                            });
+                        }
+                    }
+                } else {
+                    unsafe {
+                        moves.push_unchecked(Move {
                             from: pawn,
                             to: m,
                             piece: Piece::Pawn,
-                            typ: MoveType::PromotionCapture((p, cap)),
+                            typ: MoveType::Capture(cap),
                         });
                     }
-                } else {
-                    moves.push(Move {
-                        from: pawn,
-                        to: m,
-                        piece: Piece::Pawn,
-                        typ: MoveType::Capture(cap),
-                    });
                 }
             }
         }

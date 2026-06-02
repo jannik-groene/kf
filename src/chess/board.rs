@@ -78,12 +78,7 @@ impl Board {
             Piece::Rook,
             Piece::Pawn,
         ];
-        for p in PIECES {
-            if self.piece_boards[p as usize].is_set(sq) {
-                return Some(p);
-            }
-        }
-        None
+        PIECES.iter().find(|&&p| self.piece_boards[p as usize].is_set(sq)).copied()
     }
     #[inline]
     pub fn king_square(&self, c: Color) -> Square {

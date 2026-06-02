@@ -3,8 +3,9 @@ use super::board::Board;
 use crate::chess::{Color, Piece};
 use crate::constants;
 use std::fmt;
+use std::hash::{Hash, Hasher};
 
-pub type MoveList = arrayvec::ArrayVec<Move, 256>;
+pub type MoveList = arrayvec::ArrayVec<Move, 254>;
 
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub enum MoveType {
@@ -14,7 +15,6 @@ pub enum MoveType {
     PromotionCapture((Piece, Piece)),
     Enpassant,
     Castle,
-    Null,
 }
 
 #[derive(PartialEq, Clone, Copy, Debug)]
@@ -92,7 +92,6 @@ impl Move {
             MoveType::PromotionCapture((p, q)) => ((p as u32) << 3) | ((q as u32) << 6) | (3 << 9),
             MoveType::Castle => 4 << 9,
             MoveType::Enpassant => 5 << 9,
-            MoveType::Null => panic!("Cannot compress null move."),
         };
 
         (piece_and_type << 12) ^ <Square as Into<u32>>::into(self.from) ^ (<Square as Into<u32>>::into(self.to) << 6)
@@ -166,6 +165,17 @@ impl Move {
 
             _ => 0,
         }
+    }
+}
+
+
+// This hashing implementation aims to enable move voting.
+// We can therefore assume that there is only one unique move between two squares.
+// We thus do not hash any other information.
+impl Hash for Move {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        u8::from(self.to).hash(state);
+        u8::from(self.from).hash(state);
     }
 }
 
