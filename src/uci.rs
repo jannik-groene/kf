@@ -144,7 +144,9 @@ impl UCIHandler for Engine {
         self.print_config();
         println!("uciok");
     }
-    fn handle_debug(&mut self, _tokens: Vec<&str>) {}
+    fn handle_debug(&mut self, _tokens: Vec<&str>) {
+        println!("{}", self.position().get_board())
+    }
     //If we are not ready we will not parse in the first place.
     fn handle_isready(&self) {
         println!("readyok");
@@ -235,7 +237,10 @@ impl UCIHandler for Engine {
     }
     fn handle_ponderhit(&self) {}
     fn handle_perft(&self, tokens: Vec<&str>) {
+        let start = std::time::Instant::now();
         self.perft(tokens[1].parse::<u8>().unwrap());
+        let delta = std::time::Instant::now() - start;
+        println!("\n{}ms elapsed.", delta.as_millis());
     }
     fn handle_eval(&self) {
         println!("Eval: {}", self.eval());
