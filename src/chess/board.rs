@@ -48,6 +48,13 @@ impl Board {
         self.piece_boards[p as usize].set(sq);
     }
     #[inline]
+    pub fn unset_all(&mut self, sq: Square, c: Color) {
+        self.color_boards[c as usize].unset(sq);
+        for b in &mut self.piece_boards {
+            b.unset(sq);
+        }
+    }
+    #[inline]
     pub fn unset(&mut self, sq: Square, c: Color, p: Piece) {
         self.color_boards[c as usize].unset(sq);
         self.piece_boards[p as usize].unset(sq);
@@ -114,12 +121,12 @@ impl Board {
             (Color::Black, Color::White)
         };
         let our_piece = match m.typ {
-            MoveType::Promotion(p) | MoveType::PromotionCapture((p, _)) => p,
+            MoveType::Promotion(p) | MoveType::PromotionCapture(p) => p,
             _ => m.piece,
         };
         self.unset(m.from, us, m.piece);
         match m.typ {
-            MoveType::Capture(p) | MoveType::PromotionCapture((_, p)) => self.unset(m.to, them, p),
+            MoveType::Capture | MoveType::PromotionCapture(_) => self.unset_all(m.to, them),
             MoveType::Enpassant => self.unset(
                 m.to.file().ep_cap_square().relative(them),
                 them,
@@ -152,30 +159,30 @@ impl Board {
             _ => panic!("Invalid castling attempt."),
         }
     }
-    #[inline]
-    pub fn undo_move(&mut self, m: Move) {
-        let (us, them) = if self.color_boards[0].is_set(m.to) {
-            (Color::White, Color::Black)
-        } else {
-            (Color::Black, Color::White)
-        };
-        let our_piece = match m.typ {
-            MoveType::Promotion(p) | MoveType::PromotionCapture((p, _)) => p,
-            _ => m.piece,
-        };
-        self.set(m.from, us, m.piece);
-        self.unset(m.to, us, our_piece);
-        match m.typ {
-            MoveType::Capture(p) | MoveType::PromotionCapture((_, p)) => self.set(m.to, them, p),
-            MoveType::Enpassant => self.set(
-                m.to.file().ep_cap_square().relative(them),
-                them,
-                Piece::Pawn,
-            ),
-            MoveType::Castle => self.undo_move_castling_rooks(m.to),
-            _ => {}
-        }
-    }
+//    #[inline]
+//    pub fn undo_move(&mut self, m: Move) {
+//        let (us, them) = if self.color_boards[0].is_set(m.to) {
+//            (Color::White, Color::Black)
+//        } else {
+//            (Color::Black, Color::White)
+//        };
+//        let our_piece = match m.typ {
+//            MoveType::Promotion(p) | MoveType::PromotionCapture(p) => p,
+//            _ => m.piece,
+//        };
+//        self.set(m.from, us, m.piece);
+//        self.unset(m.to, us, our_piece);
+//        match m.typ {
+//            MoveType::Capture(p) | MoveType::PromotionCapture((_, p)) => self.set(m.to, them, p),
+//            MoveType::Enpassant => self.set(
+//                m.to.file().ep_cap_square().relative(them),
+//                them,
+//                Piece::Pawn,
+//            ),
+//            MoveType::Castle => self.undo_move_castling_rooks(m.to),
+//            _ => {}
+//        }
+//    }
 }
 
 fn write_piece_to_position(c: char, pos: BitBoard, cboard: &mut [[char; 8]; 8]) {

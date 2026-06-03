@@ -10,9 +10,9 @@ pub type MoveList = arrayvec::ArrayVec<Move, 254>;
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub enum MoveType {
     Normal,
-    Capture(Piece),
+    Capture,
     Promotion(Piece),
-    PromotionCapture((Piece, Piece)),
+    PromotionCapture(Piece),
     Enpassant,
     Castle,
 }
@@ -63,12 +63,9 @@ impl Move {
 
         let typ = match piece_and_type >> 9 {
             0 => MoveType::Normal,
-            1 => MoveType::Capture(u32_to_piece((piece_and_type >> 3) & 0b111)),
+            1 => MoveType::Capture,
             2 => MoveType::Promotion(u32_to_piece((piece_and_type >> 3) & 0b111)),
-            3 => MoveType::PromotionCapture((
-                u32_to_piece((piece_and_type >> 3) & 0b111),
-                u32_to_piece((piece_and_type >> 6) & 0b111),
-            )),
+            3 => MoveType::PromotionCapture(u32_to_piece((piece_and_type >> 3) & 0b111)),
             4 => MoveType::Castle,
             5 => MoveType::Enpassant,
             _ => return None,
@@ -87,9 +84,9 @@ impl Move {
 
         piece_and_type |= match self.typ {
             MoveType::Normal => 0,
-            MoveType::Capture(p) => ((p as u32) << 3) | (1 << 9),
+            MoveType::Capture => 1 << 9,
             MoveType::Promotion(p) => ((p as u32) << 3) | (2 << 9),
-            MoveType::PromotionCapture((p, q)) => ((p as u32) << 3) | ((q as u32) << 6) | (3 << 9),
+            MoveType::PromotionCapture(p) => ((p as u32) << 3) | (3 << 9),
             MoveType::Castle => 4 << 9,
             MoveType::Enpassant => 5 << 9,
         };
@@ -101,7 +98,7 @@ impl Move {
     //This does not include castling and enpassant numbers, since these depend on the total state
     //of the position.
     #[inline]
-    pub fn zobrist(&self, c: Color) -> u64 {
+    pub fn zobrist(&self, board: &Board, c: Color) -> u64 {
         match self.typ {
             MoveType::Castle => match self.to {
                 Square::C1 => {
@@ -146,13 +143,15 @@ impl Move {
                     ^ constants::piece_zobrist(p, c, self.to)
             }
 
-            MoveType::PromotionCapture((p, q)) => {
+            MoveType::PromotionCapture(p) => {
+                let q = board.piece_at(self.to).unwrap();
                 constants::piece_zobrist(Piece::Pawn, c, self.from)
                     ^ constants::piece_zobrist(p, c, self.to)
                     ^ constants::piece_zobrist(q, c.other(), self.to)
             }
 
-            MoveType::Capture(p) => {
+            MoveType::Capture => {
+                let p = board.piece_at(self.to).unwrap();
                 constants::piece_zobrist(self.piece, c, self.from)
                     ^ constants::piece_zobrist(self.piece, c, self.to)
                     ^ constants::piece_zobrist(p, c.other(), self.to)
@@ -162,8 +161,6 @@ impl Move {
                 constants::piece_zobrist(self.piece, c, self.from)
                     ^ constants::piece_zobrist(self.piece, c, self.to)
             }
-
-            _ => 0,
         }
     }
 }
@@ -202,10 +199,7 @@ fn determine_move_type(
                 return MoveType::Enpassant;
             } else if promote.is_some() {
                 if board.occupation().is_set(to) {
-                    return MoveType::PromotionCapture((
-                        promote.unwrap(),
-                        board.piece_at(to).unwrap(),
-                    ));
+                    return MoveType::PromotionCapture(promote.unwrap());
                 } else {
                     return MoveType::Promotion(promote.unwrap());
                 }
@@ -215,7 +209,7 @@ fn determine_move_type(
     }
 
     if board.occupation().is_set(to) {
-        MoveType::Capture(board.piece_at(to).unwrap())
+        MoveType::Capture
     } else {
         MoveType::Normal
     }
@@ -233,10 +227,10 @@ fn display_promotion(m: &Move) -> String {
         MoveType::Promotion(Piece::Rook) => "r".to_string(),
         MoveType::Promotion(Piece::Bishop) => "b".to_string(),
         MoveType::Promotion(Piece::Knight) => "n".to_string(),
-        MoveType::PromotionCapture((Piece::Queen, _)) => "q".to_string(),
-        MoveType::PromotionCapture((Piece::Rook, _)) => "r".to_string(),
-        MoveType::PromotionCapture((Piece::Bishop, _)) => "b".to_string(),
-        MoveType::PromotionCapture((Piece::Knight, _)) => "n".to_string(),
+        MoveType::PromotionCapture(Piece::Queen) => "q".to_string(),
+        MoveType::PromotionCapture(Piece::Rook) => "r".to_string(),
+        MoveType::PromotionCapture(Piece::Bishop) => "b".to_string(),
+        MoveType::PromotionCapture(Piece::Knight) => "n".to_string(),
         _ => "".to_string(),
     }
 }

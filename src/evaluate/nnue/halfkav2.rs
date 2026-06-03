@@ -1,4 +1,4 @@
-use crate::chess::{Color, Move, MoveType, Piece, Position, Square};
+use crate::chess::{Board, Color, Move, MoveType, Piece, Position, Square};
 use arrayvec::ArrayVec;
 use nnue::features::{EnumerateFeatures, Feature, MoveFeatures, Perspective};
 
@@ -31,7 +31,7 @@ impl Feature for HalfKAv2Feature {
     }
 }
 
-impl MoveFeatures<HalfKAv2Feature> for Move {
+impl MoveFeatures<HalfKAv2Feature> for (Move,Option<Piece>) {
     #[inline]
     fn changed_features(
         &self,
@@ -39,30 +39,36 @@ impl MoveFeatures<HalfKAv2Feature> for Move {
         ksq: u8,
         our_piece: bool,
     ) -> (Vec<HalfKAv2Feature>, Vec<HalfKAv2Feature>) {
-        let f = self.from.relative(perspective.into());
-        let t = self.to.relative(perspective.into());
+        let f = self.0.from.relative(perspective.into());
+        let t = self.0.to.relative(perspective.into());
         let ksq = Square::from(ksq).relative(perspective.into());
 
         //select updated features
-        match self.typ {
-            MoveType::Capture(p) => (
-                vec![HalfKAv2Feature::new(ksq, self.piece, t, our_piece)],
-                vec![
-                    HalfKAv2Feature::new(ksq, self.piece, f, our_piece),
-                    HalfKAv2Feature::new(ksq, p, t, !our_piece),
-                ],
-            ),
+        match self.0.typ {
+            MoveType::Capture => {
+                let p = self.1.unwrap();
+                (
+                    vec![HalfKAv2Feature::new(ksq, self.0.piece, t, our_piece)],
+                    vec![
+                        HalfKAv2Feature::new(ksq, self.0.piece, f, our_piece),
+                        HalfKAv2Feature::new(ksq, p, t, !our_piece),
+                    ],
+                )
+            }
             MoveType::Promotion(p) => (
                 vec![HalfKAv2Feature::new(ksq, p, t, our_piece)],
-                vec![HalfKAv2Feature::new(ksq, self.piece, f, our_piece)],
+                vec![HalfKAv2Feature::new(ksq, self.0.piece, f, our_piece)],
             ),
-            MoveType::PromotionCapture((p_prom, p_cap)) => (
-                vec![HalfKAv2Feature::new(ksq, p_prom, t, our_piece)],
-                vec![
-                    HalfKAv2Feature::new(ksq, self.piece, f, our_piece),
-                    HalfKAv2Feature::new(ksq, p_cap, t, !our_piece),
-                ],
-            ),
+            MoveType::PromotionCapture(p) => {
+                let q = self.1.unwrap();
+                (
+                    vec![HalfKAv2Feature::new(ksq, p, t, our_piece)],
+                    vec![
+                        HalfKAv2Feature::new(ksq, self.0.piece, f, our_piece),
+                        HalfKAv2Feature::new(ksq, q, t, !our_piece),
+                    ]
+                )
+            }
             MoveType::Enpassant => {
                 let cap_square = if our_piece {
                     t.file().ep_cap_square()
@@ -70,9 +76,9 @@ impl MoveFeatures<HalfKAv2Feature> for Move {
                     t.file().ep_cap_square().flipped()
                 };
                 (
-                    vec![HalfKAv2Feature::new(ksq, self.piece, t, our_piece)],
+                    vec![HalfKAv2Feature::new(ksq, self.0.piece, t, our_piece)],
                     vec![
-                        HalfKAv2Feature::new(ksq, self.piece, f, our_piece),
+                        HalfKAv2Feature::new(ksq, self.0.piece, f, our_piece),
                         HalfKAv2Feature::new(ksq, Piece::Pawn, cap_square, !our_piece),
                     ],
                 )
@@ -95,8 +101,8 @@ impl MoveFeatures<HalfKAv2Feature> for Move {
                 )
             }
             _ => (
-                vec![HalfKAv2Feature::new(ksq, self.piece, t, our_piece)],
-                vec![HalfKAv2Feature::new(ksq, self.piece, f, our_piece)],
+                vec![HalfKAv2Feature::new(ksq, self.0.piece, t, our_piece)],
+                vec![HalfKAv2Feature::new(ksq, self.0.piece, f, our_piece)],
             ),
         }
     }

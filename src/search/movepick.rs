@@ -160,7 +160,7 @@ impl Iterator for MovePicker {
 fn is_capture(m: &Move) -> bool {
     matches!(
         m.typ,
-        MoveType::Capture(_) | MoveType::PromotionCapture(_) | MoveType::Enpassant
+        MoveType::Capture | MoveType::PromotionCapture(_) | MoveType::Enpassant
     )
 }
 

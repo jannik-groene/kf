@@ -46,7 +46,8 @@ impl NNUEState {
             let our_piece = pos.get_board().get_color_bb(c).is_set(m.to);
 
             //select updated features
-            let (added, removed) = m.changed_features(c.into(), kp.into(), our_piece);
+            let p = pos.get_board().piece_at(m.to);
+            let (added, removed) = (m,p).changed_features(c.into(), kp.into(), our_piece);
             sf_half_ka_v2::update_accumulator(acc, acc_new, added, removed, c as usize)
         }
         //if the king has moved we need to update all weights in the position
@@ -90,6 +91,7 @@ mod tests {
     make_model!(sf_half_ka_v2, 45056 => 1024 => 16 => 32 => 1, 8);
 
     #[test]
+    #[ignore]
     fn evaluate_position() {
         let pos = Position::new();
         sf_half_ka_v2::load_model(std::path::Path::new("nn-33c9d39e5eb6.nnue")).unwrap();

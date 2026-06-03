@@ -236,7 +236,7 @@ fn search_helper(helper: &mut HelperThread, depth: u8, alpha: Eval, beta: Eval) 
 fn is_tactical(pos: &Position, m: Move) -> bool {
     matches!(
         m.typ,
-        MoveType::Capture(_) | MoveType::Promotion(_) | MoveType::PromotionCapture(_)
+        MoveType::Capture | MoveType::Promotion(_) | MoveType::PromotionCapture(_)
     ) || pos.gives_check(&m)
 }
 
@@ -442,7 +442,7 @@ fn search_step(
                 zh,
                 TTEntry::new(movescore.to_lowerbound(), depth_left, zh, m),
             );
-            if !matches!(m.typ, MoveType::Capture(_)) && ttmove != Some(m) {
+            if !matches!(m.typ, MoveType::Capture) && ttmove != Some(m) {
                 thread.register_killer(depth.current as u8, m);
             }
             thread.invalidate_killers(depth.current as u8);
@@ -522,10 +522,10 @@ fn quiesce(thread: &mut impl Thread, mut alpha: Eval, beta: Eval, delta: i32, qp
             .iter()
             .copied()
             .filter(|m| match m.typ {
-                MoveType::Capture(_) => {
+                MoveType::Capture => {
                     static_eval + thread.pos().see(*m) + delta > alpha && thread.pos().see(*m) > 0
                 }
-                MoveType::Promotion(_) | MoveType::PromotionCapture((_, _)) => true,
+                MoveType::Promotion(_) | MoveType::PromotionCapture(_) => true,
                 MoveType::Enpassant => static_eval + delta + 100 > alpha,
                 _ => false,
             })
@@ -534,10 +534,11 @@ fn quiesce(thread: &mut impl Thread, mut alpha: Eval, beta: Eval, delta: i32, qp
             return static_eval;
         }
         cand_moves.sort_by_key(|m| -match m.typ {
-            MoveType::Capture(_) => thread.pos().see(*m),
+            MoveType::Capture => thread.pos().see(*m),
             MoveType::Promotion(p) => piece_value(p) - piece_value(Piece::Pawn),
-            MoveType::PromotionCapture((p_prom, p_cap)) => {
-                piece_value(p_prom) + piece_value(p_cap) - piece_value(Piece::Pawn)
+            MoveType::PromotionCapture(p) => {
+                let q = thread.pos().get_board().piece_at(m.to).unwrap();
+                piece_value(p) + piece_value(q) - piece_value(Piece::Pawn)
             }
             _ => 0,
         });

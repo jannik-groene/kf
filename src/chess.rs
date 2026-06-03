@@ -410,7 +410,7 @@ impl Position {
                         typ: if !self.board.occupation().is_set(m) {
                             MoveType::Normal
                         } else {
-                            MoveType::Capture(self.board.piece_at(m).unwrap())
+                            MoveType::Capture
                         },
                     });
                 }
@@ -598,8 +598,6 @@ impl Position {
             }
 
             for m in attacks {
-                let cap = self.board.piece_at(m).unwrap();
-
                 if m.rank().relative(self.to_move) == Rank::Eighth {
                     for p in PROMOTION_PIECES {
                         unsafe {
@@ -607,7 +605,7 @@ impl Position {
                                 from: pawn,
                                 to: m,
                                 piece: Piece::Pawn,
-                                typ: MoveType::PromotionCapture((p, cap)),
+                                typ: MoveType::PromotionCapture(p),
                             });
                         }
                     }
@@ -617,7 +615,7 @@ impl Position {
                             from: pawn,
                             to: m,
                             piece: Piece::Pawn,
-                            typ: MoveType::Capture(cap),
+                            typ: MoveType::Capture,
                         });
                     }
                 }
@@ -650,7 +648,7 @@ impl Position {
                 typ: if !self.board.occupation().is_set(km) {
                     MoveType::Normal
                 } else {
-                    MoveType::Capture(self.board.piece_at(km).unwrap())
+                    MoveType::Capture
                 },
             });
         }
@@ -717,7 +715,7 @@ impl Position {
 
     #[inline]
     fn update_zobrist(&mut self, m: Move) {
-        self.zobrist ^= m.zobrist(self.to_move);
+        self.zobrist ^= m.zobrist(&self.board, self.to_move);
         //Unset the Zobrist en passant flag, if necessary
         if let Some(esq) = self.ply_info.ep_square {
             self.zobrist ^= constants::enpassant_zobrist(esq.file());
@@ -790,7 +788,7 @@ impl Position {
         self.to_move = self.to_move.other();
         self.zobrist ^= constants::color_zobrist();
 
-        if m.piece == Piece::Pawn || matches!(m.typ, MoveType::Capture(_)) {
+        if m.piece == Piece::Pawn || matches!(m.typ, MoveType::Capture) {
             self.ply_info.rule_50_count = 0;
         } else {
             self.ply_info.rule_50_count += 1;
@@ -858,12 +856,12 @@ impl Position {
     //X-ray attacks.
     //We ignore en passant here! Attackers are sorted by value!
     pub fn see(&self, m: Move) -> i32 {
+        let target = m.to;
         let target_piece = match m.typ {
-            MoveType::Capture(p) => p,
+            MoveType::Capture => self.board.piece_at(target).unwrap(),
             _ => return 0,
         };
 
-        let target = m.to;
         let mut color = self.to_move;
         let mut occupation = self.board.occupation();
 
@@ -953,7 +951,7 @@ impl Position {
             .least_square();
 
         let final_piece = match m.typ {
-            MoveType::Promotion(p) | MoveType::PromotionCapture((p, _)) => p,
+            MoveType::Promotion(p) | MoveType::PromotionCapture(p) => p,
             _ => m.piece,
         };
 
@@ -981,7 +979,7 @@ fn simple_sse() {
     let mov = Move {
         from: Square::E1,
         to: Square::E5,
-        typ: MoveType::Capture(Piece::Pawn),
+        typ: MoveType::Capture,
         piece: Piece::Rook,
     };
     assert_eq!(pos.see(mov), constants::piece_value(Piece::Pawn));
@@ -992,7 +990,7 @@ fn simple_sse() {
     let mov2 = Move {
         from: Square::D3,
         to: Square::E5,
-        typ: MoveType::Capture(Piece::Pawn),
+        typ: MoveType::Capture,
         piece: Piece::Knight,
     };
     assert_eq!(pos2.see(mov2), constants::piece_value(Piece::Pawn) - constants::piece_value(Piece::Knight));
@@ -1019,27 +1017,23 @@ fn compress_and_decompress_move() {
         assert!(m == m2.unwrap());
     }
     for p in pieces.iter() {
-        for q in pieces.iter() {
-            let m = Move {
-                from: Square::G7,
-                to: Square::H8,
-                piece: Piece::Pawn,
-                typ: MoveType::PromotionCapture((*p, *q)),
-            };
-            let m2 = Move::decompress(m.compress());
-            assert!(m == m2.unwrap());
-        }
+        let m = Move {
+            from: Square::G7,
+            to: Square::H8,
+            piece: Piece::Pawn,
+            typ: MoveType::PromotionCapture(*p),
+        };
+        let m2 = Move::decompress(m.compress());
+        assert!(m == m2.unwrap());
     }
     for p in pieces.iter() {
-        for q in pieces.iter() {
-            let m = Move {
-                from: Square::G7,
-                to: Square::H8,
-                piece: *p,
-                typ: MoveType::Capture(*q),
-            };
-            let m2 = Move::decompress(m.compress());
-            assert!(m == m2.unwrap());
-        }
+        let m = Move {
+            from: Square::G7,
+            to: Square::H8,
+            piece: *p,
+            typ: MoveType::Capture,
+        };
+        let m2 = Move::decompress(m.compress());
+        assert!(m == m2.unwrap());
     }
 }
