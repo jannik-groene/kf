@@ -54,8 +54,8 @@ impl EngineConfig {
             },
             ConfigOption {
                 id: "Threads".to_string(),
-                value: OptionValue::Spin(4),
-                default: Some(OptionValue::Spin(4)),
+                value: OptionValue::Spin(1),
+                default: Some(OptionValue::Spin(1)),
                 min: Some(OptionValue::Spin(1)),
                 max: Some(OptionValue::Spin(8)),
                 vars: None,
@@ -89,17 +89,17 @@ impl EngineConfig {
                 //                OptionValue::BUTTON => print!("button"),
                 OptionValue::String(_) => print!("string"),
             }
-            if option.default.is_some() {
-                print!(" default {}", option.default.as_ref().unwrap());
+            if let Some(default) = &option.default {
+                print!(" default {}", default);
             }
-            if option.min.is_some() {
-                print!(" min {}", option.min.as_ref().unwrap());
+            if let Some(min) = &option.min {
+                print!(" min {}", min);
             }
-            if option.max.is_some() {
-                print!(" max {}", option.max.as_ref().unwrap());
+            if let Some(max) = &option.max {
+                print!(" max {}", max);
             }
-            if option.vars.is_some() {
-                for v in option.vars.as_ref().unwrap() {
+            if let Some(vars) = &option.vars {
+                for v in vars {
                     print!(" var {}", v);
                 }
             }
@@ -283,6 +283,9 @@ impl Engine {
     }
     pub fn eval(&self) -> crate::evaluate::Eval {
         crate::evaluate::evaluate(&self.search.root_position())
+    }
+    pub fn position(&self) -> crate::chess::Position {
+        self.search.root_position()
     }
 }
 
