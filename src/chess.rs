@@ -517,9 +517,6 @@ impl Position {
 
     #[inline]
     fn get_pawn_moves(&self, moves: &mut MoveList, check_mask: BitBoard) {
-        const PROMOTION_PIECES: [Piece; 4] =
-            [Piece::Queen, Piece::Rook, Piece::Bishop, Piece::Knight];
-
         let pawns = self.board.get_bb(self.to_move, Piece::Pawn);
 
         let ksq = self.board.get_bb(self.to_move, Piece::King).least_square();
@@ -575,15 +572,31 @@ impl Position {
                 continue;
             }
 
-            for p in PROMOTION_PIECES {
-                unsafe {
-                    moves.push_unchecked(Move {
-                        piece: Piece::Pawn,
-                        from,
-                        to,
-                        typ: MoveType::Promotion(p),
-                    });
-                }
+            unsafe {
+                moves.push_unchecked(Move {
+                    piece: Piece::Pawn,
+                    from,
+                    to,
+                    typ: MoveType::PromotionN,
+                });
+                moves.push_unchecked(Move {
+                    piece: Piece::Pawn,
+                    from,
+                    to,
+                    typ: MoveType::PromotionB,
+                });
+                moves.push_unchecked(Move {
+                    piece: Piece::Pawn,
+                    from,
+                    to,
+                    typ: MoveType::PromotionR,
+                });
+                moves.push_unchecked(Move {
+                    piece: Piece::Pawn,
+                    from,
+                    to,
+                    typ: MoveType::PromotionQ,
+                });
             }
         }
 
@@ -599,15 +612,31 @@ impl Position {
 
             for m in attacks {
                 if m.rank().relative(self.to_move) == Rank::Eighth {
-                    for p in PROMOTION_PIECES {
-                        unsafe {
-                            moves.push_unchecked(Move {
-                                from: pawn,
-                                to: m,
-                                piece: Piece::Pawn,
-                                typ: MoveType::PromotionCapture(p),
-                            });
-                        }
+                    unsafe {
+                        moves.push_unchecked(Move {
+                            from: pawn,
+                            to: m,
+                            piece: Piece::Pawn,
+                            typ: MoveType::PromotionCaptureN,
+                        });
+                        moves.push_unchecked(Move {
+                            from: pawn,
+                            to: m,
+                            piece: Piece::Pawn,
+                            typ: MoveType::PromotionCaptureB,
+                        });
+                        moves.push_unchecked(Move {
+                            from: pawn,
+                            to: m,
+                            piece: Piece::Pawn,
+                            typ: MoveType::PromotionCaptureR,
+                        });
+                        moves.push_unchecked(Move {
+                            from: pawn,
+                            to: m,
+                            piece: Piece::Pawn,
+                            typ: MoveType::PromotionCaptureQ,
+                        });
                     }
                 } else {
                     unsafe {
@@ -950,10 +979,7 @@ impl Position {
             .get_bb(self.color().other(), Piece::King)
             .least_square();
 
-        let final_piece = match m.typ {
-            MoveType::Promotion(p) | MoveType::PromotionCapture(p) => p,
-            _ => m.piece,
-        };
+        let final_piece = if let Some(p) = m.typ.promotion_piece() {p} else {m.piece}; 
 
         match final_piece {
             Piece::Knight => constants::knight_moves(kpos).is_set(m.to),
@@ -1016,12 +1042,12 @@ fn compress_and_decompress_move() {
         let m2 = Move::decompress(m.compress());
         assert!(m == m2.unwrap());
     }
-    for p in pieces.iter() {
+    {
         let m = Move {
             from: Square::G7,
             to: Square::H8,
             piece: Piece::Pawn,
-            typ: MoveType::PromotionCapture(*p),
+            typ: MoveType::PromotionCaptureB,
         };
         let m2 = Move::decompress(m.compress());
         assert!(m == m2.unwrap());

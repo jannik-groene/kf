@@ -234,10 +234,8 @@ fn search_helper(helper: &mut HelperThread, depth: u8, alpha: Eval, beta: Eval) 
 }
 
 fn is_tactical(pos: &Position, m: Move) -> bool {
-    matches!(
-        m.typ,
-        MoveType::Capture | MoveType::Promotion(_) | MoveType::PromotionCapture(_)
-    ) || pos.gives_check(&m)
+    m.typ == MoveType::Capture || m.typ.is_promotion() || pos.gives_check(&m)
+}
 }
 
 //Parameters:
@@ -525,7 +523,10 @@ fn quiesce(thread: &mut impl Thread, mut alpha: Eval, beta: Eval, delta: i32, qp
                 MoveType::Capture => {
                     static_eval + thread.pos().see(*m) + delta > alpha && thread.pos().see(*m) > 0
                 }
-                MoveType::Promotion(_) | MoveType::PromotionCapture(_) => true,
+                MoveType::PromotionN | MoveType::PromotionB | MoveType::PromotionR 
+                                     | MoveType::PromotionQ | MoveType::PromotionCaptureN
+                                     | MoveType::PromotionCaptureB | MoveType::PromotionCaptureR
+                                     | MoveType::PromotionCaptureQ                               => true,
                 MoveType::Enpassant => static_eval + delta + 100 > alpha,
                 _ => false,
             })
@@ -535,10 +536,25 @@ fn quiesce(thread: &mut impl Thread, mut alpha: Eval, beta: Eval, delta: i32, qp
         }
         cand_moves.sort_by_key(|m| -match m.typ {
             MoveType::Capture => thread.pos().see(*m),
-            MoveType::Promotion(p) => piece_value(p) - piece_value(Piece::Pawn),
-            MoveType::PromotionCapture(p) => {
+            MoveType::PromotionN => piece_value(Piece::Knight) - piece_value(Piece::Pawn),
+            MoveType::PromotionB => piece_value(Piece::Bishop) - piece_value(Piece::Pawn),
+            MoveType::PromotionR => piece_value(Piece::Rook) - piece_value(Piece::Pawn),
+            MoveType::PromotionQ => piece_value(Piece::Queen) - piece_value(Piece::Pawn),
+            MoveType::PromotionCaptureN => {
                 let q = thread.pos().get_board().piece_at(m.to).unwrap();
-                piece_value(p) + piece_value(q) - piece_value(Piece::Pawn)
+                piece_value(Piece::Knight) + piece_value(q) - piece_value(Piece::Pawn)
+            }
+            MoveType::PromotionCaptureB => {
+                let q = thread.pos().get_board().piece_at(m.to).unwrap();
+                piece_value(Piece::Knight) + piece_value(q) - piece_value(Piece::Pawn)
+            }
+            MoveType::PromotionCaptureR => {
+                let q = thread.pos().get_board().piece_at(m.to).unwrap();
+                piece_value(Piece::Knight) + piece_value(q) - piece_value(Piece::Pawn)
+            }
+            MoveType::PromotionCaptureQ => {
+                let q = thread.pos().get_board().piece_at(m.to).unwrap();
+                piece_value(Piece::Knight) + piece_value(q) - piece_value(Piece::Pawn)
             }
             _ => 0,
         });

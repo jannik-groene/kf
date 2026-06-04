@@ -11,10 +11,31 @@ pub type MoveList = arrayvec::ArrayVec<Move, 254>;
 pub enum MoveType {
     Normal,
     Capture,
-    Promotion(Piece),
-    PromotionCapture(Piece),
+    PromotionN,
+    PromotionB,
+    PromotionR,
+    PromotionQ,
+    PromotionCaptureN,
+    PromotionCaptureB,
+    PromotionCaptureR,
+    PromotionCaptureQ,
     Enpassant,
     Castle,
+}
+
+impl MoveType {
+    pub fn is_promotion(self) -> bool {
+        matches!(self, Self::PromotionN | Self::PromotionB | Self::PromotionR | Self::PromotionQ | Self::PromotionCaptureN | Self::PromotionCaptureB | Self::PromotionCaptureR | Self::PromotionCaptureQ)
+    }
+    pub fn promotion_piece(self) -> Option<Piece> {
+        match self {
+            Self::PromotionN | Self::PromotionCaptureN => Some(Piece::Knight),
+            Self::PromotionB | Self::PromotionCaptureB => Some(Piece::Bishop),
+            Self::PromotionR | Self::PromotionCaptureR => Some(Piece::Rook),
+            Self::PromotionQ | Self::PromotionCaptureQ => Some(Piece::Queen),
+            _ => None,
+        }
+    }
 }
 
 #[derive(PartialEq, Clone, Copy, Debug)]
@@ -61,15 +82,7 @@ impl Move {
 
         let piece = u32_to_piece(piece_and_type & 0b111);
 
-        let typ = match piece_and_type >> 9 {
-            0 => MoveType::Normal,
-            1 => MoveType::Capture,
-            2 => MoveType::Promotion(u32_to_piece((piece_and_type >> 3) & 0b111)),
-            3 => MoveType::PromotionCapture(u32_to_piece((piece_and_type >> 3) & 0b111)),
-            4 => MoveType::Castle,
-            5 => MoveType::Enpassant,
-            _ => return None,
-        };
+        let typ: MoveType = unsafe { std::mem::transmute((piece_and_type >> 3) as u8) };
 
         Some(Move {
             from: from.into(),
@@ -82,14 +95,7 @@ impl Move {
     pub fn compress(&self) -> u32 {
         let mut piece_and_type = self.piece as u32;
 
-        piece_and_type |= match self.typ {
-            MoveType::Normal => 0,
-            MoveType::Capture => 1 << 9,
-            MoveType::Promotion(p) => ((p as u32) << 3) | (2 << 9),
-            MoveType::PromotionCapture(p) => ((p as u32) << 3) | (3 << 9),
-            MoveType::Castle => 4 << 9,
-            MoveType::Enpassant => 5 << 9,
-        };
+        piece_and_type |= (self.typ as u32) << 3;
 
         (piece_and_type << 12) ^ <Square as Into<u32>>::into(self.from) ^ (<Square as Into<u32>>::into(self.to) << 6)
     }
@@ -138,15 +144,51 @@ impl Move {
                     )
             }
 
-            MoveType::Promotion(p) => {
+            MoveType::PromotionN => {
                 constants::piece_zobrist(Piece::Pawn, c, self.from)
-                    ^ constants::piece_zobrist(p, c, self.to)
+                    ^ constants::piece_zobrist(Piece::Knight, c, self.to)
             }
 
-            MoveType::PromotionCapture(p) => {
+            MoveType::PromotionB => {
+                constants::piece_zobrist(Piece::Pawn, c, self.from)
+                    ^ constants::piece_zobrist(Piece::Bishop, c, self.to)
+            }
+
+            MoveType::PromotionR => {
+                constants::piece_zobrist(Piece::Pawn, c, self.from)
+                    ^ constants::piece_zobrist(Piece::Rook, c, self.to)
+            }
+
+            MoveType::PromotionQ => {
+                constants::piece_zobrist(Piece::Pawn, c, self.from)
+                    ^ constants::piece_zobrist(Piece::Queen, c, self.to)
+            }
+
+            MoveType::PromotionCaptureN => {
                 let q = board.piece_at(self.to).unwrap();
                 constants::piece_zobrist(Piece::Pawn, c, self.from)
-                    ^ constants::piece_zobrist(p, c, self.to)
+                    ^ constants::piece_zobrist(Piece::Knight, c, self.to)
+                    ^ constants::piece_zobrist(q, c.other(), self.to)
+            }
+
+            MoveType::PromotionCaptureB => {
+                let q = board.piece_at(self.to).unwrap();
+                constants::piece_zobrist(Piece::Pawn, c, self.from)
+                    ^ constants::piece_zobrist(Piece::Bishop, c, self.to)
+                    ^ constants::piece_zobrist(q, c.other(), self.to)
+            }
+
+            MoveType::PromotionCaptureR => {
+                let q = board.piece_at(self.to).unwrap();
+                constants::piece_zobrist(Piece::Pawn, c, self.from)
+                    ^ constants::piece_zobrist(Piece::Rook, c, self.to)
+                    ^ constants::piece_zobrist(q, c.other(), self.to)
+            }
+
+            MoveType::PromotionCaptureQ => {
+                let q = board.piece_at(self.to).unwrap();
+                constants::piece_zobrist(Piece::Queen, c, self.from)
+                    ^ constants::piece_zobrist(Piece::Bishop, c, self.to)
                     ^ constants::piece_zobrist(q, c.other(), self.to)
             }
 
@@ -197,11 +239,24 @@ fn determine_move_type(
         Piece::Pawn => {
             if !board.occupation().is_set(to) && to.file() != from.file() {
                 return MoveType::Enpassant;
-            } else if promote.is_some() {
+            } 
+            else if let Some(p) = promote {
                 if board.occupation().is_set(to) {
-                    return MoveType::PromotionCapture(promote.unwrap());
+                    return match p {
+                        Piece::Knight => MoveType::PromotionCaptureN,
+                        Piece::Bishop => MoveType::PromotionCaptureB,
+                        Piece::Rook   => MoveType::PromotionCaptureR,
+                        Piece::Queen  => MoveType::PromotionCaptureQ,
+                        _             => panic!("Invalid promotion.")
+                    };
                 } else {
-                    return MoveType::Promotion(promote.unwrap());
+                    return match p {
+                        Piece::Knight => MoveType::PromotionN,
+                        Piece::Bishop => MoveType::PromotionB,
+                        Piece::Rook   => MoveType::PromotionR,
+                        Piece::Queen  => MoveType::PromotionQ,
+                        _             => panic!("Invalid promotion.")
+                    };
                 }
             }
         }
@@ -223,14 +278,14 @@ impl fmt::Display for Move {
 
 fn display_promotion(m: &Move) -> String {
     match m.typ {
-        MoveType::Promotion(Piece::Queen) => "q".to_string(),
-        MoveType::Promotion(Piece::Rook) => "r".to_string(),
-        MoveType::Promotion(Piece::Bishop) => "b".to_string(),
-        MoveType::Promotion(Piece::Knight) => "n".to_string(),
-        MoveType::PromotionCapture(Piece::Queen) => "q".to_string(),
-        MoveType::PromotionCapture(Piece::Rook) => "r".to_string(),
-        MoveType::PromotionCapture(Piece::Bishop) => "b".to_string(),
-        MoveType::PromotionCapture(Piece::Knight) => "n".to_string(),
+        MoveType::PromotionQ => "q".to_string(),
+        MoveType::PromotionR => "r".to_string(),
+        MoveType::PromotionB => "b".to_string(),
+        MoveType::PromotionN => "n".to_string(),
+        MoveType::PromotionCaptureQ => "q".to_string(),
+        MoveType::PromotionCaptureR => "r".to_string(),
+        MoveType::PromotionCaptureB => "b".to_string(),
+        MoveType::PromotionCaptureN => "n".to_string(),
         _ => "".to_string(),
     }
 }

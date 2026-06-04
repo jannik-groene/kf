@@ -120,13 +120,13 @@ impl Board {
         } else {
             (Color::Black, Color::White)
         };
-        let our_piece = match m.typ {
-            MoveType::Promotion(p) | MoveType::PromotionCapture(p) => p,
-            _ => m.piece,
-        };
+        let our_piece = if let Some(p) = m.typ.promotion_piece() {p} else {m.piece};
         self.unset(m.from, us, m.piece);
         match m.typ {
-            MoveType::Capture | MoveType::PromotionCapture(_) => self.unset_all(m.to, them),
+            MoveType::Capture | MoveType::PromotionCaptureN 
+                              | MoveType::PromotionCaptureB 
+                              | MoveType::PromotionCaptureR 
+                              | MoveType::PromotionCaptureQ => self.unset_all(m.to, them),
             MoveType::Enpassant => self.unset(
                 m.to.file().ep_cap_square().relative(them),
                 them,

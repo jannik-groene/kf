@@ -209,7 +209,7 @@ fn simple_rook_capture() {
         from: 14u8.into(),
         to: 7u8.into(),
         piece: chess::Piece::Pawn,
-        typ: chess::MoveType::PromotionCapture(chess::Piece::Knight),
+        typ: chess::MoveType::PromotionCaptureN,
     });
     assert!(pos.get_moves().len() == 47);
 }

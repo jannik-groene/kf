@@ -55,14 +55,56 @@ impl MoveFeatures<HalfKAv2Feature> for (Move,Option<Piece>) {
                     ],
                 )
             }
-            MoveType::Promotion(p) => (
-                vec![HalfKAv2Feature::new(ksq, p, t, our_piece)],
+            MoveType::PromotionN => (
+                vec![HalfKAv2Feature::new(ksq, Piece::Knight, t, our_piece)],
                 vec![HalfKAv2Feature::new(ksq, self.0.piece, f, our_piece)],
             ),
-            MoveType::PromotionCapture(p) => {
+            MoveType::PromotionB => (
+                vec![HalfKAv2Feature::new(ksq, Piece::Bishop, t, our_piece)],
+                vec![HalfKAv2Feature::new(ksq, self.0.piece, f, our_piece)],
+            ),
+            MoveType::PromotionR => (
+                vec![HalfKAv2Feature::new(ksq, Piece::Rook, t, our_piece)],
+                vec![HalfKAv2Feature::new(ksq, self.0.piece, f, our_piece)],
+            ),
+            MoveType::PromotionQ => (
+                vec![HalfKAv2Feature::new(ksq, Piece::Queen, t, our_piece)],
+                vec![HalfKAv2Feature::new(ksq, self.0.piece, f, our_piece)],
+            ),
+            MoveType::PromotionCaptureN => {
                 let q = self.1.unwrap();
                 (
-                    vec![HalfKAv2Feature::new(ksq, p, t, our_piece)],
+                    vec![HalfKAv2Feature::new(ksq, Piece::Knight, t, our_piece)],
+                    vec![
+                        HalfKAv2Feature::new(ksq, self.0.piece, f, our_piece),
+                        HalfKAv2Feature::new(ksq, q, t, !our_piece),
+                    ]
+                )
+            }
+            MoveType::PromotionCaptureB => {
+                let q = self.1.unwrap();
+                (
+                    vec![HalfKAv2Feature::new(ksq, Piece::Bishop, t, our_piece)],
+                    vec![
+                        HalfKAv2Feature::new(ksq, self.0.piece, f, our_piece),
+                        HalfKAv2Feature::new(ksq, q, t, !our_piece),
+                    ]
+                )
+            }
+            MoveType::PromotionCaptureR => {
+                let q = self.1.unwrap();
+                (
+                    vec![HalfKAv2Feature::new(ksq, Piece::Rook, t, our_piece)],
+                    vec![
+                        HalfKAv2Feature::new(ksq, self.0.piece, f, our_piece),
+                        HalfKAv2Feature::new(ksq, q, t, !our_piece),
+                    ]
+                )
+            }
+            MoveType::PromotionCaptureQ => {
+                let q = self.1.unwrap();
+                (
+                    vec![HalfKAv2Feature::new(ksq, Piece::Queen, t, our_piece)],
                     vec![
                         HalfKAv2Feature::new(ksq, self.0.piece, f, our_piece),
                         HalfKAv2Feature::new(ksq, q, t, !our_piece),
