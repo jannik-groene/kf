@@ -37,9 +37,9 @@ impl TranspositionTable {
             return None;
         }
         let entry = unsafe { (& *self.hash.get())[zobrist_key as usize % self.size] };
-        if entry.0.zobrist_hash ^ (entry.0.depth_and_move as u64) ^ entry.0.eval == zobrist_key && entry.0.depth() != 0 {
+        if entry.0.zobrist_hash ^ entry.0.data == zobrist_key && entry.0.depth() != 0 {
             Some(entry.0)
-        } else if entry.1.zobrist_hash ^ (entry.1.depth_and_move as u64) ^ entry.1.eval == zobrist_key && entry.1.depth() != 0 {
+        } else if entry.1.zobrist_hash ^ entry.1.data == zobrist_key && entry.1.depth() != 0 {
             Some(entry.1)
         } else {
             None
@@ -69,36 +69,34 @@ impl TranspositionTable {
 #[derive(Clone, PartialEq, Copy)]
 pub struct TTEntry {
     zobrist_hash: u64,
-    eval: u64,
-    depth_and_move: u32,
+    data: u64,
 }
 
 impl TTEntry {
     const UNCHECKED: TTEntry = TTEntry {
         zobrist_hash: 0,
-        eval: 0,
-        depth_and_move: 0,
+        data: 0,
     };
     #[inline]
     pub fn mov(&self) -> Option<Move> {
-        Move::decompress((self.depth_and_move >> 8) as u16)
+        Move::decompress(((self.data >> 8) & 0xffff) as u16)
     }
     pub fn new(eval: Eval, depth: u8, zobrist_hash: u64, mov: Move) -> TTEntry {
         let dam = ((mov.compress() as u32) << 8) ^ (depth as u32);
         let ev = eval.pack_for_tt();
+        let data = (ev << 24) ^ (dam as u64);
         TTEntry {
-            zobrist_hash: zobrist_hash ^ dam as u64 ^ ev,
-            depth_and_move: dam,
-            eval: ev,
+            zobrist_hash: zobrist_hash ^ data,
+            data,
         }
     }
     #[inline]
     pub fn eval(&self) -> Eval {
-        Eval::from_packed(self.eval)
+        Eval::from_packed(self.data >> 24)
     }
     #[inline]
     pub fn depth(&self) -> u8 {
-        (self.depth_and_move & 0xff) as u8
+        (self.data & 0xff) as u8
     }
 }
 
@@ -117,7 +115,12 @@ fn write_and_read_tt() {
         },
     );
     hash.set(1234628935786765, entry);
+    let ret = hash.get(1234628935786765).unwrap();
     assert!(hash.get(1234628935786765).unwrap() == entry);
+    assert!(ret.eval() == -Eval::MATE_NOW);
+    assert!(ret.depth() == 3);
+    assert!(ret.mov().unwrap() == Move {from: Square::B1, to: Square::C1, typ: crate::chess::MoveType::Normal});
+    
     let entry2 = TTEntry::new(
         -Eval::MATE_NOW,
         3,
