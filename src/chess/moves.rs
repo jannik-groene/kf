@@ -130,6 +130,7 @@ impl Move {
                         c.other(),
                         self.to.file().ep_cap_square().relative(c.other()),
                     )
+                    ^ constants::enpassant_zobrist(self.to.file())
             }
 
             MoveType::PromotionN => {
