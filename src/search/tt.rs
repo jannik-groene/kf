@@ -5,8 +5,6 @@ use crate::{
 use std::sync::Arc;
 use std::cell::UnsafeCell;
 
-use parking_lot::{Mutex, const_mutex};
-
 #[derive(Clone)]
 pub struct TranspositionTable {
     //We run with two buckets. One replace on depth, on always replace
@@ -39,9 +37,9 @@ impl TranspositionTable {
             return None;
         }
         let entry = unsafe { (& *self.hash.get())[zobrist_key as usize % self.size] };
-        if entry.0.zobrist_hash ^ entry.0.depth_and_move ^ entry.0.eval == zobrist_key && entry.0.depth() != 0 {
+        if entry.0.zobrist_hash ^ (entry.0.depth_and_move as u64) ^ entry.0.eval == zobrist_key && entry.0.depth() != 0 {
             Some(entry.0)
-        } else if entry.1.zobrist_hash ^ entry.1.depth_and_move ^ entry.1.eval == zobrist_key && entry.1.depth() != 0 {
+        } else if entry.1.zobrist_hash ^ (entry.1.depth_and_move as u64) ^ entry.1.eval == zobrist_key && entry.1.depth() != 0 {
             Some(entry.1)
         } else {
             None
@@ -71,25 +69,25 @@ impl TranspositionTable {
 #[derive(Clone, PartialEq, Copy)]
 pub struct TTEntry {
     zobrist_hash: u64,
-    depth_and_move: u64,
-    eval: u64
+    eval: u64,
+    depth_and_move: u32,
 }
 
 impl TTEntry {
     const UNCHECKED: TTEntry = TTEntry {
         zobrist_hash: 0,
-        depth_and_move: 0,
         eval: 0,
+        depth_and_move: 0,
     };
     #[inline]
     pub fn mov(&self) -> Option<Move> {
-        Move::decompress(((self.depth_and_move >> 8) & 0xffffffff) as u32)
+        Move::decompress((self.depth_and_move >> 8) as u16)
     }
     pub fn new(eval: Eval, depth: u8, zobrist_hash: u64, mov: Move) -> TTEntry {
-        let dam = ((mov.compress() << 8) ^ depth as u32) as u64;
+        let dam = ((mov.compress() as u32) << 8) ^ (depth as u32);
         let ev = eval.pack_for_tt();
         TTEntry {
-            zobrist_hash: zobrist_hash ^ dam ^ ev,
+            zobrist_hash: zobrist_hash ^ dam as u64 ^ ev,
             depth_and_move: dam,
             eval: ev,
         }
@@ -115,7 +113,6 @@ fn write_and_read_tt() {
         Move {
             from: Square::B1,
             to: Square::C1,
-            piece: crate::chess::Piece::King,
             typ: crate::chess::MoveType::Normal,
         },
     );
@@ -128,7 +125,6 @@ fn write_and_read_tt() {
         Move {
             from: Square::B1,
             to: Square::C1,
-            piece: crate::chess::Piece::King,
             typ: crate::chess::MoveType::Normal,
         },
     );
@@ -139,7 +135,6 @@ fn write_and_read_tt() {
         Move {
             from: Square::E1,
             to: Square::A2,
-            piece: crate::chess::Piece::Queen,
             typ: crate::chess::MoveType::Normal,
         },
     );
@@ -153,7 +148,6 @@ fn write_and_read_tt() {
         Move {
             from: Square::B1,
             to: Square::C1,
-            piece: crate::chess::Piece::King,
             typ: crate::chess::MoveType::Normal,
         },
     );

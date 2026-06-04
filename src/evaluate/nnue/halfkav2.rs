@@ -31,7 +31,7 @@ impl Feature for HalfKAv2Feature {
     }
 }
 
-impl MoveFeatures<HalfKAv2Feature> for (Move,Option<Piece>) {
+impl MoveFeatures<HalfKAv2Feature> for (Move,Piece,Option<Piece>) {
     #[inline]
     fn changed_features(
         &self,
@@ -46,67 +46,67 @@ impl MoveFeatures<HalfKAv2Feature> for (Move,Option<Piece>) {
         //select updated features
         match self.0.typ {
             MoveType::Capture => {
-                let p = self.1.unwrap();
+                let p = self.2.unwrap();
                 (
-                    vec![HalfKAv2Feature::new(ksq, self.0.piece, t, our_piece)],
+                    vec![HalfKAv2Feature::new(ksq, self.1, t, our_piece)],
                     vec![
-                        HalfKAv2Feature::new(ksq, self.0.piece, f, our_piece),
+                        HalfKAv2Feature::new(ksq, self.1, f, our_piece),
                         HalfKAv2Feature::new(ksq, p, t, !our_piece),
                     ],
                 )
             }
             MoveType::PromotionN => (
                 vec![HalfKAv2Feature::new(ksq, Piece::Knight, t, our_piece)],
-                vec![HalfKAv2Feature::new(ksq, self.0.piece, f, our_piece)],
+                vec![HalfKAv2Feature::new(ksq, self.1, f, our_piece)],
             ),
             MoveType::PromotionB => (
                 vec![HalfKAv2Feature::new(ksq, Piece::Bishop, t, our_piece)],
-                vec![HalfKAv2Feature::new(ksq, self.0.piece, f, our_piece)],
+                vec![HalfKAv2Feature::new(ksq, self.1, f, our_piece)],
             ),
             MoveType::PromotionR => (
                 vec![HalfKAv2Feature::new(ksq, Piece::Rook, t, our_piece)],
-                vec![HalfKAv2Feature::new(ksq, self.0.piece, f, our_piece)],
+                vec![HalfKAv2Feature::new(ksq, self.1, f, our_piece)],
             ),
             MoveType::PromotionQ => (
                 vec![HalfKAv2Feature::new(ksq, Piece::Queen, t, our_piece)],
-                vec![HalfKAv2Feature::new(ksq, self.0.piece, f, our_piece)],
+                vec![HalfKAv2Feature::new(ksq, self.1, f, our_piece)],
             ),
             MoveType::PromotionCaptureN => {
-                let q = self.1.unwrap();
+                let q = self.2.unwrap();
                 (
                     vec![HalfKAv2Feature::new(ksq, Piece::Knight, t, our_piece)],
                     vec![
-                        HalfKAv2Feature::new(ksq, self.0.piece, f, our_piece),
+                        HalfKAv2Feature::new(ksq, self.1, f, our_piece),
                         HalfKAv2Feature::new(ksq, q, t, !our_piece),
                     ]
                 )
             }
             MoveType::PromotionCaptureB => {
-                let q = self.1.unwrap();
+                let q = self.2.unwrap();
                 (
                     vec![HalfKAv2Feature::new(ksq, Piece::Bishop, t, our_piece)],
                     vec![
-                        HalfKAv2Feature::new(ksq, self.0.piece, f, our_piece),
+                        HalfKAv2Feature::new(ksq, self.1, f, our_piece),
                         HalfKAv2Feature::new(ksq, q, t, !our_piece),
                     ]
                 )
             }
             MoveType::PromotionCaptureR => {
-                let q = self.1.unwrap();
+                let q = self.2.unwrap();
                 (
                     vec![HalfKAv2Feature::new(ksq, Piece::Rook, t, our_piece)],
                     vec![
-                        HalfKAv2Feature::new(ksq, self.0.piece, f, our_piece),
+                        HalfKAv2Feature::new(ksq, self.1, f, our_piece),
                         HalfKAv2Feature::new(ksq, q, t, !our_piece),
                     ]
                 )
             }
             MoveType::PromotionCaptureQ => {
-                let q = self.1.unwrap();
+                let q = self.2.unwrap();
                 (
                     vec![HalfKAv2Feature::new(ksq, Piece::Queen, t, our_piece)],
                     vec![
-                        HalfKAv2Feature::new(ksq, self.0.piece, f, our_piece),
+                        HalfKAv2Feature::new(ksq, self.1, f, our_piece),
                         HalfKAv2Feature::new(ksq, q, t, !our_piece),
                     ]
                 )
@@ -118,9 +118,9 @@ impl MoveFeatures<HalfKAv2Feature> for (Move,Option<Piece>) {
                     t.file().ep_cap_square().flipped()
                 };
                 (
-                    vec![HalfKAv2Feature::new(ksq, self.0.piece, t, our_piece)],
+                    vec![HalfKAv2Feature::new(ksq, Piece::Pawn, t, our_piece)],
                     vec![
-                        HalfKAv2Feature::new(ksq, self.0.piece, f, our_piece),
+                        HalfKAv2Feature::new(ksq, Piece::Pawn, f, our_piece),
                         HalfKAv2Feature::new(ksq, Piece::Pawn, cap_square, !our_piece),
                     ],
                 )
@@ -143,8 +143,8 @@ impl MoveFeatures<HalfKAv2Feature> for (Move,Option<Piece>) {
                 )
             }
             _ => (
-                vec![HalfKAv2Feature::new(ksq, self.0.piece, t, our_piece)],
-                vec![HalfKAv2Feature::new(ksq, self.0.piece, f, our_piece)],
+                vec![HalfKAv2Feature::new(ksq, self.1, t, our_piece)],
+                vec![HalfKAv2Feature::new(ksq, self.1, f, our_piece)],
             ),
         }
     }

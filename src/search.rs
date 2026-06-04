@@ -233,8 +233,8 @@ fn search_helper(helper: &mut HelperThread, depth: u8, alpha: Eval, beta: Eval) 
     *helper.nodes()
 }
 
-fn is_tactical(pos: &Position, m: Move) -> bool {
-    m.typ == MoveType::Capture || m.typ.is_promotion() || pos.gives_check(&m)
+fn is_tactical(m: Move) -> bool {
+    m.typ == MoveType::Capture || m.typ.is_promotion()
 }
 }
 
@@ -391,7 +391,7 @@ fn search_step(
         } else if zw
             && depth.current > 2
             && !thread.pos_mut().in_check()
-            && !is_tactical(thread.pos(), m)
+            && !is_tactical(m)
         {
             -search_step(
                 thread,

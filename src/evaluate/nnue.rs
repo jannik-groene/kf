@@ -33,8 +33,9 @@ impl NNUEState {
         m: Move,
         c: Color,
     ) {
+        let piece = pos.get_board().piece_at(m.from).unwrap();
         //if the King has not moved the update is simple
-        if m.piece != Piece::King
+        if piece != Piece::King
             || pos
                 .get_board()
                 .get_bb(c.other(), Piece::King)
@@ -47,7 +48,7 @@ impl NNUEState {
 
             //select updated features
             let p = pos.get_board().piece_at(m.to);
-            let (added, removed) = (m,p).changed_features(c.into(), kp.into(), our_piece);
+            let (added, removed) = (m,piece,p).changed_features(c.into(), kp.into(), our_piece);
             sf_half_ka_v2::update_accumulator(acc, acc_new, added, removed, c as usize)
         }
         //if the king has moved we need to update all weights in the position

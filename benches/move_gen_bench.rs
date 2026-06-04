@@ -28,7 +28,6 @@ fn do_move_en_passant(c: &mut Criterion<CyclesPerByte>) {
     let m = chess::Move {
         from: 35u8.into(),
         to: 42u8.into(),
-        piece: chess::Piece::Pawn,
         typ: chess::MoveType::Enpassant,
     };
     c.bench_function("do_move_en_passant", |b| {

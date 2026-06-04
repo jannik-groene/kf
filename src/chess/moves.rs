@@ -40,7 +40,6 @@ impl MoveType {
 
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub struct Move {
-    pub piece: Piece,
     pub from: Square,
     pub to: Square,
     pub typ: MoveType,
@@ -57,8 +56,6 @@ impl Move {
         let mut to = chars.next().unwrap() as u8 - b'a';
         to += 8 * (chars.next().unwrap() as u8 - b'1');
 
-        let piece = board.piece_at(from.into()).unwrap();
-
         let prom = match chars.next() {
             Some('q') => Some(Piece::Queen),
             Some('r') => Some(Piece::Rook),
@@ -70,34 +67,25 @@ impl Move {
         Move {
             from: from.into(),
             to: to.into(),
-            piece,
-            typ: determine_move_type(board, from.into(), to.into(), piece, prom),
+            typ: determine_move_type(board, from.into(), to.into(), prom),
         }
     }
 
-    pub fn decompress(m: u32) -> Option<Move> {
+    pub fn decompress(m: u16) -> Option<Move> {
         let from = m & 0b111111;
         let to = (m >> 6) & 0b111111;
-        let piece_and_type = m >> 12;
 
-        let piece = u32_to_piece(piece_and_type & 0b111);
-
-        let typ: MoveType = unsafe { std::mem::transmute((piece_and_type >> 3) as u8) };
+        let typ: MoveType = unsafe { std::mem::transmute((m >> 12) as u8) };
 
         Some(Move {
             from: from.into(),
             to: to.into(),
-            piece,
             typ,
         })
     }
 
-    pub fn compress(&self) -> u32 {
-        let mut piece_and_type = self.piece as u32;
-
-        piece_and_type |= (self.typ as u32) << 3;
-
-        (piece_and_type << 12) ^ <Square as Into<u32>>::into(self.from) ^ (<Square as Into<u32>>::into(self.to) << 6)
+    pub fn compress(&self) -> u16 {
+        ((self.typ as u16) << 12) ^ <Square as Into<u16>>::into(self.from) ^ (<Square as Into<u16>>::into(self.to) << 6)
     }
 
     //Get the zobrist number associated to the given move
@@ -193,15 +181,17 @@ impl Move {
             }
 
             MoveType::Capture => {
-                let p = board.piece_at(self.to).unwrap();
-                constants::piece_zobrist(self.piece, c, self.from)
-                    ^ constants::piece_zobrist(self.piece, c, self.to)
-                    ^ constants::piece_zobrist(p, c.other(), self.to)
+                let p = board.piece_at(self.from).unwrap();
+                let q = board.piece_at(self.to).unwrap();
+                constants::piece_zobrist(p, c, self.from)
+                    ^ constants::piece_zobrist(p, c, self.to)
+                    ^ constants::piece_zobrist(q, c.other(), self.to)
             }
 
             MoveType::Normal => {
-                constants::piece_zobrist(self.piece, c, self.from)
-                    ^ constants::piece_zobrist(self.piece, c, self.to)
+                let p = board.piece_at(self.from).unwrap();
+                constants::piece_zobrist(p, c, self.from)
+                    ^ constants::piece_zobrist(p, c, self.to)
             }
         }
     }
@@ -222,16 +212,16 @@ fn determine_move_type(
     board: &Board,
     from: Square,
     to: Square,
-    piece: Piece,
     promote: Option<Piece>,
 ) -> MoveType {
+    let piece = board.piece_at(from).unwrap();
     match piece {
         Piece::King => {
-            if piece == Piece::King && from == Square::E1 && (to == Square::G1 || to == Square::C1)
+            if from == Square::E1 && (to == Square::G1 || to == Square::C1)
             {
                 return MoveType::Castle;
             }
-            if piece == Piece::King && from == Square::E8 && (to == Square::G8 || to == Square::C8)
+            if from == Square::E8 && (to == Square::G8 || to == Square::C8)
             {
                 return MoveType::Castle;
             }

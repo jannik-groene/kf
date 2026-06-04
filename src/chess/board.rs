@@ -120,8 +120,9 @@ impl Board {
         } else {
             (Color::Black, Color::White)
         };
-        let our_piece = if let Some(p) = m.typ.promotion_piece() {p} else {m.piece};
-        self.unset(m.from, us, m.piece);
+        let piece = self.piece_at(m.from).unwrap();
+        let our_piece = if let Some(p) = m.typ.promotion_piece() {p} else {piece};
+        self.unset(m.from, us, piece);
         match m.typ {
             MoveType::Capture | MoveType::PromotionCaptureN 
                               | MoveType::PromotionCaptureB 

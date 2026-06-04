@@ -406,7 +406,6 @@ impl Position {
                     moves.push_unchecked(Move {
                         from: pos,
                         to: m,
-                        piece: p,
                         typ: if !self.board.occupation().is_set(m) {
                             MoveType::Normal
                         } else {
@@ -461,7 +460,6 @@ impl Position {
                         moves.push_unchecked(Move {
                             from: cand,
                             to: esq,
-                            piece: Piece::Pawn,
                             typ: MoveType::Enpassant,
                         });
                     }
@@ -493,7 +491,6 @@ impl Position {
                 moves.push_unchecked(Move {
                     from: Square::E1.relative(self.to_move),
                     to: Square::G1.relative(self.to_move),
-                    piece: Piece::King,
                     typ: MoveType::Castle,
                 });
             }
@@ -509,7 +506,6 @@ impl Position {
             moves.push(Move {
                 from: Square::E1.relative(self.to_move),
                 to: Square::C1.relative(self.to_move),
-                piece: Piece::King,
                 typ: MoveType::Castle,
             });
         }
@@ -538,7 +534,6 @@ impl Position {
 
             unsafe {
                 moves.push_unchecked(Move {
-                    piece: Piece::Pawn,
                     from,
                     to,
                     typ: MoveType::Normal,
@@ -556,7 +551,6 @@ impl Position {
 
             unsafe {
                 moves.push_unchecked(Move {
-                    piece: Piece::Pawn,
                     from,
                     to,
                     typ: MoveType::Normal,
@@ -574,25 +568,21 @@ impl Position {
 
             unsafe {
                 moves.push_unchecked(Move {
-                    piece: Piece::Pawn,
                     from,
                     to,
                     typ: MoveType::PromotionN,
                 });
                 moves.push_unchecked(Move {
-                    piece: Piece::Pawn,
                     from,
                     to,
                     typ: MoveType::PromotionB,
                 });
                 moves.push_unchecked(Move {
-                    piece: Piece::Pawn,
                     from,
                     to,
                     typ: MoveType::PromotionR,
                 });
                 moves.push_unchecked(Move {
-                    piece: Piece::Pawn,
                     from,
                     to,
                     typ: MoveType::PromotionQ,
@@ -616,25 +606,21 @@ impl Position {
                         moves.push_unchecked(Move {
                             from: pawn,
                             to: m,
-                            piece: Piece::Pawn,
                             typ: MoveType::PromotionCaptureN,
                         });
                         moves.push_unchecked(Move {
                             from: pawn,
                             to: m,
-                            piece: Piece::Pawn,
                             typ: MoveType::PromotionCaptureB,
                         });
                         moves.push_unchecked(Move {
                             from: pawn,
                             to: m,
-                            piece: Piece::Pawn,
                             typ: MoveType::PromotionCaptureR,
                         });
                         moves.push_unchecked(Move {
                             from: pawn,
                             to: m,
-                            piece: Piece::Pawn,
                             typ: MoveType::PromotionCaptureQ,
                         });
                     }
@@ -643,7 +629,6 @@ impl Position {
                         moves.push_unchecked(Move {
                             from: pawn,
                             to: m,
-                            piece: Piece::Pawn,
                             typ: MoveType::Capture,
                         });
                     }
@@ -673,7 +658,6 @@ impl Position {
             moves.push(Move {
                 from: self.board.get_bb(self.to_move, Piece::King).least_square(),
                 to: km,
-                piece: Piece::King,
                 typ: if !self.board.occupation().is_set(km) {
                     MoveType::Normal
                 } else {
@@ -743,7 +727,7 @@ impl Position {
     }
 
     #[inline]
-    fn update_zobrist(&mut self, m: Move) {
+    fn update_zobrist(&mut self, m: Move, p: Piece) {
         self.zobrist ^= m.zobrist(&self.board, self.to_move);
         //Unset the Zobrist en passant flag, if necessary
         if let Some(esq) = self.ply_info.ep_square {
@@ -751,7 +735,7 @@ impl Position {
         }
 
         //Check if a new en passant flag is to be set
-        if m.piece == Piece::Pawn
+        if p == Piece::Pawn
             && m.from.relative(self.to_move).rank() == Rank::Second
             && m.to.relative(self.to_move).rank() == Rank::Fourth
         {
@@ -763,9 +747,9 @@ impl Position {
     }
 
     #[inline]
-    fn update_castling_rights(&mut self, m: Move) {
+    fn update_castling_rights(&mut self, m: Move, piece: Piece) {
         //If the king was moves we lose all castling rights
-        if m.piece == Piece::King {
+        if piece == Piece::King {
             if self.ply_info.castling_rights[self.to_move as usize][0] {
                 self.zobrist ^= constants::castle_zobrist(Square::G1.relative(self.to_move));
             }
@@ -801,13 +785,16 @@ impl Position {
     }
 
     pub fn do_move(&mut self, m: Move) {
+        let piece = self.board.piece_at(m.from).unwrap();
+
+        //Update the zobrist numbers (except castling numbers)
+        self.update_zobrist(m, piece);
+
         //Actually do the move on the board
         self.board.do_move(m);
 
-        //Update the zobrist numbers (except castling numbers)
-        self.update_zobrist(m);
 
-        self.update_castling_rights(m);
+        self.update_castling_rights(m, piece);
 
         //Adjust other state information
         self.ply_info.attacked_squares = BitBoard::EMPTY;
@@ -817,7 +804,7 @@ impl Position {
         self.to_move = self.to_move.other();
         self.zobrist ^= constants::color_zobrist();
 
-        if m.piece == Piece::Pawn || matches!(m.typ, MoveType::Capture) {
+        if piece == Piece::Pawn || matches!(m.typ, MoveType::Capture) {
             self.ply_info.rule_50_count = 0;
         } else {
             self.ply_info.rule_50_count += 1;
@@ -907,7 +894,7 @@ impl Position {
         //We guess that most exchanges will feature less than ten pieces, which seems a safe
         //assumption
         let mut gain = Vec::with_capacity(10);
-        let mut taker = m.piece;
+        let mut taker = self.board.piece_at(m.from).unwrap();
 
         gain.push(constants::piece_value(target_piece));
 
@@ -979,7 +966,8 @@ impl Position {
             .get_bb(self.color().other(), Piece::King)
             .least_square();
 
-        let final_piece = if let Some(p) = m.typ.promotion_piece() {p} else {m.piece}; 
+        let final_piece = if let Some(p) = m.typ.promotion_piece() {p} 
+                          else {self.board.piece_at(m.from).unwrap()}; 
 
         match final_piece {
             Piece::Knight => constants::knight_moves(kpos).is_set(m.to),
@@ -1006,7 +994,6 @@ fn simple_sse() {
         from: Square::E1,
         to: Square::E5,
         typ: MoveType::Capture,
-        piece: Piece::Rook,
     };
     assert_eq!(pos.see(mov), constants::piece_value(Piece::Pawn));
     let pos2 = Position::from_fen(String::from(
@@ -1017,49 +1004,33 @@ fn simple_sse() {
         from: Square::D3,
         to: Square::E5,
         typ: MoveType::Capture,
-        piece: Piece::Knight,
     };
     assert_eq!(pos2.see(mov2), constants::piece_value(Piece::Pawn) - constants::piece_value(Piece::Knight));
 }
 
 #[test]
 fn compress_and_decompress_move() {
-    let pieces = vec![
-        Piece::Pawn,
-        Piece::King,
-        Piece::Queen,
-        Piece::Bishop,
-        Piece::Knight,
-        Piece::Rook,
-    ];
-    for p in pieces.iter() {
-        let m = Move {
-            from: Square::A1,
-            to: Square::B1,
-            piece: *p,
-            typ: MoveType::Normal,
-        };
-        let m2 = Move::decompress(m.compress());
-        assert!(m == m2.unwrap());
-    }
-    {
-        let m = Move {
-            from: Square::G7,
-            to: Square::H8,
-            piece: Piece::Pawn,
-            typ: MoveType::PromotionCaptureB,
-        };
-        let m2 = Move::decompress(m.compress());
-        assert!(m == m2.unwrap());
-    }
-    for p in pieces.iter() {
-        let m = Move {
-            from: Square::G7,
-            to: Square::H8,
-            piece: *p,
-            typ: MoveType::Capture,
-        };
-        let m2 = Move::decompress(m.compress());
-        assert!(m == m2.unwrap());
-    }
+    let m = Move {
+        from: Square::A1,
+        to: Square::B1,
+        typ: MoveType::Normal,
+    };
+    let m2 = Move::decompress(m.compress());
+    assert!(m == m2.unwrap());
+
+    let m = Move {
+        from: Square::G7,
+        to: Square::H8,
+        typ: MoveType::PromotionCaptureB,
+    };
+    let m2 = Move::decompress(m.compress());
+    assert!(m == m2.unwrap());
+
+    let m = Move {
+        from: Square::G7,
+        to: Square::H8,
+        typ: MoveType::Capture,
+    };
+    let m2 = Move::decompress(m.compress());
+    assert!(m == m2.unwrap());
 }
