@@ -58,7 +58,9 @@ fn timer(time: TimeSpec, id: u64, ch: Sender<EngineIO>) {
         std::thread::sleep(movetime - SAFETY_DELTA);
     }
     //Spin until we reach target time
-    while now.elapsed() < movetime - std::time::Duration::from_micros(1) {}
+    while now.elapsed() < movetime - std::time::Duration::from_micros(10) {
+        std::hint::spin_loop();
+    }
     drop(ch.send(EngineIO::TimerEnded(id)));
 }
 
