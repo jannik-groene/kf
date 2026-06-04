@@ -3,7 +3,7 @@ use std::io::{stdout, Write};
 use std::sync::mpsc::{Receiver, Sender};
 
 use crate::{
-    chess::{Color, Position},
+    chess::{Color, Position, Move},
     search::{SearchInfo, SearchManager},
 };
 
@@ -286,6 +286,9 @@ impl Engine {
     }
     pub fn position(&self) -> crate::chess::Position {
         self.search.root_position()
+    }
+    pub fn do_move(&mut self, m: Move) {
+        self.search.do_move(m);
     }
 }
 

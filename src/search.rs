@@ -8,12 +8,12 @@ use std::time::Instant;
 use std::io::Write;
 
 use crate::{
-    chess::{Color, Move, MoveType, Piece, Position},
+    chess::{Color, Move, MoveType, Piece, Position, Square},
     constants::piece_value,
     engine::EngineIO,
     evaluate::{has_major_pieces, has_minor_pieces, is_material_draw, Bound, Eval, Value},
 };
-use thread::{HelperThread, MainThread, Thread};
+use thread::{MainThread, SearchHead};
 use tt::{TTEntry, TranspositionTable};
 
 #[derive(Clone)]
@@ -39,6 +39,7 @@ impl SearchInfo {
 
 pub struct SearchManager {
     pos: Position,
+    pos_history: Vec<Position>,
     threads: usize,
     tt: TranspositionTable,
     stop_flag: Arc<RwLock<bool>>,
@@ -50,6 +51,7 @@ impl SearchManager {
     pub fn new() -> SearchManager {
         SearchManager {
             pos: Position::new(),
+            pos_history: Vec::new(),
             threads: 1,
             tt: TranspositionTable::new(2),
             stop_flag: Arc::new(RwLock::new(false)),
@@ -66,6 +68,11 @@ impl SearchManager {
     }
     pub fn set_position(&mut self, pos: Position) {
         self.pos = pos;
+        self.pos_history.clear();
+    }
+    pub fn do_move(&mut self, m: Move) {
+        self.pos_history.push(self.pos.clone());
+        self.pos.do_move(m);
     }
     pub fn set_use_nnue(&mut self, use_nnue: bool) {
         self.use_nnue = use_nnue;
@@ -81,12 +88,13 @@ impl SearchManager {
         self.stop_flag = Arc::new(RwLock::new(false));
         let mut root_search_info = MainThread::new(
             self.pos.clone(),
-            self.threads,
             self.tt.clone(),
+            self.pos_history.clone(),
             self.stop_flag.clone(),
-            self.search_info.clone(),
-            out_channel,
+            self.threads,
             self.use_nnue,
+            out_channel,
+            self.search_info.clone(),
         );
         std::thread::spawn(move || search(&mut root_search_info, depth, Eval::MIN, Eval::MAX))
     }
@@ -156,49 +164,48 @@ fn search(thread: &mut MainThread, depth: u8, mut alpha: Eval, mut beta: Eval) {
         loop {
             //Spawn helper threads for search
             if thread.threads() > 1 && d > 2 {
-                for i in 1..thread.threads() {
-                    let mut helper_thread = HelperThread::new(
-                        thread.pos().clone(),
-                        thread.tt().clone(),
-                        helper_stop_flag.clone(),
-                        thread.uses_nnue(),
-                    );
+                for _ in 1..thread.threads() {
+                    let mut search_head = SearchHead::new(thread.search_head().pos().clone(),
+                                                          thread.search_head().tt().clone(),
+                                                          thread.search_head().history(),
+                                                          helper_stop_flag.clone(), 
+                                                          thread.uses_nnue());
                     helper_handles.push(std::thread::spawn(move || {
                         search_helper(
-                            &mut helper_thread,
-                            d.saturating_add(i as u8 / 2),
+                            &mut search_head,
+                            d,
                             alpha,
                             beta,
                         )
                     }));
                 }
             }
-            let eval = search_step(thread, Depth::new(d as i16), 0, false, alpha, beta);
-            if thread.stop_flag().read().unwrap().eq(&true) {
+            let eval = search_step(thread.search_head_mut(), Depth::new(d as i16), 0, false, alpha, beta);
+            if thread.search_head().stop_flag().read().unwrap().eq(&true) {
                 *helper_stop_flag.write().unwrap() = true;
                 thread.send_info(EngineIO::SearchEnded(thread.search_info().id));
                 return;
             }
             if d > 2 {
                 //Set stop flag and join all helpers
-                *helper_stop_flag.write().unwrap() = true;
+                //*helper_stop_flag.write().unwrap() = true;
                 for helper in helper_handles {
                     match helper.join() {
                         //Concerning but not fatal?
                         Err(_) => {}
-                        Ok(n) => *thread.nodes_mut() += n,
+                        Ok(n) => *thread.search_head_mut().nodes_mut() += n,
                     }
                 }
                 helper_handles = Vec::new();
                 //Reset stop flag
-                *helper_stop_flag.write().unwrap() = false | *thread.stop_flag().read().unwrap();
+                *helper_stop_flag.write().unwrap() = false | *thread.search_head().stop_flag().read().unwrap();
             }
             let stdout = std::io::stdout();
             let mut handle = stdout.lock();
             drop(write!(handle,
                 "info nodes {} nps {}",
-                thread.nodes(),
-                1000 * *thread.nodes() as u128 / now.elapsed().as_millis().clamp(1, u128::MAX)
+                thread.search_head().nodes(),
+                1000 * *thread.search_head().nodes() as u128 / now.elapsed().as_millis().clamp(1, u128::MAX)
             ));
             //We reached the target depth and stopped, so we update the external values
             match eval.bound() {
@@ -206,7 +213,7 @@ fn search(thread: &mut MainThread, depth: u8, mut alpha: Eval, mut beta: Eval) {
                     drop(write!(handle, " {} depth {} time {}", eval, d, now.elapsed().as_millis()));
                     thread.print_pv(d, &mut handle);
                     thread.search_info_mut().eval = eval;
-                    thread.search_info_mut().bestmove = thread.bestmove();
+                    thread.search_info_mut().bestmove = thread.search_head().bestmove();
                     thread.send_info(EngineIO::SearchUpdate(thread.search_info().clone()));
                     alpha = eval.aspiration_lower(0);
                     beta = eval.aspiration_higher(0);
@@ -228,7 +235,7 @@ fn search(thread: &mut MainThread, depth: u8, mut alpha: Eval, mut beta: Eval) {
     thread.send_info(EngineIO::SearchEnded(thread.search_info().id));
 }
 
-fn search_helper(helper: &mut HelperThread, depth: u8, alpha: Eval, beta: Eval) -> u64 {
+fn search_helper(helper: &mut SearchHead, depth: u8, alpha: Eval, beta: Eval) -> u64 {
     search_step(helper, Depth::new(depth as i16), 0, false, alpha, beta);
     *helper.nodes()
 }
@@ -245,7 +252,7 @@ fn is_tactical(m: Move) -> bool {
 // alpha: the alpha value of the current ab search
 // beta: the beta of the current ab search
 fn search_step(
-    thread: &mut impl Thread,
+    thread: &mut SearchHead,
     mut depth: Depth,
     null_moves: u8,
     zw: bool,
@@ -374,7 +381,7 @@ fn search_step(
 
     for (i, m) in move_picker.enumerate() {
         //lmr reduction depth
-        let lmr = ((depth_left as f64).sqrt() * (i as f64).sqrt() / 5.) as i16;
+        let lmr = ((depth_left as f32).sqrt() * (i as f32).sqrt() / 5.) as i16;
 
         thread.do_move(m);
 
@@ -414,7 +421,7 @@ fn search_step(
         };
 
         //Research if we failed high in a PV node
-        if i != 0 && movescore > alpha && movescore < beta {
+        if !zw && i != 0 && movescore > alpha && movescore < beta {
             movescore = -search_step(
                 thread,
                 depth.next(),
@@ -488,7 +495,7 @@ fn search_step(
     }
 }
 
-fn quiesce(thread: &mut impl Thread, mut alpha: Eval, beta: Eval, delta: i32, qply: u8) -> Eval {
+fn quiesce(thread: &mut SearchHead, mut alpha: Eval, beta: Eval, delta: i32, qply: u8) -> Eval {
     //check for obviously drawn positions
     if is_material_draw(thread.pos()) {
         return Eval::DRAW;
@@ -578,4 +585,48 @@ fn quiesce(thread: &mut impl Thread, mut alpha: Eval, beta: Eval, delta: i32, qp
         }
     }
     alpha
+}
+
+
+#[test]
+fn threefold_detection() {
+    let pos = Position::from_fen(String::from("rnbqkbnr/ppp1pppp/3p4/8/8/3P4/PPP1PPPP/RNBQKBNR w KQkq - 0 2")).unwrap();
+    let tt = TranspositionTable::new(2);
+    let sf = Arc::new(RwLock::new(false));
+    let mut head = SearchHead::new(pos, tt, Vec::new(), sf, false);
+    let moves = [
+        Move { from: Square::D1, to: Square::D2, typ: MoveType::Normal },
+        Move { from: Square::D8, to: Square::D7, typ: MoveType::Normal },
+        Move { from: Square::D2, to: Square::D1, typ: MoveType::Normal },
+        Move { from: Square::D7, to: Square::D8, typ: MoveType::Normal },
+    ];
+    for m in moves {
+        head.do_move(m);
+    }
+    assert!(head.is_repetition());
+    assert!(!head.is_threefold());
+    for m in moves {
+        head.do_move(m);
+    }
+    assert!(head.is_threefold());
+
+    let pos = Position::from_fen(String::from("8/8/pbpk1r2/p2pNn2/R2P1PKp/7P/1PP1NP2/8 w - - 2 41")).unwrap();
+    let tt = TranspositionTable::new(2);
+    let sf = Arc::new(RwLock::new(false));
+    let mut head = SearchHead::new(pos, tt, Vec::new(), sf, false);
+    let moves = [
+        Move { from: Square::E5, to: Square::F3, typ: MoveType::Normal },
+        Move { from: Square::B6, to: Square::D8, typ: MoveType::Normal },
+        Move { from: Square::F3, to: Square::E5, typ: MoveType::Normal },
+        Move { from: Square::D8, to: Square::B6, typ: MoveType::Normal },
+    ];
+    for m in moves {
+        head.do_move(m);
+    }
+    assert!(head.is_repetition());
+    assert!(!head.is_threefold());
+    for m in moves {
+        head.do_move(m);
+    }
+    assert!(head.is_threefold());
 }

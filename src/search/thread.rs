@@ -11,215 +11,50 @@ use crate::{
 
 use super::tt::TranspositionTable;
 
-pub trait Thread {
-    fn pos(&self) -> &Position;
-    fn pos_mut(&mut self) -> &mut Position;
-
-    fn nodes(&self) -> &u64;
-    fn nodes_mut(&mut self) -> &mut u64;
-
-    fn tt_mut(&mut self) -> &mut TranspositionTable;
-    fn tt(&self) -> &TranspositionTable;
-
-    fn is_helper(&self) -> bool;
-
-    fn stop_flag(&self) -> &Arc<RwLock<bool>>;
-
-    //These are optional and not used for helper threads
-    fn threads(&self) -> usize {
-        1
-    }
-    fn set_bestmove(&mut self, _m: Option<Move>) {}
-
-    fn do_move(&mut self, m: Move);
-    fn undo_move(&mut self);
-
-    fn do_null_move(&mut self);
-    fn undo_null_move(&mut self);
-
-    fn is_threefold(&self) -> bool;
-    fn is_repetition(&self) -> bool;
-
-    fn evaluate(&mut self) -> Eval;
-
-    //save and retrieve killer moves
-    fn register_killer(&mut self, ply: u8, m: Move);
-    fn get_killers(&self, ply: u8) -> &[Option<Move>; 2];
-    fn invalidate_killers(&mut self, ply: u8);
-}
-
 pub struct MainThread {
-    pos: Position,
-    history: Vec<Position>,
-    nodes: u64,
     threads: usize,
-    tt: TranspositionTable,
-    stop_flag: Arc<RwLock<bool>>,
-    search_info: SearchInfo,
     sender: Sender<EngineIO>,
-    bestmove: Option<Move>,
-    killers: Vec<([Option<Move>; 2], [u8; 2])>,
-    use_nnue: bool,
-    nnue: NNUEState,
-}
-
-impl Thread for MainThread {
-    #[inline]
-    fn pos_mut(&mut self) -> &mut Position {
-        &mut self.pos
-    }
-    #[inline]
-    fn pos(&self) -> &Position {
-        &self.pos
-    }
-    #[inline]
-    fn nodes(&self) -> &u64 {
-        &self.nodes
-    }
-    #[inline]
-    fn nodes_mut(&mut self) -> &mut u64 {
-        &mut self.nodes
-    }
-    #[inline]
-    fn tt(&self) -> &TranspositionTable {
-        &self.tt
-    }
-    #[inline]
-    fn tt_mut(&mut self) -> &mut TranspositionTable {
-        &mut self.tt
-    }
-    #[inline]
-    fn is_helper(&self) -> bool {
-        false
-    }
-    #[inline]
-    fn stop_flag(&self) -> &Arc<RwLock<bool>> {
-        &self.stop_flag
-    }
-    #[inline]
-    fn threads(&self) -> usize {
-        self.threads
-    }
-    #[inline]
-    fn set_bestmove(&mut self, m: Option<Move>) {
-        self.bestmove = m;
-    }
-    #[inline]
-    fn do_move(&mut self, m: Move) {
-        if self.use_nnue {
-            self.nnue.do_move(m, &self.pos);
-        }
-        self.history.push(self.pos.clone());
-        self.pos.do_move(m);
-        self.nodes += 1;
-    }
-    #[inline]
-    fn undo_move(&mut self) {
-        self.pos = self.history.pop().unwrap();
-        if self.use_nnue {
-            self.nnue.undo_move();
-        }
-    }
-    #[inline]
-    fn do_null_move(&mut self) {
-        self.history.push(self.pos.clone());
-        self.pos.do_null_move();
-        self.nodes += 1;
-    }
-    #[inline]
-    fn undo_null_move(&mut self) {
-        self.pos = self.history.pop().unwrap();
-    }
-    #[inline]
-    fn is_threefold(&self) -> bool {
-        self.history.iter().filter(|x| x.zobrist_hash() == self.pos.zobrist_hash()).count() > 1
-    }
-    #[inline]
-    fn is_repetition(&self) -> bool {
-        self.history.iter().filter(|x| x.zobrist_hash() == self.pos.zobrist_hash()).count() > 1
-    }
-    #[inline]
-    fn evaluate(&mut self) -> Eval {
-        if self.use_nnue {
-            Eval::exact_from_cents(self.nnue.evaluate_position(self.pos(), self.pos.color()))
-        } else {
-            evaluate(self.pos_mut())
-        }
-    }
-
-    #[inline]
-    fn register_killer(&mut self, ply: u8, m: Move) {
-        if self.killers.len() <= ply as usize {
-            self.killers
-                .resize(ply as usize + 1, ([None, None], [0, 0]));
-        }
-        if self.killers[ply as usize].0[0] == Some(m) {
-            self.killers[ply as usize].1[0] += 1;
-        } else if self.killers[ply as usize].0[1] == Some(m) {
-            self.killers[ply as usize].1[1] += 1;
-        } else if self.killers[ply as usize].1[0] > self.killers[ply as usize].1[1] {
-            self.killers[ply as usize].0[1] = Some(m);
-            self.killers[ply as usize].1[1] = 1;
-        } else {
-            self.killers[ply as usize].0[0] = Some(m);
-            self.killers[ply as usize].1[0] = 1;
-        }
-    }
-    #[inline]
-    fn get_killers(&self, ply: u8) -> &[Option<Move>; 2] {
-        if self.killers.len() <= ply as usize {
-            &[None, None]
-        } else {
-            &self.killers[ply as usize].0
-        }
-    }
-    #[inline]
-    fn invalidate_killers(&mut self, ply: u8) {
-        if self.killers.len() > ply as usize + 1 {
-            self.killers[ply as usize + 1].1 = [0, 0];
-        }
-    }
+    search_info: SearchInfo,
+    search_head: SearchHead,
 }
 
 impl MainThread {
     pub fn new(
         pos: Position,
-        threads: usize,
         tt: TranspositionTable,
+        history: Vec<Position>,
         stop_flag: Arc<RwLock<bool>>,
-        search_info: SearchInfo,
-        sender: Sender<EngineIO>,
+        threads: usize,
         use_nnue: bool,
+        sender: Sender<EngineIO>,
+        search_info: SearchInfo,
     ) -> MainThread {
-        let nnue = NNUEState::new(&pos);
         MainThread {
-            pos,
-            history: Vec::new(),
-            nodes: 0,
             threads,
-            tt,
-            stop_flag,
-            search_info,
             sender,
-            bestmove: None,
-            killers: Vec::new(),
-            nnue,
-            use_nnue,
+            search_info,
+            search_head: SearchHead {
+                pos,
+                history,
+                nodes: 0,
+                tt,
+                stop_flag,
+                killers: Vec::new(),
+                nnue: None,
+                use_nnue,
+                bestmove: None,
+            },
         }
-    }
-    #[inline]
-    pub fn bestmove(&self) -> Option<Move> {
-        self.bestmove
     }
     pub fn print_pv(&self, depth: u8, handle: &mut std::io::StdoutLock) {
-        if self.bestmove().is_none() {
+        if self.search_head.bestmove().is_none() {
             return;
         }
-        drop(write!(handle, " pv {}", self.bestmove().unwrap()));
-        let mut pos = self.pos().from_move(self.bestmove().unwrap());
+        drop(write!(handle, " pv {}", self.search_head.bestmove().unwrap()));
+        let mut pos = self.search_head.pos().from_move(self.search_head.bestmove().unwrap());
         let mut index = 1;
         loop {
-            let hashentry = self.tt.get(pos.zobrist_hash());
+            let hashentry = self.search_head.tt.get(pos.zobrist_hash());
             if hashentry.is_none() {
                 break;
             }
@@ -236,6 +71,15 @@ impl MainThread {
         }
         drop(writeln!(handle));
     }
+    pub fn threads(&self) -> usize {
+        self.threads
+    }
+    pub fn search_head(&self) -> &SearchHead {
+        &self.search_head
+    }
+    pub fn search_head_mut(&mut self) -> &mut SearchHead {
+        &mut self.search_head
+    }
     #[inline]
     pub fn send_info(&self, io: EngineIO) {
         drop(self.sender.send(io));
@@ -250,119 +94,123 @@ impl MainThread {
     }
     #[inline]
     pub fn uses_nnue(&self) -> bool {
-        self.use_nnue
+        self.search_head.use_nnue
     }
 }
 
-pub struct HelperThread {
+#[derive(Clone)]
+pub struct SearchHead {
     pos: Position,
     history: Vec<Position>,
     nodes: u64,
     tt: TranspositionTable,
     stop_flag: Arc<RwLock<bool>>,
     killers: Vec<([Option<Move>; 2], [u8; 2])>,
-    nnue: NNUEState,
+    nnue: Option<NNUEState>,
     use_nnue: bool,
+    bestmove: Option<Move>
 }
 
-impl HelperThread {
+impl SearchHead {
     pub fn new(
         pos: Position,
         tt: TranspositionTable,
+        history: Vec<Position>,
         stop_flag: Arc<RwLock<bool>>,
         use_nnue: bool,
-    ) -> HelperThread {
-        let nnue = NNUEState::new(&pos);
-        HelperThread {
+    ) -> SearchHead {
+        SearchHead {
             pos,
-            history: Vec::new(),
+            history,
             nodes: 0,
             tt,
             stop_flag,
             killers: Vec::new(),
-            nnue,
+            nnue: None,
             use_nnue,
+            bestmove: None,
         }
     }
-}
-
-impl Thread for HelperThread {
     #[inline]
-    fn pos_mut(&mut self) -> &mut Position {
+    pub fn pos_mut(&mut self) -> &mut Position {
         &mut self.pos
     }
     #[inline]
-    fn pos(&self) -> &Position {
+    pub fn pos(&self) -> &Position {
         &self.pos
     }
     #[inline]
-    fn nodes(&self) -> &u64 {
+    pub fn nodes(&self) -> &u64 {
         &self.nodes
     }
     #[inline]
-    fn nodes_mut(&mut self) -> &mut u64 {
+    pub fn nodes_mut(&mut self) -> &mut u64 {
         &mut self.nodes
     }
     #[inline]
-    fn tt(&self) -> &TranspositionTable {
+    pub fn tt(&self) -> &TranspositionTable {
         &self.tt
     }
     #[inline]
-    fn tt_mut(&mut self) -> &mut TranspositionTable {
+    pub fn tt_mut(&mut self) -> &mut TranspositionTable {
         &mut self.tt
     }
     #[inline]
-    fn is_helper(&self) -> bool {
-        true
+    pub fn history(&self) -> Vec<Position> {
+        self.history.clone()
     }
     #[inline]
-    fn stop_flag(&self) -> &Arc<RwLock<bool>> {
+    pub fn stop_flag(&self) -> &Arc<RwLock<bool>> {
         &self.stop_flag
     }
     #[inline]
-    fn do_move(&mut self, m: Move) {
+    pub fn do_move(&mut self, m: Move) {
         if self.use_nnue {
-            self.nnue.do_move(m, &self.pos);
+            self.nnue.as_mut().unwrap().do_move(m, &self.pos);
         }
         self.history.push(self.pos.clone());
         self.pos.do_move(m);
         self.nodes += 1;
     }
     #[inline]
-    fn undo_move(&mut self) {
+    pub fn undo_move(&mut self) {
         self.pos = self.history.pop().unwrap();
         if self.use_nnue {
-            self.nnue.undo_move();
+            self.nnue.as_mut().unwrap().undo_move();
         }
     }
     #[inline]
-    fn do_null_move(&mut self) {
+    pub fn do_null_move(&mut self) {
         self.history.push(self.pos.clone());
         self.pos.do_null_move();
         self.nodes += 1;
     }
     #[inline]
-    fn undo_null_move(&mut self) {
+    pub fn undo_null_move(&mut self) {
         self.pos = self.history.pop().unwrap();
     }
     #[inline]
-    fn is_threefold(&self) -> bool {
+    pub fn is_threefold(&self) -> bool {
         self.history.iter().filter(|x| x.zobrist_hash() == self.pos.zobrist_hash()).count() > 1
     }
     #[inline]
-    fn is_repetition(&self) -> bool {
+    pub fn is_repetition(&self) -> bool {
         self.history.iter().filter(|x| x.zobrist_hash() == self.pos.zobrist_hash()).count() > 0
     }
     #[inline]
-    fn evaluate(&mut self) -> Eval {
+    pub fn evaluate(&mut self) -> Eval {
         if self.use_nnue {
-            Eval::exact_from_cents(self.nnue.evaluate_position(self.pos(), self.pos.color()))
+            Eval::exact_from_cents(self.nnue.as_ref().unwrap().evaluate_position(self.pos(), self.pos.color()))
         } else {
             evaluate(self.pos_mut())
         }
     }
     #[inline]
-    fn register_killer(&mut self, ply: u8, m: Move) {
+    pub fn set_bestmove(&mut self, m: Option<Move>) {
+        self.bestmove = m;
+    }
+    #[inline]
+    pub fn register_killer(&mut self, ply: u8, m: Move) {
         if self.killers.len() <= ply as usize {
             self.killers
                 .resize(ply as usize + 1, ([None, None], [0, 0]));
@@ -380,7 +228,7 @@ impl Thread for HelperThread {
         }
     }
     #[inline]
-    fn get_killers(&self, ply: u8) -> &[Option<Move>; 2] {
+    pub fn get_killers(&self, ply: u8) -> &[Option<Move>; 2] {
         if self.killers.len() <= ply as usize {
             &[None, None]
         } else {
@@ -388,9 +236,16 @@ impl Thread for HelperThread {
         }
     }
     #[inline]
-    fn invalidate_killers(&mut self, ply: u8) {
+    pub fn invalidate_killers(&mut self, ply: u8) {
         if self.killers.len() > ply as usize + 1 {
             self.killers[ply as usize + 1].1 = [0, 0];
         }
+    }
+    pub fn clear_killers(&mut self) {
+        self.killers.clear();
+    }
+    #[inline]
+    pub fn bestmove(&self) -> Option<Move> {
+        self.bestmove
     }
 }

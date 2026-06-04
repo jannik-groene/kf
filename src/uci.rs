@@ -81,6 +81,7 @@ pub trait UCIHandler {
 
 impl UCIHandler for Engine {
     fn uci_loop(&mut self) {
+//        println!("{}", std::mem::size_of::<Move>());
         let mut waiting_for_search_end = false;
         let tx = self.get_sender();
         let mut last_search_update: Option<SearchInfo> = None;
@@ -174,12 +175,15 @@ impl UCIHandler for Engine {
         } else {
             return;
         };
+        self.set_position(pos.clone());
         if tokens.len() > offset && tokens[offset] == "moves" {
             for m in tokens[offset + 1..].iter() {
-                pos.do_move(Move::from_str(m, pos.get_board()));
+                //TODO: Somewhat hacky fix
+                let mv = Move::from_str(m, pos.get_board());
+                self.do_move(mv);
+                pos.do_move(mv);
             }
         }
-        self.set_position(pos)
     }
     fn handle_go(&mut self, tokens: Vec<&str>) {
         if tokens.len() < 2 {
