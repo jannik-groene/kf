@@ -658,7 +658,7 @@ impl Position {
             moves.push(Move {
                 from: self.board.get_bb(self.to_move, Piece::King).least_square(),
                 to: km,
-                typ: if !self.board.occupation().is_set(km) {
+                typ: if !self.board.get_color_bb(self.to_move.other()).is_set(km) {
                     MoveType::Normal
                 } else {
                     MoveType::Capture
@@ -748,6 +748,8 @@ impl Position {
 
     #[inline]
     fn update_castling_rights(&mut self, m: Move, piece: Piece) {
+        if self.ply_info.castling_rights[self.to_move as usize] == [false,false] {return;}
+
         //If the king was moves we lose all castling rights
         if piece == Piece::King {
             if self.ply_info.castling_rights[self.to_move as usize][0] {
@@ -960,6 +962,7 @@ impl Position {
     }
 
     #[inline]
+    #[allow(dead_code)]
     pub fn gives_check(&self, m: &Move) -> bool {
         let kpos = self
             .board
