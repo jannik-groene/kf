@@ -40,9 +40,7 @@ impl MoveType {
 
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub struct Move {
-    from: Square,
-    to: Square,
-    typ: MoveType,
+    data: u16,
 }
 
 impl Move {
@@ -50,9 +48,7 @@ impl Move {
     #[inline(always)]
     pub fn new(from: Square, to: Square, typ: MoveType) -> Move {
         Move {
-            from,
-            to,
-            typ
+            data: u16::from(from) | ((u16::from(to) << 6) | ((typ as u16) << 12))
         }
     }
 
@@ -74,43 +70,36 @@ impl Move {
             _ => None,
         };
 
-        Move {
-            from: from.into(),
-            to: to.into(),
-            typ: determine_move_type(board, from.into(), to.into(), prom),
-        }
-    }
-
-    #[inline(always)]
-    pub fn to(&self) -> Square {
-        self.to
+        Move::new(
+            from.into(),
+            to.into(),
+            determine_move_type(board, from.into(), to.into(), prom),
+        )
     }
 
     #[inline(always)]
     pub fn from(&self) -> Square {
-        self.from
+        (self.data & 0b111111).into()
+    }
+
+    #[inline(always)]
+    pub fn to(&self) -> Square {
+        ((self.data >> 6) & 0b111111).into()
     }
 
     #[inline(always)]
     pub fn typ(&self) -> MoveType {
-        self.typ
+        unsafe { std::mem::transmute((self.data >> 12) as u8) }
     }
 
     pub fn decompress(m: u16) -> Option<Move> {
-        let from = m & 0b111111;
-        let to = (m >> 6) & 0b111111;
-
-        let typ: MoveType = unsafe { std::mem::transmute((m >> 12) as u8) };
-
         Some(Move {
-            from: from.into(),
-            to: to.into(),
-            typ,
+            data: m, 
         })
     }
 
     pub fn compress(&self) -> u16 {
-        ((self.typ as u16) << 12) ^ <Square as Into<u16>>::into(self.from) ^ (<Square as Into<u16>>::into(self.to) << 6)
+        self.data
     }
 
     //Get the zobrist number associated to the given move
@@ -118,8 +107,8 @@ impl Move {
     //of the position.
     #[inline]
     pub fn zobrist(&self, board: &Board, c: Color) -> u64 {
-        match self.typ {
-            MoveType::Castle => match self.to {
+        match self.typ() {
+            MoveType::Castle => match self.to() {
                 Square::C1 => {
                     constants::piece_zobrist(Piece::King, Color::White, Square::E1)
                         ^ constants::piece_zobrist(Piece::King, Color::White, Square::C1)
@@ -148,75 +137,75 @@ impl Move {
             },
 
             MoveType::Enpassant => {
-                constants::piece_zobrist(Piece::Pawn, c, self.from)
-                    ^ constants::piece_zobrist(Piece::Pawn, c, self.to)
+                constants::piece_zobrist(Piece::Pawn, c, self.from())
+                    ^ constants::piece_zobrist(Piece::Pawn, c, self.to())
                     ^ constants::piece_zobrist(
                         Piece::Pawn,
                         c.other(),
-                        self.to.file().ep_cap_square().relative(c.other()),
+                        self.to().file().ep_cap_square().relative(c.other()),
                     )
             }
 
             MoveType::PromotionN => {
-                constants::piece_zobrist(Piece::Pawn, c, self.from)
-                    ^ constants::piece_zobrist(Piece::Knight, c, self.to)
+                constants::piece_zobrist(Piece::Pawn, c, self.from())
+                    ^ constants::piece_zobrist(Piece::Knight, c, self.to())
             }
 
             MoveType::PromotionB => {
-                constants::piece_zobrist(Piece::Pawn, c, self.from)
-                    ^ constants::piece_zobrist(Piece::Bishop, c, self.to)
+                constants::piece_zobrist(Piece::Pawn, c, self.from())
+                    ^ constants::piece_zobrist(Piece::Bishop, c, self.to())
             }
 
             MoveType::PromotionR => {
-                constants::piece_zobrist(Piece::Pawn, c, self.from)
-                    ^ constants::piece_zobrist(Piece::Rook, c, self.to)
+                constants::piece_zobrist(Piece::Pawn, c, self.from())
+                    ^ constants::piece_zobrist(Piece::Rook, c, self.to())
             }
 
             MoveType::PromotionQ => {
-                constants::piece_zobrist(Piece::Pawn, c, self.from)
-                    ^ constants::piece_zobrist(Piece::Queen, c, self.to)
+                constants::piece_zobrist(Piece::Pawn, c, self.from())
+                    ^ constants::piece_zobrist(Piece::Queen, c, self.to())
             }
 
             MoveType::PromotionCaptureN => {
-                let q = board.piece_at(self.to).unwrap();
-                constants::piece_zobrist(Piece::Pawn, c, self.from)
-                    ^ constants::piece_zobrist(Piece::Knight, c, self.to)
-                    ^ constants::piece_zobrist(q, c.other(), self.to)
+                let q = board.piece_at(self.to()).unwrap();
+                constants::piece_zobrist(Piece::Pawn, c, self.from())
+                    ^ constants::piece_zobrist(Piece::Knight, c, self.to())
+                    ^ constants::piece_zobrist(q, c.other(), self.to())
             }
 
             MoveType::PromotionCaptureB => {
-                let q = board.piece_at(self.to).unwrap();
-                constants::piece_zobrist(Piece::Pawn, c, self.from)
-                    ^ constants::piece_zobrist(Piece::Bishop, c, self.to)
-                    ^ constants::piece_zobrist(q, c.other(), self.to)
+                let q = board.piece_at(self.to()).unwrap();
+                constants::piece_zobrist(Piece::Pawn, c, self.from())
+                    ^ constants::piece_zobrist(Piece::Bishop, c, self.to())
+                    ^ constants::piece_zobrist(q, c.other(), self.to())
             }
 
             MoveType::PromotionCaptureR => {
-                let q = board.piece_at(self.to).unwrap();
-                constants::piece_zobrist(Piece::Pawn, c, self.from)
-                    ^ constants::piece_zobrist(Piece::Rook, c, self.to)
-                    ^ constants::piece_zobrist(q, c.other(), self.to)
+                let q = board.piece_at(self.to()).unwrap();
+                constants::piece_zobrist(Piece::Pawn, c, self.from())
+                    ^ constants::piece_zobrist(Piece::Rook, c, self.to())
+                    ^ constants::piece_zobrist(q, c.other(), self.to())
             }
 
             MoveType::PromotionCaptureQ => {
-                let q = board.piece_at(self.to).unwrap();
-                constants::piece_zobrist(Piece::Queen, c, self.from)
-                    ^ constants::piece_zobrist(Piece::Bishop, c, self.to)
-                    ^ constants::piece_zobrist(q, c.other(), self.to)
+                let q = board.piece_at(self.to()).unwrap();
+                constants::piece_zobrist(Piece::Queen, c, self.from())
+                    ^ constants::piece_zobrist(Piece::Bishop, c, self.to())
+                    ^ constants::piece_zobrist(q, c.other(), self.to())
             }
 
             MoveType::Capture => {
-                let p = board.piece_at(self.from).unwrap();
-                let q = board.piece_at(self.to).unwrap();
-                constants::piece_zobrist(p, c, self.from)
-                    ^ constants::piece_zobrist(p, c, self.to)
-                    ^ constants::piece_zobrist(q, c.other(), self.to)
+                let p = board.piece_at(self.from()).unwrap();
+                let q = board.piece_at(self.to()).unwrap();
+                constants::piece_zobrist(p, c, self.from())
+                    ^ constants::piece_zobrist(p, c, self.to())
+                    ^ constants::piece_zobrist(q, c.other(), self.to())
             }
 
             MoveType::Normal => {
-                let p = board.piece_at(self.from).unwrap();
-                constants::piece_zobrist(p, c, self.from)
-                    ^ constants::piece_zobrist(p, c, self.to)
+                let p = board.piece_at(self.from()).unwrap();
+                constants::piece_zobrist(p, c, self.from())
+                    ^ constants::piece_zobrist(p, c, self.to())
             }
         }
     }
@@ -228,8 +217,8 @@ impl Move {
 // We thus do not hash any other information.
 impl Hash for Move {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        u8::from(self.to).hash(state);
-        u8::from(self.from).hash(state);
+        u8::from(self.to()).hash(state);
+        u8::from(self.from()).hash(state);
     }
 }
 
@@ -287,12 +276,12 @@ fn determine_move_type(
 
 impl fmt::Display for Move {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}{}{}", self.from, self.to, display_promotion(self))
+        write!(f, "{}{}{}", self.from(), self.to(), display_promotion(self))
     }
 }
 
 fn display_promotion(m: &Move) -> String {
-    match m.typ {
+    match m.typ() {
         MoveType::PromotionQ => "q".to_string(),
         MoveType::PromotionR => "r".to_string(),
         MoveType::PromotionB => "b".to_string(),
