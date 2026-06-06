@@ -25,11 +25,7 @@ fn do_move_en_passant(c: &mut Criterion<CyclesPerByte>) {
         "rnbqkbnr/pp3ppp/8/2pPp3/5P2/8/PPPP2PP/RNBQKBNR w KQkq c6 0 4",
     ))
     .unwrap();
-    let m = chess::Move {
-        from: 35u8.into(),
-        to: 42u8.into(),
-        typ: chess::MoveType::Enpassant,
-    };
+    let m = chess::Move::new(35u8.into(), 42u8.into(), chess::MoveType::Enpassant);
     c.bench_function("do_move_en_passant", |b| {
         b.iter(|| {
             pos.from_move(m);

@@ -115,28 +115,28 @@ impl Board {
     }
     #[inline]
     pub fn do_move(&mut self, m: Move) {
-        let (us, them) = if self.color_boards[0].is_set(m.from) {
+        let (us, them) = if self.color_boards[0].is_set(m.from()) {
             (Color::White, Color::Black)
         } else {
             (Color::Black, Color::White)
         };
-        let piece = self.piece_at(m.from).unwrap();
-        let our_piece = if let Some(p) = m.typ.promotion_piece() {p} else {piece};
-        self.unset(m.from, us, piece);
-        match m.typ {
+        let piece = self.piece_at(m.from()).unwrap();
+        let our_piece = if let Some(p) = m.typ().promotion_piece() {p} else {piece};
+        self.unset(m.from(), us, piece);
+        match m.typ() {
             MoveType::Capture | MoveType::PromotionCaptureN 
                               | MoveType::PromotionCaptureB 
                               | MoveType::PromotionCaptureR 
-                              | MoveType::PromotionCaptureQ => self.unset_all(m.to, them),
+                              | MoveType::PromotionCaptureQ => self.unset_all(m.to(), them),
             MoveType::Enpassant => self.unset(
-                m.to.file().ep_cap_square().relative(them),
+                m.to().file().ep_cap_square().relative(them),
                 them,
                 Piece::Pawn,
             ),
-            MoveType::Castle => self.move_castling_rooks(m.to),
+            MoveType::Castle => self.move_castling_rooks(m.to()),
             _ => {}
         }
-        self.set(m.to, us, our_piece);
+        self.set(m.to(), us, our_piece);
     }
     #[inline]
     fn undo_move_castling_rooks(&mut self, ksq: Square) {

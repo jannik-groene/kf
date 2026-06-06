@@ -33,21 +33,21 @@ impl NNUEState {
         m: Move,
         c: Color,
     ) {
-        let piece = pos.get_board().piece_at(m.from).unwrap();
+        let piece = pos.get_board().piece_at(m.from()).unwrap();
         //if the King has not moved the update is simple
         if piece != Piece::King
             || pos
                 .get_board()
                 .get_bb(c.other(), Piece::King)
-                .is_set(m.from)
-            || pos.get_board().get_bb(c.other(), Piece::King).is_set(m.to)
+                .is_set(m.from())
+            || pos.get_board().get_bb(c.other(), Piece::King).is_set(m.to())
         {
             let kp = pos.get_board().get_bb(c, Piece::King).least_square();
 
-            let our_piece = pos.get_board().get_color_bb(c).is_set(m.to);
+            let our_piece = pos.get_board().get_color_bb(c).is_set(m.to());
 
             //select updated features
-            let p = pos.get_board().piece_at(m.to);
+            let p = pos.get_board().piece_at(m.to());
             let (added, removed) = (m,piece,p).changed_features(c.into(), kp.into(), our_piece);
             sf_half_ka_v2::update_accumulator(acc, acc_new, added, removed, c as usize)
         }

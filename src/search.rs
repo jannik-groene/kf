@@ -241,8 +241,7 @@ fn search_helper(helper: &mut SearchHead, depth: u8, alpha: Eval, beta: Eval) ->
 }
 
 fn is_tactical(m: Move) -> bool {
-    m.typ == MoveType::Capture || m.typ.is_promotion()
-}
+    m.typ() == MoveType::Capture || m.typ().is_promotion()
 }
 
 //Parameters:
@@ -447,7 +446,7 @@ fn search_step(
                 zh,
                 TTEntry::new(movescore.to_lowerbound(), depth_left, zh, m),
             );
-            if !matches!(m.typ, MoveType::Capture) && ttmove != Some(m) {
+            if !matches!(m.typ(), MoveType::Capture) && ttmove != Some(m) {
                 thread.register_killer(depth.current as u8, m);
             }
             thread.invalidate_killers(depth.current as u8);
@@ -526,7 +525,7 @@ fn quiesce(thread: &mut SearchHead, mut alpha: Eval, beta: Eval, delta: i32, qpl
         cand_moves = cand_moves
             .iter()
             .copied()
-            .filter(|m| match m.typ {
+            .filter(|m| match m.typ() {
                 MoveType::Capture => {
                     static_eval + thread.pos().see(*m) + delta > alpha && thread.pos().see(*m) > 0
                 }
@@ -541,26 +540,26 @@ fn quiesce(thread: &mut SearchHead, mut alpha: Eval, beta: Eval, delta: i32, qpl
         if cand_moves.is_empty() {
             return static_eval;
         }
-        cand_moves.sort_by_key(|m| -match m.typ {
+        cand_moves.sort_by_key(|m| -match m.typ() {
             MoveType::Capture => thread.pos().see(*m),
             MoveType::PromotionN => piece_value(Piece::Knight) - piece_value(Piece::Pawn),
             MoveType::PromotionB => piece_value(Piece::Bishop) - piece_value(Piece::Pawn),
             MoveType::PromotionR => piece_value(Piece::Rook) - piece_value(Piece::Pawn),
             MoveType::PromotionQ => piece_value(Piece::Queen) - piece_value(Piece::Pawn),
             MoveType::PromotionCaptureN => {
-                let q = thread.pos().get_board().piece_at(m.to).unwrap();
+                let q = thread.pos().get_board().piece_at(m.to()).unwrap();
                 piece_value(Piece::Knight) + piece_value(q) - piece_value(Piece::Pawn)
             }
             MoveType::PromotionCaptureB => {
-                let q = thread.pos().get_board().piece_at(m.to).unwrap();
+                let q = thread.pos().get_board().piece_at(m.to()).unwrap();
                 piece_value(Piece::Knight) + piece_value(q) - piece_value(Piece::Pawn)
             }
             MoveType::PromotionCaptureR => {
-                let q = thread.pos().get_board().piece_at(m.to).unwrap();
+                let q = thread.pos().get_board().piece_at(m.to()).unwrap();
                 piece_value(Piece::Knight) + piece_value(q) - piece_value(Piece::Pawn)
             }
             MoveType::PromotionCaptureQ => {
-                let q = thread.pos().get_board().piece_at(m.to).unwrap();
+                let q = thread.pos().get_board().piece_at(m.to()).unwrap();
                 piece_value(Piece::Knight) + piece_value(q) - piece_value(Piece::Pawn)
             }
             _ => 0,
@@ -595,10 +594,10 @@ fn threefold_detection() {
     let sf = Arc::new(RwLock::new(false));
     let mut head = SearchHead::new(pos, tt, Vec::new(), sf, false);
     let moves = [
-        Move { from: Square::D1, to: Square::D2, typ: MoveType::Normal },
-        Move { from: Square::D8, to: Square::D7, typ: MoveType::Normal },
-        Move { from: Square::D2, to: Square::D1, typ: MoveType::Normal },
-        Move { from: Square::D7, to: Square::D8, typ: MoveType::Normal },
+        Move::new(Square::D1, Square::D2, MoveType::Normal),
+        Move::new(Square::D8, Square::D7, MoveType::Normal),
+        Move::new(Square::D2, Square::D1, MoveType::Normal),
+        Move::new(Square::D7, Square::D8, MoveType::Normal),
     ];
     for m in moves {
         head.do_move(m);
@@ -615,10 +614,10 @@ fn threefold_detection() {
     let sf = Arc::new(RwLock::new(false));
     let mut head = SearchHead::new(pos, tt, Vec::new(), sf, false);
     let moves = [
-        Move { from: Square::E5, to: Square::F3, typ: MoveType::Normal },
-        Move { from: Square::B6, to: Square::D8, typ: MoveType::Normal },
-        Move { from: Square::F3, to: Square::E5, typ: MoveType::Normal },
-        Move { from: Square::D8, to: Square::B6, typ: MoveType::Normal },
+        Move::new(Square::E5, Square::F3, MoveType::Normal),
+        Move::new(Square::B6, Square::D8, MoveType::Normal),
+        Move::new(Square::F3, Square::E5, MoveType::Normal),
+        Move::new(Square::D8, Square::B6, MoveType::Normal),
     ];
     for m in moves {
         head.do_move(m);

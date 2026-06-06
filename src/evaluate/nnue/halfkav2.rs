@@ -39,12 +39,12 @@ impl MoveFeatures<HalfKAv2Feature> for (Move,Piece,Option<Piece>) {
         ksq: u8,
         our_piece: bool,
     ) -> (Vec<HalfKAv2Feature>, Vec<HalfKAv2Feature>) {
-        let f = self.0.from.relative(perspective.into());
-        let t = self.0.to.relative(perspective.into());
+        let f = self.0.from().relative(perspective.into());
+        let t = self.0.to().relative(perspective.into());
         let ksq = Square::from(ksq).relative(perspective.into());
 
         //select updated features
-        match self.0.typ {
+        match self.0.typ() {
             MoveType::Capture => {
                 let p = self.2.unwrap();
                 (

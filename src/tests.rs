@@ -37,11 +37,7 @@ fn simple_en_passant() {
         "rnbqkbnr/pp3ppp/8/2pPp3/5P2/8/PPPP2PP/RNBQKBNR w KQkq c6 0 4",
     ))
     .unwrap();
-    let m = chess::Move {
-        from: 35u8.into(),
-        to: 42u8.into(),
-        typ: chess::MoveType::Enpassant,
-    };
+    let m = chess::Move::new(35u8.into(), 42u8.into(), chess::MoveType::Enpassant);
     assert!(pos.get_moves().contains(&m));
     let npos1 = pos.from_move(m);
     println!("{}", npos1.board);
@@ -58,11 +54,7 @@ fn simple_castle() {
         "rn1qk2r/1p2bppp/p2pbn2/4p3/4P3/1NN1BP2/PPPQ2PP/R3KB1R b KQkq - 2 9",
     ))
     .unwrap();
-    let m = chess::Move {
-        from: 60u8.into(),
-        to: 62u8.into(),
-        typ: chess::MoveType::Castle,
-    };
+    let m = chess::Move::new(60u8.into(), 62u8.into(), chess::MoveType::Castle);
     assert!(pos.get_moves().contains(&m));
     let npos1 = pos.from_move(m);
     let npos2 = chess::Position::from_fen(String::from(
@@ -79,7 +71,7 @@ fn simple_pin() {
         chess::Position::from_fen(String::from("4k3/4r3/8/8/4Q3/8/8/4K3 w - - 0 1")).unwrap();
     println!("Found {} moves, expected 10.", pos.get_moves().len());
     for m in pos.get_moves() {
-        println!("Move from {} to {}", m.from, m.to);
+        println!("Move from {} to {}", m.from(), m.to());
     }
     assert!(pos.get_moves().len() == 10);
 }
@@ -114,7 +106,7 @@ fn simple_pinned_no_en_passant() {
             .unwrap();
     println!("Found {} moves, expected 0.", pos.get_moves().len());
     for m in pos.get_moves() {
-        println!("Move from {} to {}", m.from, m.to);
+        println!("Move from {} to {}", m.from(), m.to());
     }
     println!("{}", pos.get_board());
     assert!(pos.get_moves().is_empty());
@@ -126,7 +118,7 @@ fn simple_remove_attacker() {
         chess::Position::from_fen(String::from("4k3/3r1r2/8/8/8/8/r2q4/2B1K3 w - - 0 1")).unwrap();
     println!("Found {} moves, expected 1.", pos.get_moves().len());
     for m in pos.get_moves() {
-        println!("Move from {} to {}", m.from, m.to);
+        println!("Move from {} to {}", m.from(), m.to());
     }
     assert!(pos.get_moves().len() == 1);
 }
@@ -145,14 +137,10 @@ fn simple_pinned_pawn_attack() {
     let mut pos =
         chess::Position::from_fen(String::from("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 2"))
             .unwrap();
-    pos = pos.from_move(chess::Move {
-        from: 12u8.into(),
-        to: 28u8.into(),
-        typ: chess::MoveType::Normal,
-    });
+    pos = pos.from_move(chess::Move::new(12u8.into(), 28u8.into(), chess::MoveType::Normal));
     println!("Found {} moves, expected 16.", pos.get_moves().len());
     for m in pos.get_moves() {
-        println!("Move from {} to {}", m.from, m.to);
+        println!("Move from {} to {}", m.from(), m.to());
     }
     assert!(pos.get_moves().len() == 16);
 }
@@ -163,7 +151,7 @@ fn simple_avoid_check() {
         chess::Position::from_fen(String::from("8/2p5/3p4/KP5r/5Rk1/8/4P3/8 b - - 0 2")).unwrap();
     println!("Found {} moves, expected 4.", pos.get_moves().len());
     for m in pos.get_moves() {
-        println!("Move from {} to {}", m.from, m.to);
+        println!("Move from {} to {}", m.from(), m.to());
     }
     assert!(pos.get_moves().len() == 4);
 }
@@ -174,13 +162,13 @@ fn simple_en_passant_check_avoidance() {
         chess::Position::from_fen(String::from("5b1k/8/8/2pP4/8/K7/8/8 w - c6 0 1")).unwrap();
     println!("Found {} moves, expected 5.", pos.get_moves().len());
     for m in pos.get_moves() {
-        println!("Move from {} to {}", m.from, m.to);
+        println!("Move from {} to {}", m.from(), m.to());
     }
     assert!(pos.get_moves().len() == 5);
     pos = chess::Position::from_fen(String::from("7k/8/8/K1pP3r/8/8/8/8 w - c6 0 1")).unwrap();
     println!("Found {} moves, expected 5.", pos.get_moves().len());
     for m in pos.get_moves() {
-        println!("Move from {} to {}", m.from, m.to);
+        println!("Move from {} to {}", m.from(), m.to());
     }
     assert!(pos.get_moves().len() == 5);
 }
@@ -199,11 +187,7 @@ fn simple_rook_capture() {
         "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N1Q3/PPPBBPpP/R3K2R b KQkq - 1 2",
     ))
     .unwrap();
-    pos = pos.from_move(chess::Move {
-        from: 14u8.into(),
-        to: 7u8.into(),
-        typ: chess::MoveType::PromotionCaptureN,
-    });
+    pos = pos.from_move(chess::Move::new(14u8.into(), 7u8.into(), chess::MoveType::PromotionCaptureN));
     assert!(pos.get_moves().len() == 47);
 }
 

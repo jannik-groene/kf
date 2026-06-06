@@ -401,17 +401,14 @@ impl Position {
             }
 
             for m in pmoves {
+                let typ = if !self.board.occupation().is_set(m) {
+                    MoveType::Normal
+                } else {
+                    MoveType::Capture
+                };
                 //SAFETY: The ArrayVec capacity exceeds the maximal move number of 218
                 unsafe {
-                    moves.push_unchecked(Move {
-                        from: pos,
-                        to: m,
-                        typ: if !self.board.occupation().is_set(m) {
-                            MoveType::Normal
-                        } else {
-                            MoveType::Capture
-                        },
-                    });
+                    moves.push_unchecked(Move::new(pos, m, typ));
                 }
             }
         }
@@ -457,11 +454,7 @@ impl Position {
                     }
 
                     unsafe {
-                        moves.push_unchecked(Move {
-                            from: cand,
-                            to: esq,
-                            typ: MoveType::Enpassant,
-                        });
+                        moves.push_unchecked(Move::new(cand, esq, MoveType::Enpassant));
                     }
                 }
             }
@@ -488,11 +481,9 @@ impl Position {
                 .is_empty()
         {
             unsafe {
-                moves.push_unchecked(Move {
-                    from: Square::E1.relative(self.to_move),
-                    to: Square::G1.relative(self.to_move),
-                    typ: MoveType::Castle,
-                });
+                moves.push_unchecked(Move::new(Square::E1.relative(self.to_move),
+                                               Square::G1.relative(self.to_move),
+                                               MoveType::Castle));
             }
         }
 
@@ -503,11 +494,11 @@ impl Position {
             && (self.board.occupation() & QUEEN_CASTLE_MATERIAL_MASK[self.to_move as usize])
                 .is_empty()
         {
-            moves.push(Move {
-                from: Square::E1.relative(self.to_move),
-                to: Square::C1.relative(self.to_move),
-                typ: MoveType::Castle,
-            });
+            moves.push(Move::new(
+                Square::E1.relative(self.to_move),
+                Square::C1.relative(self.to_move),
+                MoveType::Castle
+            ));
         }
     }
 
@@ -533,11 +524,7 @@ impl Position {
             }
 
             unsafe {
-                moves.push_unchecked(Move {
-                    from,
-                    to,
-                    typ: MoveType::Normal,
-                });
+                moves.push_unchecked(Move::new(from, to, MoveType::Normal));
             }
         }
 
@@ -550,11 +537,7 @@ impl Position {
             }
 
             unsafe {
-                moves.push_unchecked(Move {
-                    from,
-                    to,
-                    typ: MoveType::Normal,
-                });
+                moves.push_unchecked(Move::new(from, to, MoveType::Normal));
             }
         }
 
@@ -567,26 +550,10 @@ impl Position {
             }
 
             unsafe {
-                moves.push_unchecked(Move {
-                    from,
-                    to,
-                    typ: MoveType::PromotionN,
-                });
-                moves.push_unchecked(Move {
-                    from,
-                    to,
-                    typ: MoveType::PromotionB,
-                });
-                moves.push_unchecked(Move {
-                    from,
-                    to,
-                    typ: MoveType::PromotionR,
-                });
-                moves.push_unchecked(Move {
-                    from,
-                    to,
-                    typ: MoveType::PromotionQ,
-                });
+                moves.push_unchecked(Move::new(from, to, MoveType::PromotionN));
+                moves.push_unchecked(Move::new(from, to, MoveType::PromotionB));
+                moves.push_unchecked(Move::new(from, to, MoveType::PromotionR));
+                moves.push_unchecked(Move::new(from, to, MoveType::PromotionQ));
             }
         }
 
@@ -603,34 +570,14 @@ impl Position {
             for m in attacks {
                 if m.rank().relative(self.to_move) == Rank::Eighth {
                     unsafe {
-                        moves.push_unchecked(Move {
-                            from: pawn,
-                            to: m,
-                            typ: MoveType::PromotionCaptureN,
-                        });
-                        moves.push_unchecked(Move {
-                            from: pawn,
-                            to: m,
-                            typ: MoveType::PromotionCaptureB,
-                        });
-                        moves.push_unchecked(Move {
-                            from: pawn,
-                            to: m,
-                            typ: MoveType::PromotionCaptureR,
-                        });
-                        moves.push_unchecked(Move {
-                            from: pawn,
-                            to: m,
-                            typ: MoveType::PromotionCaptureQ,
-                        });
+                        moves.push_unchecked(Move::new(pawn, m, MoveType::PromotionCaptureN));
+                        moves.push_unchecked(Move::new(pawn, m, MoveType::PromotionCaptureB));
+                        moves.push_unchecked(Move::new(pawn, m, MoveType::PromotionCaptureR));
+                        moves.push_unchecked(Move::new(pawn, m, MoveType::PromotionCaptureQ));
                     }
                 } else {
                     unsafe {
-                        moves.push_unchecked(Move {
-                            from: pawn,
-                            to: m,
-                            typ: MoveType::Capture,
-                        });
+                        moves.push_unchecked(Move::new(pawn, m, MoveType::Capture));
                     }
                 }
             }
@@ -648,22 +595,20 @@ impl Position {
             self.generate_attack_table();
         }
 
+        let ksq = self.board.get_bb(self.to_move, Piece::King).least_square();
         //Generate King moves first (except castling)
         let mut king_moves =
-            constants::king_moves(self.board.get_bb(self.to_move, Piece::King).least_square());
+            constants::king_moves(ksq);
         king_moves &= !self.board.get_color_bb(self.to_move);
         king_moves &= !self.ply_info.attacked_squares;
 
         for km in king_moves {
-            moves.push(Move {
-                from: self.board.get_bb(self.to_move, Piece::King).least_square(),
-                to: km,
-                typ: if !self.board.get_color_bb(self.to_move.other()).is_set(km) {
-                    MoveType::Normal
-                } else {
-                    MoveType::Capture
-                },
-            });
+            let typ = if !self.board.get_color_bb(self.to_move.other()).is_set(km) {
+                MoveType::Normal
+            } else {
+                MoveType::Capture
+            };
+            moves.push(Move::new(ksq, km, typ));
         }
 
         //optimize double or better check
@@ -736,11 +681,11 @@ impl Position {
 
         //Check if a new en passant flag is to be set
         if p == Piece::Pawn
-            && m.from.relative(self.to_move).rank() == Rank::Second
-            && m.to.relative(self.to_move).rank() == Rank::Fourth
+            && m.from().relative(self.to_move).rank() == Rank::Second
+            && m.to().relative(self.to_move).rank() == Rank::Fourth
         {
-            self.zobrist ^= constants::enpassant_zobrist(m.to.file());
-            self.ply_info.ep_square = Some(m.to.file().ep_square().relative(self.to_move));
+            self.zobrist ^= constants::enpassant_zobrist(m.to().file());
+            self.ply_info.ep_square = Some(m.to().file().ep_square().relative(self.to_move));
         } else {
             self.ply_info.ep_square = None;
         }
@@ -764,22 +709,22 @@ impl Position {
         }
 
         //Check if white's rooks are moved _or_ captured
-        if self.ply_info.castling_rights[0][1] && (m.to == Square::A1 || m.from == Square::A1) {
+        if self.ply_info.castling_rights[0][1] && (m.to() == Square::A1 || m.from() == Square::A1) {
             self.ply_info.castling_rights[0][1] = false;
             self.zobrist ^= constants::castle_zobrist(Square::C1);
         } else if self.ply_info.castling_rights[0][0]
-            && (m.to == Square::H1 || m.from == Square::H1)
+            && (m.to() == Square::H1 || m.from() == Square::H1)
         {
             self.ply_info.castling_rights[0][0] = false;
             self.zobrist ^= constants::castle_zobrist(Square::G1);
         }
 
         //Check if black's rooks are moved _or_ captured
-        if self.ply_info.castling_rights[1][0] && (m.to == Square::H8 || m.from == Square::H8) {
+        if self.ply_info.castling_rights[1][0] && (m.to() == Square::H8 || m.from() == Square::H8) {
             self.ply_info.castling_rights[1][0] = false;
             self.zobrist ^= constants::castle_zobrist(Square::G8);
         } else if self.ply_info.castling_rights[1][1]
-            && (m.to == Square::A8 || m.from == Square::A8)
+            && (m.to() == Square::A8 || m.from() == Square::A8)
         {
             self.ply_info.castling_rights[1][1] = false;
             self.zobrist ^= constants::castle_zobrist(Square::C8);
@@ -787,7 +732,7 @@ impl Position {
     }
 
     pub fn do_move(&mut self, m: Move) {
-        let piece = self.board.piece_at(m.from).unwrap();
+        let piece = self.board.piece_at(m.from()).unwrap();
 
         //Update the zobrist numbers (except castling numbers)
         self.update_zobrist(m, piece);
@@ -806,7 +751,7 @@ impl Position {
         self.to_move = self.to_move.other();
         self.zobrist ^= constants::color_zobrist();
 
-        if piece == Piece::Pawn || matches!(m.typ, MoveType::Capture) {
+        if piece == Piece::Pawn || matches!(m.typ(), MoveType::Capture) {
             self.ply_info.rule_50_count = 0;
         } else {
             self.ply_info.rule_50_count += 1;
@@ -874,8 +819,8 @@ impl Position {
     //X-ray attacks.
     //We ignore en passant here! Attackers are sorted by value!
     pub fn see(&self, m: Move) -> i32 {
-        let target = m.to;
-        let target_piece = match m.typ {
+        let target = m.to();
+        let target_piece = match m.typ() {
             MoveType::Capture => self.board.piece_at(target).unwrap(),
             _ => return 0,
         };
@@ -891,16 +836,16 @@ impl Position {
 
         attackers |= constants::knight_moves(target) & self.board.get_piece_bb(Piece::Knight);
 
-        attackers |= m.from.into();
+        attackers |= m.from().into();
 
         //We guess that most exchanges will feature less than ten pieces, which seems a safe
         //assumption
         let mut gain = Vec::with_capacity(10);
-        let mut taker = self.board.piece_at(m.from).unwrap();
+        let mut taker = self.board.piece_at(m.from()).unwrap();
 
         gain.push(constants::piece_value(target_piece));
 
-        let mut from = m.from;
+        let mut from = m.from();
         loop {
             let last_gain = *gain.last().unwrap_or(&0);
 
@@ -969,16 +914,16 @@ impl Position {
             .get_bb(self.color().other(), Piece::King)
             .least_square();
 
-        let final_piece = if let Some(p) = m.typ.promotion_piece() {p} 
-                          else {self.board.piece_at(m.from).unwrap()}; 
+        let final_piece = if let Some(p) = m.typ().promotion_piece() {p} 
+                          else {self.board.piece_at(m.from()).unwrap()}; 
 
         match final_piece {
-            Piece::Knight => constants::knight_moves(kpos).is_set(m.to),
-            Piece::Bishop => self.bishop_moves(kpos).is_set(m.to),
-            Piece::Rook => self.rook_moves(kpos).is_set(m.to),
-            Piece::Queen => (self.rook_moves(kpos) | self.bishop_moves(kpos)).is_set(m.to),
+            Piece::Knight => constants::knight_moves(kpos).is_set(m.to()),
+            Piece::Bishop => self.bishop_moves(kpos).is_set(m.to()),
+            Piece::Rook => self.rook_moves(kpos).is_set(m.to()),
+            Piece::Queen => (self.rook_moves(kpos) | self.bishop_moves(kpos)).is_set(m.to()),
             Piece::Pawn => {
-                let attacked_sqs = constants::pawn_attacks(m.to, self.to_move);
+                let attacked_sqs = constants::pawn_attacks(m.to(), self.to_move);
                 attacked_sqs.is_set(kpos)
             }
             _ => false,
@@ -993,47 +938,27 @@ fn simple_sse() {
         "1k1r4/1pp4p/p7/4p3/8/P5P1/1PP4P/2K1R3 w - - 0 0",
     ))
     .unwrap();
-    let mov = Move {
-        from: Square::E1,
-        to: Square::E5,
-        typ: MoveType::Capture,
-    };
+    let mov = Move::new(Square::E1, Square::E5, MoveType::Capture);
     assert_eq!(pos.see(mov), constants::piece_value(Piece::Pawn));
     let pos2 = Position::from_fen(String::from(
         "1k1r3q/1ppn3p/p4b2/4p3/8/P2N2P1/1PP1R1BP/2K1Q3 w - - 0 0",
     ))
     .unwrap();
-    let mov2 = Move {
-        from: Square::D3,
-        to: Square::E5,
-        typ: MoveType::Capture,
-    };
+    let mov2 = Move::new(Square::D3, Square::E5, MoveType::Capture);
     assert_eq!(pos2.see(mov2), constants::piece_value(Piece::Pawn) - constants::piece_value(Piece::Knight));
 }
 
 #[test]
 fn compress_and_decompress_move() {
-    let m = Move {
-        from: Square::A1,
-        to: Square::B1,
-        typ: MoveType::Normal,
-    };
+    let m = Move::new(Square::A1, Square::B1, MoveType::Normal);
     let m2 = Move::decompress(m.compress());
     assert!(m == m2.unwrap());
 
-    let m = Move {
-        from: Square::G7,
-        to: Square::H8,
-        typ: MoveType::PromotionCaptureB,
-    };
+    let m = Move::new(Square::G7, Square::H8, MoveType::PromotionCaptureB);
     let m2 = Move::decompress(m.compress());
     assert!(m == m2.unwrap());
 
-    let m = Move {
-        from: Square::G7,
-        to: Square::H8,
-        typ: MoveType::Capture,
-    };
+    let m = Move::new(Square::G7, Square::H8, MoveType::Capture);
     let m2 = Move::decompress(m.compress());
     assert!(m == m2.unwrap());
 }

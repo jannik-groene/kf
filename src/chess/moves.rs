@@ -40,12 +40,22 @@ impl MoveType {
 
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub struct Move {
-    pub from: Square,
-    pub to: Square,
-    pub typ: MoveType,
+    from: Square,
+    to: Square,
+    typ: MoveType,
 }
 
 impl Move {
+
+    #[inline(always)]
+    pub fn new(from: Square, to: Square, typ: MoveType) -> Move {
+        Move {
+            from,
+            to,
+            typ
+        }
+    }
+
     //read a str in the UCI format to a move
     pub fn from_str(s: &str, board: &Board) -> Move {
         let mut chars = s.chars();
@@ -69,6 +79,21 @@ impl Move {
             to: to.into(),
             typ: determine_move_type(board, from.into(), to.into(), prom),
         }
+    }
+
+    #[inline(always)]
+    pub fn to(&self) -> Square {
+        self.to
+    }
+
+    #[inline(always)]
+    pub fn from(&self) -> Square {
+        self.from
+    }
+
+    #[inline(always)]
+    pub fn typ(&self) -> MoveType {
+        self.typ
     }
 
     pub fn decompress(m: u16) -> Option<Move> {
