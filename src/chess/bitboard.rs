@@ -271,7 +271,7 @@ impl Square {
         if shift >= 0 {
             Self::new(*self as u8 + shift as u8)
         } else {
-            Self::new(*self as u8 - shift.abs() as u8)
+            Self::new(*self as u8 - shift.unsigned_abs())
         }
     }
     #[inline]
