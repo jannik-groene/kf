@@ -28,7 +28,20 @@ pub struct MovePicker {
 
 impl MovePicker {
     pub fn new(pos: &mut Position, killers: [Option<Move>; 2], ttmove: Option<Move>) -> Self {
-        let moves = pos.get_moves();
+        let moves = pos.get_moves::<true>();
+        let scores = Self::score_captures(&moves, pos);
+
+        MovePicker {
+            moves,
+            scores,
+            ttmove,
+            killers,
+            stage: MovePickingStage::TtMove,
+            idx: 0,
+        }
+    }
+
+    pub fn from_move_list(moves: MoveList, pos: &mut Position, killers: [Option<Move>; 2], ttmove: Option<Move>) -> Self { 
         let scores = Self::score_captures(&moves, pos);
 
         MovePicker {

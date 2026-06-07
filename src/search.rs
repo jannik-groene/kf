@@ -310,7 +310,7 @@ fn search_step(
     }
 
     //Check if this is a terminal position
-    let moves = thread.pos_mut().get_moves();
+    let moves = thread.pos_mut().get_moves::<true>();
 
     if moves.is_empty() && thread.pos_mut().in_check() {
         return Eval::MATE_NOW;
@@ -323,20 +323,20 @@ fn search_step(
 
     //We extend the normal search if we are  in check, else go into quiescence
     if depth_left == 0 && !thread.pos_mut().in_check() {
-        return quiesce(thread, alpha, beta, 200 - 20 * depth.reduction as i32, 0);
+        return quiesce(thread, alpha, beta, 200 - 20 * depth.reduction as i32);
     }
     //Futility pruning
     else if depth.target > 3 && depth_left == 1 {
         let eval = thread.evaluate();
         if eval + 300 < alpha {
-            return quiesce(thread, alpha, beta, 100, 0);
+            return quiesce(thread, alpha, beta, 100);
         }
     }
     //Extended futility pruning
     else if depth.target > 3 && depth_left == 2 {
         let eval = thread.evaluate();
         if eval + 500 < alpha {
-            return quiesce(thread, alpha, beta, 100, 0);
+            return quiesce(thread, alpha, beta, 100);
         }
     }
 
@@ -376,7 +376,7 @@ fn search_step(
     }
 
     let killers = *thread.get_killers(depth.current as u8);
-    let move_picker = movepick::MovePicker::new(thread.pos_mut(), killers, ttmove);
+    let move_picker = movepick::MovePicker::from_move_list(moves, thread.pos_mut(), killers, ttmove);
 
     for (i, m) in move_picker.enumerate() {
         //lmr reduction depth
@@ -494,21 +494,22 @@ fn search_step(
     }
 }
 
-fn quiesce(thread: &mut SearchHead, mut alpha: Eval, beta: Eval, delta: i32, qply: u8) -> Eval {
+fn quiesce(thread: &mut SearchHead, mut alpha: Eval, beta: Eval, delta: i32) -> Eval {
     //check for obviously drawn positions
     if is_material_draw(thread.pos()) {
         return Eval::DRAW;
     }
 
-    let mut cand_moves = thread.pos_mut().get_moves();
+    //Search all evasions, else only captures.
+    let mut cand_moves = if thread.pos_mut().in_check() {
+        thread.pos_mut().get_moves::<true>()
+    } else {
+        thread.pos_mut().get_moves::<false>()
+    };
 
     //check for terminal position
-    if cand_moves.is_empty() {
-        if thread.pos_mut().in_check() {
+    if cand_moves.is_empty() && thread.pos_mut().in_check() {
             return Eval::MATE_NOW;
-        } else {
-            return Eval::STALEMATE;
-        }
     }
 
     let static_eval = thread.evaluate();
@@ -529,10 +530,8 @@ fn quiesce(thread: &mut SearchHead, mut alpha: Eval, beta: Eval, delta: i32, qpl
                 MoveType::Capture => {
                     static_eval + thread.pos().see(*m) + delta > alpha && thread.pos().see(*m) > 0
                 }
-                MoveType::PromotionN | MoveType::PromotionB | MoveType::PromotionR 
-                                     | MoveType::PromotionQ | MoveType::PromotionCaptureN
-                                     | MoveType::PromotionCaptureB | MoveType::PromotionCaptureR
-                                     | MoveType::PromotionCaptureQ                               => true,
+                MoveType::PromotionCaptureN | MoveType::PromotionCaptureB 
+                    | MoveType::PromotionCaptureR | MoveType::PromotionCaptureQ => true,
                 MoveType::Enpassant => static_eval + delta + 100 > alpha,
                 _ => false,
             })
@@ -574,7 +573,7 @@ fn quiesce(thread: &mut SearchHead, mut alpha: Eval, beta: Eval, delta: i32, qpl
 
         thread.do_move(m);
         //The deeper we are the more valuable captures need to be
-        let score = -quiesce(thread, -beta, -alpha, delta - 20, qply + 1);
+        let score = -quiesce(thread, -beta, -alpha, delta - 20);
         thread.undo_move();
 
         if score >= beta {

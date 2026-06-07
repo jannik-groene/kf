@@ -14,13 +14,13 @@ fn read_start_fen() {
 #[test]
 fn no_moves_in_checkmate() {
     let pos = chess::Position::from_fen(String::from("2Q4k/4Q3/4p3/4P3/5P2/4BK2/8/8 b - - 0 106"));
-    assert!(pos.unwrap().get_moves().is_empty());
+    assert!(pos.unwrap().get_moves::<true>().is_empty());
 }
 
 #[test]
 fn count_moves_from_start() {
     let mut pos = chess::Position::new();
-    assert!(pos.get_moves().len() == 20);
+    assert!(pos.get_moves::<true>().len() == 20);
 }
 
 #[test]
@@ -38,7 +38,7 @@ fn simple_en_passant() {
     ))
     .unwrap();
     let m = chess::Move::new(35u8.into(), 42u8.into(), chess::MoveType::Enpassant);
-    assert!(pos.get_moves().contains(&m));
+    assert!(pos.get_moves::<true>().contains(&m));
     let npos1 = pos.from_move(m);
     println!("{}", npos1.board);
     let npos2 = chess::Position::from_fen(String::from(
@@ -55,7 +55,7 @@ fn simple_castle() {
     ))
     .unwrap();
     let m = chess::Move::new(60u8.into(), 62u8.into(), chess::MoveType::Castle);
-    assert!(pos.get_moves().contains(&m));
+    assert!(pos.get_moves::<true>().contains(&m));
     let npos1 = pos.from_move(m);
     let npos2 = chess::Position::from_fen(String::from(
         "rn1q1rk1/1p2bppp/p2pbn2/4p3/4P3/1NN1BP2/PPPQ2PP/R3KB1R w KQ - 3 10",
@@ -69,25 +69,25 @@ fn simple_castle() {
 fn simple_pin() {
     let mut pos =
         chess::Position::from_fen(String::from("4k3/4r3/8/8/4Q3/8/8/4K3 w - - 0 1")).unwrap();
-    println!("Found {} moves, expected 10.", pos.get_moves().len());
-    for m in pos.get_moves() {
+    println!("Found {} moves, expected 10.", pos.get_moves::<true>().len());
+    for m in pos.get_moves::<true>() {
         println!("Move from {} to {}", m.from(), m.to());
     }
-    assert!(pos.get_moves().len() == 10);
+    assert!(pos.get_moves::<true>().len() == 10);
 }
 
 #[test]
 fn simple_block() {
     let mut pos =
         chess::Position::from_fen(String::from("4k3/3r1r2/8/b7/8/8/r7/2B1K3 w - - 0 1")).unwrap();
-    assert!(pos.get_moves().len() == 1);
+    assert!(pos.get_moves::<true>().len() == 1);
 }
 
 #[test]
 fn simple_remove_attacking_knight() {
     let mut pos =
         chess::Position::from_fen(String::from("4k3/3r1r2/8/8/8/8/r5n1/4K2B w - - 0 1")).unwrap();
-    assert!(pos.get_moves().len() == 1);
+    assert!(pos.get_moves::<true>().len() == 1);
 }
 
 #[test]
@@ -96,7 +96,7 @@ fn simple_double_block() {
         "4k3/4r3/8/3p1p2/b3P3/3p1p1b/r3P2r/4K3 w - - 0 1",
     ))
     .unwrap();
-    assert!(pos.get_moves().len() == 6);
+    assert!(pos.get_moves::<true>().len() == 6);
 }
 
 #[test]
@@ -104,23 +104,23 @@ fn simple_pinned_no_en_passant() {
     let mut pos =
         chess::Position::from_fen(String::from("4k3/8/4r3/3pP3/3r1r2/8/r7/4K3 w - d6 0 1"))
             .unwrap();
-    println!("Found {} moves, expected 0.", pos.get_moves().len());
-    for m in pos.get_moves() {
+    println!("Found {} moves, expected 0.", pos.get_moves::<true>().len());
+    for m in pos.get_moves::<true>() {
         println!("Move from {} to {}", m.from(), m.to());
     }
     println!("{}", pos.get_board());
-    assert!(pos.get_moves().is_empty());
+    assert!(pos.get_moves::<true>().is_empty());
 }
 
 #[test]
 fn simple_remove_attacker() {
     let mut pos =
         chess::Position::from_fen(String::from("4k3/3r1r2/8/8/8/8/r2q4/2B1K3 w - - 0 1")).unwrap();
-    println!("Found {} moves, expected 1.", pos.get_moves().len());
-    for m in pos.get_moves() {
+    println!("Found {} moves, expected 1.", pos.get_moves::<true>().len());
+    for m in pos.get_moves::<true>() {
         println!("Move from {} to {}", m.from(), m.to());
     }
-    assert!(pos.get_moves().len() == 1);
+    assert!(pos.get_moves::<true>().len() == 1);
 }
 
 #[test]
@@ -129,7 +129,7 @@ fn move_count_test_2() {
         "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 0",
     ))
     .unwrap();
-    assert_eq!(pos.get_moves().len(), 48);
+    assert_eq!(pos.get_moves::<true>().len(), 48);
 }
 
 #[test]
@@ -138,47 +138,47 @@ fn simple_pinned_pawn_attack() {
         chess::Position::from_fen(String::from("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 2"))
             .unwrap();
     pos = pos.from_move(chess::Move::new(12u8.into(), 28u8.into(), chess::MoveType::Normal));
-    println!("Found {} moves, expected 16.", pos.get_moves().len());
-    for m in pos.get_moves() {
+    println!("Found {} moves, expected 16.", pos.get_moves::<true>().len());
+    for m in pos.get_moves::<true>() {
         println!("Move from {} to {}", m.from(), m.to());
     }
-    assert!(pos.get_moves().len() == 16);
+    assert!(pos.get_moves::<true>().len() == 16);
 }
 
 #[test]
 fn simple_avoid_check() {
     let mut pos =
         chess::Position::from_fen(String::from("8/2p5/3p4/KP5r/5Rk1/8/4P3/8 b - - 0 2")).unwrap();
-    println!("Found {} moves, expected 4.", pos.get_moves().len());
-    for m in pos.get_moves() {
+    println!("Found {} moves, expected 4.", pos.get_moves::<true>().len());
+    for m in pos.get_moves::<true>() {
         println!("Move from {} to {}", m.from(), m.to());
     }
-    assert!(pos.get_moves().len() == 4);
+    assert!(pos.get_moves::<true>().len() == 4);
 }
 
 #[test]
 fn simple_en_passant_check_avoidance() {
     let mut pos =
         chess::Position::from_fen(String::from("5b1k/8/8/2pP4/8/K7/8/8 w - c6 0 1")).unwrap();
-    println!("Found {} moves, expected 5.", pos.get_moves().len());
-    for m in pos.get_moves() {
+    println!("Found {} moves, expected 5.", pos.get_moves::<true>().len());
+    for m in pos.get_moves::<true>() {
         println!("Move from {} to {}", m.from(), m.to());
     }
-    assert!(pos.get_moves().len() == 5);
+    assert!(pos.get_moves::<true>().len() == 5);
     pos = chess::Position::from_fen(String::from("7k/8/8/K1pP3r/8/8/8/8 w - c6 0 1")).unwrap();
-    println!("Found {} moves, expected 5.", pos.get_moves().len());
-    for m in pos.get_moves() {
+    println!("Found {} moves, expected 5.", pos.get_moves::<true>().len());
+    for m in pos.get_moves::<true>() {
         println!("Move from {} to {}", m.from(), m.to());
     }
-    assert!(pos.get_moves().len() == 5);
+    assert!(pos.get_moves::<true>().len() == 5);
 }
 
 #[test]
 fn simple_en_passant_remove_attacker() {
     let mut pos =
         chess::Position::from_fen(String::from("4k3/8/8/3pP3/4K3/8/8/8 w - d6 0 1")).unwrap();
-    println!("Found {} moves, expected 8.", pos.get_moves().len());
-    assert!(pos.get_moves().len() == 8);
+    println!("Found {} moves, expected 8.", pos.get_moves::<true>().len());
+    assert!(pos.get_moves::<true>().len() == 8);
 }
 
 #[test]
@@ -188,25 +188,25 @@ fn simple_rook_capture() {
     ))
     .unwrap();
     pos = pos.from_move(chess::Move::new(14u8.into(), 7u8.into(), chess::MoveType::PromotionCaptureN));
-    assert!(pos.get_moves().len() == 47);
+    assert!(pos.get_moves::<true>().len() == 47);
 }
 
 #[test]
 fn simple_pawn_advance() {
     let mut pos =
         chess::Position::from_fen(String::from("3rkr2/8/8/8/8/4r3/4P3/4K3 w - - 0 1")).unwrap();
-    assert!(pos.get_moves().is_empty());
+    assert!(pos.get_moves::<true>().is_empty());
     pos = chess::Position::from_fen(String::from("3rkr2/8/8/8/4r3/8/4P3/4K3 w - - 0 1")).unwrap();
-    assert!(pos.get_moves().len() == 1);
+    assert!(pos.get_moves::<true>().len() == 1);
     pos = chess::Position::from_fen(String::from("3rkr2/8/8/4r3/8/8/4P3/4K3 w - - 0 1")).unwrap();
-    assert!(pos.get_moves().len() == 2);
+    assert!(pos.get_moves::<true>().len() == 2);
 }
 
 fn do_perft(pos: &mut chess::Position, depth: usize) -> usize {
     if depth == 0 {
         1
     } else {
-        pos.get_moves().iter().fold(0, |sum, m| {
+        pos.get_moves::<true>().iter().fold(0, |sum, m| {
             sum + do_perft(&mut pos.from_move(*m), depth - 1)
         })
     }
@@ -273,9 +273,9 @@ fn move_count_test() {
 }
 
 //fn do_and_undo_random_moves(pos: &mut chess::Position, count: usize) {
-//    let moves = pos.get_moves();
+//    let moves = pos.get_moves::<true>();
 //    if !moves.is_empty() && count > 0 {
-//        let m = *pos.get_moves().choose(&mut thread_rng()).unwrap();
+//        let m = *pos.get_moves::<true>().choose(&mut thread_rng()).unwrap();
 //        let zobrist = pos.zobrist_hash();
 //        pos.do_move(m);
 //        do_and_undo_random_moves(pos, count - 1);
