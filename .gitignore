@@ -2,6 +2,7 @@
 **/__pycache__/**
 /games
 **perf.data**
+**.perf
 **.nnue
 Cargo.lock
 **/flamegraph.svg
