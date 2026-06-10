@@ -9,74 +9,9 @@ pub use bitboard::{BitBoard, File, Rank, Square};
 pub use board::Board;
 pub use moves::{Move, MoveList, MoveType};
 
-//translate a fen symbol (kqbnrpKQBNRP) into a (Color, Piece) pair
-fn fen_to_type(c: char) -> Option<(Color, Piece)> {
-    match c {
-        'k' => Some((Color::Black, Piece::King)),
-        'q' => Some((Color::Black, Piece::Queen)),
-        'r' => Some((Color::Black, Piece::Rook)),
-        'n' => Some((Color::Black, Piece::Knight)),
-        'b' => Some((Color::Black, Piece::Bishop)),
-        'p' => Some((Color::Black, Piece::Pawn)),
-        'K' => Some((Color::White, Piece::King)),
-        'Q' => Some((Color::White, Piece::Queen)),
-        'R' => Some((Color::White, Piece::Rook)),
-        'B' => Some((Color::White, Piece::Bishop)),
-        'N' => Some((Color::White, Piece::Knight)),
-        'P' => Some((Color::White, Piece::Pawn)),
-        _ => None,
-    }
-}
 
-pub fn from_fen(s: &str) -> Option<Board> {
-    let mut board = Board::empty();
-    let mut x = 0;
-    let mut y = 7;
-    let mut chrs = s.trim().chars();
-    let mut c = chrs.next();
-    while c.is_some() && (y > 0 || x < 8) {
-        match c.unwrap() {
-            '1'..='8' => x += c.unwrap().to_digit(10).unwrap(),
-            '/' => {
-                x -= 8;
-                y -= 1;
-            }
-            _ => {
-                let typ = fen_to_type(c.unwrap());
-                match typ {
-                    Some(t) => board.set(Square::from(x + 8 * y), t.0, t.1),
-                    None => return None,
-                }
-                x += 1;
-            }
-        }
-        c = chrs.next();
-    }
-    Some(board)
-}
 
-fn get_zobrist(board: &Board) -> u64 {
-    let mut zobrist: u64 = 0;
-    let pieces = [
-        Piece::King,
-        Piece::Queen,
-        Piece::Bishop,
-        Piece::Knight,
-        Piece::Rook,
-        Piece::Pawn,
-    ];
-    for piece in pieces {
-        for sq in board.get_bb(Color::White, piece) {
-            zobrist ^= constants::piece_zobrist(piece, Color::White, sq);
-        }
-        for sq in board.get_bb(Color::Black, piece) {
-            zobrist ^= constants::piece_zobrist(piece, Color::Black, sq);
-        }
-    }
-    zobrist
-}
-
-#[derive(PartialEq, Clone, Copy, Debug)]
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub enum Piece {
     King,
     Queen,
@@ -105,20 +40,23 @@ impl Color {
 
 #[derive(Copy, Clone)]
 struct PlyInfo {
-    castling_rights: [[bool; 2]; 2],
-    rule_50_count: u8,
+    zobrist: u64,
     attacked_squares: BitBoard,
     king_attackers: BitBoard,
     pinned_pieces: BitBoard,
+    last_move: Move,
+    castling_rights: [[bool; 2]; 2],
+    rule_50_count: u8,
     ep_square: Option<Square>,
+    capture: Option<Piece>,
 }
 
 #[derive(Clone)]
 pub struct Position {
     pub board: Board,
     ply_info: PlyInfo,
+    history: Vec<PlyInfo>,
     to_move: Color,
-    zobrist: u64,      //Zobrist-Hash
 }
 
 impl Default for Position {
@@ -131,7 +69,7 @@ impl Position {
     pub fn new() -> Position {
         let board = Board::new();
 
-        let mut zobrist = get_zobrist(&board);
+        let mut zobrist = board.zobrist();
 
         for i in [Square::C1, Square::C8, Square::G1, Square::G8] {
             zobrist ^= constants::castle_zobrist(i);
@@ -141,14 +79,17 @@ impl Position {
             board,
             to_move: Color::White,
             ply_info: PlyInfo {
+                zobrist,
                 castling_rights: [[true, true], [true, true]],
                 rule_50_count: 0,
                 attacked_squares: BitBoard::EMPTY,
                 king_attackers: BitBoard::EMPTY,
                 pinned_pieces: BitBoard::EMPTY,
+                last_move: Move::ZERO,
                 ep_square: None,
+                capture: None,
             },
-            zobrist,
+            history: Vec::with_capacity(256),
         }
     }
 
@@ -156,23 +97,26 @@ impl Position {
         //First set up the pieces
         let mut fen_parts = fen.split_whitespace();
 
-        let b = from_fen(fen_parts.next().unwrap())?;
+        let b = Board::from_fen(fen_parts.next().unwrap())?;
 
         let mut pos = Position {
             board: b,
             to_move: Color::White,
             ply_info: PlyInfo {
+                zobrist: 0,
                 castling_rights: [[true, true], [true, true]],
                 rule_50_count: 0,
                 attacked_squares: BitBoard::EMPTY,
                 king_attackers: BitBoard::EMPTY,
                 pinned_pieces: BitBoard::EMPTY,
+                last_move: Move::ZERO,
                 ep_square: None,
+                capture: None,
             },
-            zobrist: 0,
+            history: Vec::with_capacity(256),
         };
 
-        pos.zobrist = get_zobrist(&b);
+        pos.ply_info.zobrist = b.zobrist();
 
         //Enter who is to move
         match fen_parts.next() {
@@ -180,7 +124,7 @@ impl Position {
                 if p == "w" {
                     pos.to_move = Color::White;
                 } else if p == "b" {
-                    pos.zobrist ^= constants::color_zobrist();
+                    pos.ply_info.zobrist ^= constants::color_zobrist();
                     pos.to_move = Color::Black;
                 } else {
                     return None;
@@ -194,19 +138,19 @@ impl Position {
         if let Some(p) = fen_parts.next() {
             if p.contains('K') {
                 castling_legal[0][0] = true;
-                pos.zobrist ^= constants::castle_zobrist(Square::G1);
+                pos.ply_info.zobrist ^= constants::castle_zobrist(Square::G1);
             }
             if p.contains('Q') {
                 castling_legal[0][1] = true;
-                pos.zobrist ^= constants::castle_zobrist(Square::C1);
+                pos.ply_info.zobrist ^= constants::castle_zobrist(Square::C1);
             }
             if p.contains('k') {
                 castling_legal[1][0] = true;
-                pos.zobrist ^= constants::castle_zobrist(Square::G8);
+                pos.ply_info.zobrist ^= constants::castle_zobrist(Square::G8);
             }
             if p.contains('q') {
                 castling_legal[1][1] = true;
-                pos.zobrist ^= constants::castle_zobrist(Square::G8);
+                pos.ply_info.zobrist ^= constants::castle_zobrist(Square::G8);
             }
         }
 
@@ -219,7 +163,7 @@ impl Position {
                 _ => {
                     let sq = Square::from_string(p);
                     pos.ply_info.ep_square = Some(sq);
-                    pos.zobrist ^= constants::enpassant_zobrist(sq.file());
+                    pos.ply_info.zobrist ^= constants::enpassant_zobrist(sq.file());
                 }
             }
         }
@@ -682,10 +626,10 @@ impl Position {
 
     #[inline]
     fn update_zobrist(&mut self, m: Move, p: Piece) {
-        self.zobrist ^= m.zobrist(&self.board, self.to_move);
+        self.ply_info.zobrist ^= m.zobrist(&self.board, self.to_move);
         //Unset the Zobrist en passant flag, if necessary
         if let Some(esq) = self.ply_info.ep_square {
-            self.zobrist ^= constants::enpassant_zobrist(esq.file());
+            self.ply_info.zobrist ^= constants::enpassant_zobrist(esq.file());
         }
 
         //Check if a new en passant flag is to be set
@@ -693,7 +637,7 @@ impl Position {
             && m.from().relative(self.to_move).rank() == Rank::Second
             && m.to().relative(self.to_move).rank() == Rank::Fourth
         {
-            self.zobrist ^= constants::enpassant_zobrist(m.to().file());
+            self.ply_info.zobrist ^= constants::enpassant_zobrist(m.to().file());
             self.ply_info.ep_square = Some(m.to().file().ep_square().relative(self.to_move));
         } else {
             self.ply_info.ep_square = None;
@@ -707,11 +651,11 @@ impl Position {
         //If the king was moves we lose all castling rights
         if piece == Piece::King {
             if self.ply_info.castling_rights[self.to_move as usize][0] {
-                self.zobrist ^= constants::castle_zobrist(Square::G1.relative(self.to_move));
+                self.ply_info.zobrist ^= constants::castle_zobrist(Square::G1.relative(self.to_move));
             }
 
             if self.ply_info.castling_rights[self.to_move as usize][1] {
-                self.zobrist ^= constants::castle_zobrist(Square::C1.relative(self.to_move));
+                self.ply_info.zobrist ^= constants::castle_zobrist(Square::C1.relative(self.to_move));
             }
 
             self.ply_info.castling_rights[self.to_move as usize] = [false, false];
@@ -720,28 +664,38 @@ impl Position {
         //Check if white's rooks are moved _or_ captured
         if self.ply_info.castling_rights[0][1] && (m.to() == Square::A1 || m.from() == Square::A1) {
             self.ply_info.castling_rights[0][1] = false;
-            self.zobrist ^= constants::castle_zobrist(Square::C1);
+            self.ply_info.zobrist ^= constants::castle_zobrist(Square::C1);
         } else if self.ply_info.castling_rights[0][0]
             && (m.to() == Square::H1 || m.from() == Square::H1)
         {
             self.ply_info.castling_rights[0][0] = false;
-            self.zobrist ^= constants::castle_zobrist(Square::G1);
+            self.ply_info.zobrist ^= constants::castle_zobrist(Square::G1);
         }
 
         //Check if black's rooks are moved _or_ captured
         if self.ply_info.castling_rights[1][0] && (m.to() == Square::H8 || m.from() == Square::H8) {
             self.ply_info.castling_rights[1][0] = false;
-            self.zobrist ^= constants::castle_zobrist(Square::G8);
+            self.ply_info.zobrist ^= constants::castle_zobrist(Square::G8);
         } else if self.ply_info.castling_rights[1][1]
             && (m.to() == Square::A8 || m.from() == Square::A8)
         {
             self.ply_info.castling_rights[1][1] = false;
-            self.zobrist ^= constants::castle_zobrist(Square::C8);
+            self.ply_info.zobrist ^= constants::castle_zobrist(Square::C8);
         }
     }
 
     pub fn do_move(&mut self, m: Move) {
         let piece = self.board.piece_at(m.from()).unwrap();
+
+        self.history.push(self.ply_info);
+
+        self.ply_info.capture = if m.typ() == MoveType::Enpassant {
+            Some(Piece::Pawn)
+        } else if m.is_capture() {
+            self.board.piece_at(m.to())
+        } else {
+            None
+        };
 
         //Update the zobrist numbers (except castling numbers)
         self.update_zobrist(m, piece);
@@ -756,9 +710,10 @@ impl Position {
         self.ply_info.attacked_squares = BitBoard::EMPTY;
         self.ply_info.pinned_pieces = BitBoard::EMPTY;
         self.ply_info.king_attackers = BitBoard::EMPTY;
+        self.ply_info.last_move = m;
 
         self.to_move = self.to_move.other();
-        self.zobrist ^= constants::color_zobrist();
+        self.ply_info.zobrist ^= constants::color_zobrist();
 
         if piece == Piece::Pawn || matches!(m.typ(), MoveType::Capture) {
             self.ply_info.rule_50_count = 0;
@@ -767,14 +722,24 @@ impl Position {
         }
     }
 
+    pub fn undo_move(&mut self) {
+        assert!(self.ply_info.last_move != Move::ZERO);
+        assert_eq!(self.ply_info.last_move.is_capture(), self.ply_info.capture.is_some());
+        self.board.undo_move(self.ply_info.last_move, self.ply_info.capture);
+        self.ply_info = self.history.pop().unwrap();
+        self.to_move = self.to_move.other();
+    }
+
     pub fn do_null_move(&mut self) {
+        self.history.push(self.ply_info);
         //Unset the Zobrist en passant flag, if necessary
         if let Some(esq) = self.ply_info.ep_square {
-            self.zobrist ^= constants::enpassant_zobrist(esq.file());
+            self.ply_info.zobrist ^= constants::enpassant_zobrist(esq.file());
         }
 
         self.to_move = self.to_move.other();
-        self.zobrist ^= constants::color_zobrist();
+        self.ply_info.last_move = Move::ZERO;
+        self.ply_info.zobrist ^= constants::color_zobrist();
 
         //Reset state information
         self.ply_info.attacked_squares = BitBoard::EMPTY;
@@ -784,6 +749,11 @@ impl Position {
         self.ply_info.ep_square = None;
     }
 
+    pub fn undo_null_move(&mut self) {
+        self.ply_info = self.history.pop().unwrap();
+        self.to_move = self.to_move.other();
+    }
+
 
     #[inline]
     pub fn in_check(&mut self) -> bool {
@@ -791,6 +761,22 @@ impl Position {
             self.generate_attack_table();
         }
         !self.ply_info.king_attackers.is_empty()
+    }
+
+    pub fn will_repeat(&self, m: Move) -> bool {
+        if m.typ() != MoveType::Normal || self.ply_info.ep_square.is_some() {
+            return false;
+        }
+        let zobrist = self.ply_info.zobrist ^ m.zobrist(&self.board, self.to_move) ^ constants::color_zobrist();
+        self.history.iter().any(|info| info.zobrist == zobrist)
+    }
+
+    pub fn is_repetition(&self) -> bool {
+        self.history.iter().any(|info| info.zobrist == self.ply_info.zobrist)
+    }
+
+    pub fn is_threefold(&self) -> bool {
+        self.history.iter().filter(|info| info.zobrist == self.ply_info.zobrist).count() > 1
     }
 
     #[inline]
@@ -814,7 +800,7 @@ impl Position {
 
     #[inline]
     pub fn zobrist_hash(&self) -> u64 {
-        self.zobrist
+        self.ply_info.zobrist
     }
 
     #[allow(dead_code)]

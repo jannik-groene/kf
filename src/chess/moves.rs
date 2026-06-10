@@ -45,6 +45,8 @@ pub struct Move {
 
 impl Move {
 
+    pub const ZERO: Move = Move { data: 0 };
+
     #[inline(always)]
     pub fn new(from: Square, to: Square, typ: MoveType) -> Move {
         Move {

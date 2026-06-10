@@ -237,7 +237,7 @@ fn search_step<const IS_PV_NODE: bool>(
     }
 
     //Repeated positions are draws
-    if sh.is_threefold() {
+    if sh.pos.is_threefold() {
         return Eval::DRAW;
     }
 
@@ -259,14 +259,7 @@ fn search_step<const IS_PV_NODE: bool>(
         ttmove = entry.mov();
 
         //make sure we do not return a repetition from tt, allowing a threefold
-        let repetition = if sh.is_repetition() {
-            sh.do_move(ttmove.unwrap());
-            let rep = sh.is_repetition();
-            sh.undo_move();
-            rep
-        } else {
-            false
-        };
+        let repetition = sh.pos.will_repeat(ttmove.unwrap());
 
         //see if we have a TT-hit
         if entry.depth() as i16 >= depth.remaining() && !repetition && !IS_PV_NODE {

@@ -240,7 +240,7 @@ impl Engine {
     pub fn reset_hash(&mut self) {
         self.search.reset_hash();
     }
-    fn perft_step(mut pos: Position, d: u8) -> usize {
+    fn perft_step(pos: &mut Position, d: u8) -> usize {
         if d == 0 {
             1
         } else if d == 1 {
@@ -248,7 +248,9 @@ impl Engine {
         } else {
             let mut total = 0;
             for m in pos.get_moves::<true>() {
-                total += Self::perft_step(pos.from_move(m), d - 1);
+                pos.do_move(m);
+                total += Self::perft_step(pos, d - 1);
+                pos.undo_move();
             }
             total
         }
@@ -260,7 +262,9 @@ impl Engine {
         let rootmove_len = (moves.len() as f64).log10().floor() as usize + 1;
         let mut counts = Vec::with_capacity(moves.len());
         for (i, m) in moves.iter().enumerate() {
-            let m_count = Self::perft_step(pos.from_move(*m), d - 1);
+            pos.do_move(*m);
+            let m_count = Self::perft_step(&mut pos, d - 1);
+            pos.undo_move();
             counts.push(m_count);
             total += m_count;
             print!(

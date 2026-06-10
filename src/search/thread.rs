@@ -75,42 +75,28 @@ impl SearchHead {
         &self.shared
     }
     #[inline]
-    pub fn history(&self) -> Vec<Position> {
-        self.history.clone()
-    }
-    #[inline]
     pub fn do_move(&mut self, m: Move) {
         if let Some(nnue) = &mut self.nnue {
             nnue.do_move(m, &self.pos);
         }
-        self.history.push(self.pos.clone());
         self.pos.do_move(m);
         self.shared.nodes.fetch_add(1, Ordering::Relaxed);
     }
     #[inline]
     pub fn undo_move(&mut self) {
-        self.pos = self.history.pop().unwrap();
+        self.pos.undo_move();
         if let Some(nnue) = &mut self.nnue {
             nnue.undo_move();
         }
     }
     #[inline]
     pub fn do_null_move(&mut self) {
-        self.history.push(self.pos.clone());
         self.pos.do_null_move();
         self.shared.nodes.fetch_add(1, Ordering::Relaxed);
     }
     #[inline]
     pub fn undo_null_move(&mut self) {
-        self.pos = self.history.pop().unwrap();
-    }
-    #[inline]
-    pub fn is_threefold(&self) -> bool {
-        self.history.iter().filter(|x| x.zobrist_hash() == self.pos.zobrist_hash()).count() > 1
-    }
-    #[inline]
-    pub fn is_repetition(&self) -> bool {
-        self.history.iter().filter(|x| x.zobrist_hash() == self.pos.zobrist_hash()).count() > 0
+        self.pos.undo_null_move();
     }
     #[inline]
     pub fn evaluate(&mut self) -> Eval {
@@ -120,10 +106,6 @@ impl SearchHead {
             evaluate(self.pos_mut())
         }
     }
-//    #[inline]
-//    pub fn set_bestmove(&mut self, m: Option<Move>) {
-//        self.bestmove = m;
-//    }
     #[inline]
     pub fn register_killer(&mut self, ply: u8, m: Move) {
         if self.killers.len() <= ply as usize {
@@ -156,9 +138,9 @@ impl SearchHead {
             self.killers[ply as usize + 1].1 = [0, 0];
         }
     }
-    pub fn clear_killers(&mut self) {
-        self.killers.clear();
-    }
+//    pub fn clear_killers(&mut self) {
+//        self.killers.clear();
+//    }
 
     pub fn write_uci_info(&self, eval: Eval, depth: u8) {
         let nodes = self.shared.nodes.load(Ordering::Relaxed);
@@ -177,8 +159,4 @@ impl SearchHead {
         }
         println!();
     }
-//    #[inline]
-//    pub fn bestmove(&self) -> Option<Move> {
-//        self.bestmove
-//    }
 }

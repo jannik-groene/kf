@@ -1,4 +1,4 @@
-use crate::chess::{Move, MoveList, MoveType, Piece, Position};
+use crate::chess::{Move, MoveList, Piece, Position};
 use crate::constants::piece_value;
 
 use std::iter::Iterator;
@@ -27,6 +27,7 @@ pub struct MovePicker {
 }
 
 impl MovePicker {
+    #[allow(dead_code)]
     pub fn new(pos: &mut Position, killers: [Option<Move>; 2], ttmove: Option<Move>) -> Self {
         let moves = pos.get_moves::<true>();
         let scores = Self::score_captures(&moves, pos);

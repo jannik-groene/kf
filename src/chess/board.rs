@@ -1,11 +1,13 @@
 use super::bitboard::{BitBoard, Square};
 use crate::chess::{Color, Move, MoveType, Piece};
+use crate::constants::piece_zobrist;
 use std::fmt;
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub struct Board {
     piece_boards: [BitBoard; 6],
     color_boards: [BitBoard; 2],
+    piece_table:  [Option<Piece>; 64],
 }
 
 impl Default for Board {
@@ -20,44 +22,83 @@ impl Board {
     pub const WHITE_SQUARES: BitBoard =
         BitBoard::new(0b0101010110101010010101011010101001010101101010100101010110101010);
 
-    pub const fn new() -> Board {
-        Board {
-            piece_boards: [
-                BitBoard::new(0x1000000000000010), //KINGS
-                BitBoard::new(0x0800000000000008), //QUEENS
-                BitBoard::new(0x2400000000000024), //BISHOPS
-                BitBoard::new(0x4200000000000042), //KNIGHTS
-                BitBoard::new(0x8100000000000081), //ROOKS
-                BitBoard::new(0x00ff00000000ff00), //PAWNS
-            ],
-            color_boards: [
-                BitBoard::new(0x000000000000ffff), //WHITE
-                BitBoard::new(0xffff000000000000), //BLACK
-            ],
-        }
+    pub fn new() -> Board {
+        Self::from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR").unwrap()
     }
+    pub fn from_fen(s: &str) -> Option<Board> {
+        let mut board = Board::empty();
+        let mut x = 0;
+        let mut y = 7;
+        let mut chrs = s.trim().chars();
+        let mut c = chrs.next();
+        while c.is_some() && (y > 0 || x < 8) {
+            match c.unwrap() {
+                '1'..='8' => x += c.unwrap().to_digit(10).unwrap(),
+                '/' => {
+                    x -= 8;
+                    y -= 1;
+                }
+                _ => {
+                    let typ = fen_to_type(c.unwrap());
+                    match typ {
+                        Some(t) => board.set(Square::from(x + 8 * y), t.0, t.1),
+                        None => return None,
+                    }
+                    x += 1;
+                }
+            }
+            c = chrs.next();
+        }
+        Some(board)
+    }
+
+    pub fn zobrist(&self) -> u64 {
+        let mut zobrist: u64 = 0;
+        let pieces = [
+            Piece::King,
+            Piece::Queen,
+            Piece::Bishop,
+            Piece::Knight,
+            Piece::Rook,
+            Piece::Pawn,
+        ];
+        for piece in pieces {
+            for sq in self.get_bb(Color::White, piece) {
+                zobrist ^= piece_zobrist(piece, Color::White, sq);
+            }
+            for sq in self.get_bb(Color::Black, piece) {
+                zobrist ^= piece_zobrist(piece, Color::Black, sq);
+            }
+        }
+        zobrist
+    }
+
     pub fn empty() -> Board {
         Board {
             piece_boards: [BitBoard::EMPTY; 6],
             color_boards: [BitBoard::EMPTY; 2],
+            piece_table:  [None; 64],
         }
     }
     #[inline]
     pub fn set(&mut self, sq: Square, c: Color, p: Piece) {
         self.color_boards[c as usize].set(sq);
         self.piece_boards[p as usize].set(sq);
+        self.piece_table[sq as usize] = Some(p);
     }
     #[inline]
-    pub fn unset_all(&mut self, sq: Square, c: Color) {
-        self.color_boards[c as usize].unset(sq);
-        for b in &mut self.piece_boards {
-            b.unset(sq);
+    pub fn unset(&mut self, sq: Square, c: Color) {
+        if let Some(p) = self.piece_table[sq as usize] {
+            self.color_boards[c as usize].unset(sq);
+            self.piece_boards[p as usize].unset(sq);
+            self.piece_table[sq as usize] = None;
         }
     }
     #[inline]
-    pub fn unset(&mut self, sq: Square, c: Color, p: Piece) {
+    pub fn unset_piece(&mut self, sq: Square, c: Color, p: Piece) {
         self.color_boards[c as usize].unset(sq);
         self.piece_boards[p as usize].unset(sq);
+        self.piece_table[sq as usize] = None;
     }
     #[inline]
     pub fn get_color_bb(&self, c: Color) -> BitBoard {
@@ -77,15 +118,7 @@ impl Board {
     }
     #[inline]
     pub fn piece_at(&self, sq: Square) -> Option<Piece> {
-        const PIECES: [Piece; 6] = [
-            Piece::King,
-            Piece::Queen,
-            Piece::Bishop,
-            Piece::Knight,
-            Piece::Rook,
-            Piece::Pawn,
-        ];
-        PIECES.iter().find(|&&p| self.piece_boards[p as usize].is_set(sq)).copied()
+        self.piece_table[sq as usize]
     }
     #[inline]
     pub fn king_square(&self, c: Color) -> Square {
@@ -95,19 +128,19 @@ impl Board {
     fn move_castling_rooks(&mut self, ksq: Square) {
         match ksq {
             Square::C1 => {
-                self.unset(Square::A1, Color::White, Piece::Rook);
+                self.unset_piece(Square::A1, Color::White, Piece::Rook);
                 self.set(Square::D1, Color::White, Piece::Rook);
             }
             Square::G1 => {
-                self.unset(Square::H1, Color::White, Piece::Rook);
+                self.unset_piece(Square::H1, Color::White, Piece::Rook);
                 self.set(Square::F1, Color::White, Piece::Rook);
             }
             Square::C8 => {
-                self.unset(Square::A8, Color::Black, Piece::Rook);
+                self.unset_piece(Square::A8, Color::Black, Piece::Rook);
                 self.set(Square::D8, Color::Black, Piece::Rook);
             }
             Square::G8 => {
-                self.unset(Square::H8, Color::Black, Piece::Rook);
+                self.unset_piece(Square::H8, Color::Black, Piece::Rook);
                 self.set(Square::F8, Color::Black, Piece::Rook);
             }
             _ => panic!("Invalid castling attempt."),
@@ -122,16 +155,15 @@ impl Board {
         };
         let piece = self.piece_at(m.from()).unwrap();
         let our_piece = if let Some(p) = m.typ().promotion_piece() {p} else {piece};
-        self.unset(m.from(), us, piece);
+        self.unset(m.from(), us);
         match m.typ() {
             MoveType::Capture | MoveType::PromotionCaptureN 
                               | MoveType::PromotionCaptureB 
                               | MoveType::PromotionCaptureR 
-                              | MoveType::PromotionCaptureQ => self.unset_all(m.to(), them),
+                              | MoveType::PromotionCaptureQ => self.unset(m.to(), them),
             MoveType::Enpassant => self.unset(
                 m.to().file().ep_cap_square().relative(them),
-                them,
-                Piece::Pawn,
+                them
             ),
             MoveType::Castle => self.move_castling_rooks(m.to()),
             _ => {}
@@ -143,48 +175,71 @@ impl Board {
         match ksq {
             Square::C1 => {
                 self.set(Square::A1, Color::White, Piece::Rook);
-                self.unset(Square::D1, Color::White, Piece::Rook);
+                self.unset_piece(Square::D1, Color::White, Piece::Rook);
             }
             Square::G1 => {
                 self.set(Square::H1, Color::White, Piece::Rook);
-                self.unset(Square::F1, Color::White, Piece::Rook);
+                self.unset_piece(Square::F1, Color::White, Piece::Rook);
             }
             Square::C8 => {
                 self.set(Square::A8, Color::Black, Piece::Rook);
-                self.unset(Square::D8, Color::Black, Piece::Rook);
+                self.unset_piece(Square::D8, Color::Black, Piece::Rook);
             }
             Square::G8 => {
                 self.set(Square::H8, Color::Black, Piece::Rook);
-                self.unset(Square::F8, Color::Black, Piece::Rook);
+                self.unset_piece(Square::F8, Color::Black, Piece::Rook);
             }
             _ => panic!("Invalid castling attempt."),
         }
     }
-//    #[inline]
-//    pub fn undo_move(&mut self, m: Move) {
-//        let (us, them) = if self.color_boards[0].is_set(m.to) {
-//            (Color::White, Color::Black)
-//        } else {
-//            (Color::Black, Color::White)
-//        };
-//        let our_piece = match m.typ {
-//            MoveType::Promotion(p) | MoveType::PromotionCapture(p) => p,
-//            _ => m.piece,
-//        };
-//        self.set(m.from, us, m.piece);
-//        self.unset(m.to, us, our_piece);
-//        match m.typ {
-//            MoveType::Capture(p) | MoveType::PromotionCapture((_, p)) => self.set(m.to, them, p),
-//            MoveType::Enpassant => self.set(
-//                m.to.file().ep_cap_square().relative(them),
-//                them,
-//                Piece::Pawn,
-//            ),
-//            MoveType::Castle => self.undo_move_castling_rooks(m.to),
-//            _ => {}
-//        }
-//    }
+    #[inline]
+    pub fn undo_move(&mut self, m: Move, cap: Option<Piece>) {
+        let (us, them) = if self.color_boards[0].is_set(m.to()) {
+            (Color::White, Color::Black)
+        } else {
+            (Color::Black, Color::White)
+        };
+        let our_piece = if m.typ().is_promotion() {
+            Piece::Pawn
+        } else {
+            self.piece_at(m.to()).unwrap()
+        };
+        self.set(m.from(), us, our_piece);
+        self.unset(m.to(), us);
+        if m.is_capture() {
+            let cap_square = if m.typ() == MoveType::Enpassant {
+                m.to().file().ep_cap_square().relative(them)
+            } else {
+                m.to()
+            };
+            self.set(cap_square, them, cap.unwrap());
+        }
+        if m.typ() == MoveType::Castle {
+            self.undo_move_castling_rooks(m.to());
+        }
+    }
 }
+
+
+//translate a fen symbol (kqbnrpKQBNRP) into a (Color, Piece) pair
+fn fen_to_type(c: char) -> Option<(Color, Piece)> {
+    match c {
+        'k' => Some((Color::Black, Piece::King)),
+        'q' => Some((Color::Black, Piece::Queen)),
+        'r' => Some((Color::Black, Piece::Rook)),
+        'n' => Some((Color::Black, Piece::Knight)),
+        'b' => Some((Color::Black, Piece::Bishop)),
+        'p' => Some((Color::Black, Piece::Pawn)),
+        'K' => Some((Color::White, Piece::King)),
+        'Q' => Some((Color::White, Piece::Queen)),
+        'R' => Some((Color::White, Piece::Rook)),
+        'B' => Some((Color::White, Piece::Bishop)),
+        'N' => Some((Color::White, Piece::Knight)),
+        'P' => Some((Color::White, Piece::Pawn)),
+        _ => None,
+    }
+}
+
 
 fn write_piece_to_position(c: char, pos: BitBoard, cboard: &mut [[char; 8]; 8]) {
     for p in pos {
