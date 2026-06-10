@@ -4,7 +4,7 @@ use std::sync::mpsc::{Receiver, Sender};
 
 use crate::{
     chess::{Color, Position, Move},
-    search::{SearchInfo, SearchManager},
+    search::SearchManager,
 };
 
 #[derive(Clone, PartialEq)]
@@ -145,7 +145,6 @@ pub struct Engine {
 #[derive(Clone)]
 pub enum EngineIO {
     UciInput(String),
-    SearchUpdate(SearchInfo),
     SearchEnded(u64),
     TimerEnded(u64),
 }
@@ -199,7 +198,7 @@ impl Engine {
     pub fn start_search(&mut self, depth: Option<u8>) {
         self.search_id += 1;
         self.search
-            .search(self.channel.0.clone(), depth, self.search_id);
+            .search(depth);
     }
     pub fn stop_search(&mut self) {
         self.search.stop();

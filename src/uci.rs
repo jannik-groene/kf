@@ -1,7 +1,6 @@
 use crate::{
     chess::{Color, Move, Position},
     engine::{Engine, EngineIO},
-    search::SearchInfo,
 };
 use std::sync::mpsc::Sender;
 
@@ -84,40 +83,16 @@ pub trait UCIHandler {
 impl UCIHandler for Engine {
     fn uci_loop(&mut self) {
 //        println!("{}", std::mem::size_of::<Move>());
-        let mut waiting_for_search_end = false;
         let tx = self.get_sender();
-        let mut last_search_update: Option<SearchInfo> = None;
         std::thread::spawn(|| read_input(tx));
         loop {
             if let Ok(io) = self.receiver().recv() {
                 match io {
                     EngineIO::UciInput(s) => self.handle_input(s),
-                    EngineIO::TimerEnded(id) => {
-                        if id == self.search_id() {
-                            if last_search_update.is_some() {
-                                match last_search_update.as_ref().unwrap().bestmove {
-                                    Some(m) => println!("bestmove {}", m),
-                                    None => println!("bestmove 0000"),
-                                }
-                            }
-                            self.increase_search_id();
-                            self.stop_search();
-                            waiting_for_search_end = true;
-                        }
+                    EngineIO::TimerEnded(_) => {
+                        self.stop_search();
                     }
-                    EngineIO::SearchUpdate(up) => last_search_update = Some(up),
-                    EngineIO::SearchEnded(id) => {
-                        if !waiting_for_search_end && id == self.search_id() {
-                            self.increase_search_id(); //invalidate search_id
-                            if last_search_update.is_some() {
-                                match last_search_update.as_ref().unwrap().bestmove {
-                                    Some(m) => println!("bestmove {}", m),
-                                    None => println!("bestmove 0000"),
-                                }
-                            }
-                        }
-                        waiting_for_search_end = false;
-                    }
+                    EngineIO::SearchEnded(id) => { }
                 }
             }
         }

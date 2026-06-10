@@ -8,10 +8,6 @@ build="src/build.rs"
 [build]
 rustflags = ["-C", "target-cpu=native"]
 
-[lib]
-name = "kf_internals"
-bench = true
-
 [profile.dev]
 opt-level = 3
 

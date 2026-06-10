@@ -46,7 +46,7 @@ impl TranspositionTable {
         }
     }
     #[inline]
-    pub fn set(&mut self, zobrist_key: u64, entry: TTEntry) {
+    pub fn set(&self, zobrist_key: u64, entry: TTEntry) {
         //do not commit invalid scores or low depths to the hashtable
         if self.size == 0 || matches!(entry.eval().value(), Value::Infty | Value::NegInfty) {
             return;
