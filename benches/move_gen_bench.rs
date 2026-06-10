@@ -41,7 +41,9 @@ fn perft_step(pos: &mut chess::Position, d: u8) -> usize {
     } else {
         let mut total = 0;
         for m in pos.get_moves::<true>() {
-            total += perft_step(&mut pos.from_move(m), d - 1);
+            pos.do_move(m);
+            total += perft_step(pos, d - 1);
+            pos.undo_move();
         }
         total
     }
