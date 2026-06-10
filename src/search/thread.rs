@@ -36,7 +36,6 @@ pub struct SearchResult {
 
 pub struct SearchHead {
     pub pos: Position,
-    pub history: Vec<Position>,
     pub killers: Vec<([Option<Move>; 2], [u8; 2])>,
     pub nnue: Option<NNUEState>,
     pub pv: [Move; 256],
@@ -48,16 +47,14 @@ pub struct SearchHead {
 impl SearchHead {
     pub fn new(
         pos: Position,
-        history: Vec<Position>,
         shared: Arc<SharedData>,
         _use_nnue: bool,
     ) -> SearchHead {
         SearchHead {
             pos,
-            history,
             killers: Vec::new(),
             nnue: None,
-            pv: [Move::decompress(0).unwrap(); 256],
+            pv: [Move::ZERO; 256],
             start_time: Instant::now(),
             result: None,
             shared

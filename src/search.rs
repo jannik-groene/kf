@@ -16,7 +16,6 @@ use tt::{TTEntry, TranspositionTable};
 
 pub struct SearchManager {
     pos: Position,
-    pos_history: Vec<Position>,
     threads: usize,
     shared: Arc<SharedData>,
 }
@@ -25,7 +24,6 @@ impl SearchManager {
     pub fn new() -> SearchManager {
         SearchManager {
             pos: Position::new(),
-            pos_history: Vec::new(),
             threads: 1,
             shared: Arc::new(SharedData::new()),
         }
@@ -44,10 +42,8 @@ impl SearchManager {
     }
     pub fn set_position(&mut self, pos: Position) {
         self.pos = pos;
-        self.pos_history.clear();
     }
     pub fn do_move(&mut self, m: Move) {
-        self.pos_history.push(self.pos.clone());
         self.pos.do_move(m);
     }
     pub fn set_use_nnue(&mut self, _use_nnue: bool) {
@@ -59,7 +55,7 @@ impl SearchManager {
         self.pos.color()
     }
     pub fn reset_hash(&mut self) {
-        //TODO
+        self.shared.tt.clear();
     }
     pub fn root_position(&self) -> Position {
         self.pos.clone()
@@ -71,13 +67,11 @@ impl SearchManager {
         target_depth: Option<u8>,
     ) {
         let pos = self.pos.clone();
-        let pos_history = self.pos_history.clone();
         let threads = self.threads;
         let shared = self.shared.clone();
         std::thread::spawn(move || start_searching(target_depth, 
                                                    shared,
                                                    pos, 
-                                                   pos_history,
                                                    threads));
     }
 }
@@ -124,7 +118,6 @@ fn start_searching(
     target_depth: Option<u8>,
     shared: Arc<SharedData>,
     pos: Position,
-    history: Vec<Position>,
     threads: usize,
 ) {
     let depth = target_depth.unwrap_or(u8::MAX);
@@ -132,7 +125,7 @@ fn start_searching(
     shared.stop_flag.store(false, Ordering::Release);
     shared.nodes.store(0, Ordering::Release);
 
-    let mut search_head = SearchHead::new(pos.clone(), history.clone(), shared.clone(), false);
+    let mut search_head = SearchHead::new(pos.clone(), shared.clone(), false);
 
     let main_handle = std::thread::spawn(move || iterative_deepening::<true>(&mut search_head, depth));
 
@@ -140,7 +133,7 @@ fn start_searching(
 
     for _ in 1..threads {
 
-        let mut search_head = SearchHead::new(pos.clone(), history.clone(), shared.clone(), false);
+        let mut search_head = SearchHead::new(pos.clone(), shared.clone(), false);
 
         helper_handles.push(
             std::thread::spawn(move || iterative_deepening::<false>(&mut search_head, depth))
@@ -247,7 +240,7 @@ fn search_step<const IS_PV_NODE: bool>(
     }
 
     if IS_PV_NODE && depth.current <= 255 {
-        sh.pv[depth.current as usize] = Move::decompress(0).unwrap();
+        sh.pv[depth.current as usize] = Move::ZERO;
     }
 
     //Check if the move is already hashed

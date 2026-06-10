@@ -5,10 +5,9 @@ use crate::{
 use std::sync::Arc;
 use std::cell::UnsafeCell;
 
-#[derive(Clone)]
 pub struct TranspositionTable {
     //We run with two buckets. One replace on depth, on always replace
-    hash: Arc<UnsafeCell<Vec<(TTEntry, TTEntry)>>>,
+    hash: UnsafeCell<Vec<(TTEntry, TTEntry)>>,
     size: usize,
 }
 
@@ -17,14 +16,22 @@ unsafe impl Sync for TranspositionTable {}
 
 impl TranspositionTable {
     pub fn new(size: usize) -> Self {
-        let mut hash_vec = Vec::with_capacity(size);
-        for _ in 0..size {
-            hash_vec.push((TTEntry::UNCHECKED, TTEntry::UNCHECKED));
-        }
+        let mut hash_vec = vec![(TTEntry::UNCHECKED, TTEntry::UNCHECKED); size];
+//            Vec::with_capacity(size);
+//        for _ in 0..size {
+//            hash_vec.push((TTEntry::UNCHECKED, TTEntry::UNCHECKED));
+//        }
         hash_vec.shrink_to_fit();
         TranspositionTable {
             size,
-            hash: Arc::new(UnsafeCell::new(hash_vec)),
+            hash: UnsafeCell::new(hash_vec),
+        }
+    }
+    pub fn clear(&self) {
+        unsafe {
+            for entry in &mut *self.hash.get() {
+                *entry = (TTEntry::UNCHECKED, TTEntry::UNCHECKED);
+            }
         }
     }
     #[inline]
@@ -103,7 +110,7 @@ impl TTEntry {
 #[test]
 fn write_and_read_tt() {
     use crate::chess::Square;
-    let mut hash = TranspositionTable::new(10000);
+    let hash = Arc::new(TranspositionTable::new(10000));
     let mv = Move::new(Square::B1, Square::C1, crate::chess::MoveType::Normal);
     let entry = TTEntry::new(
         -Eval::MATE_NOW,
@@ -139,7 +146,7 @@ fn write_and_read_tt() {
         1234628935786700,
         mv,
     );
-    let mut hash_clone = hash.clone();
+    let hash_clone = hash.clone();
     std::thread::spawn(move || hash_clone.set(1234628935786700, entry3));
     std::thread::sleep(std::time::Duration::from_millis(100));
     assert!(hash.get(1234628935786700).unwrap() == entry3);
