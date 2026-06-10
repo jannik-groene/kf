@@ -209,6 +209,22 @@ impl Move {
             }
         }
     }
+
+
+    pub fn is_tactical(&self) -> bool {
+        self.typ() == MoveType::Capture || self.typ().is_promotion()
+    }
+
+
+    pub fn is_capture(&self) -> bool {
+        matches!(
+            self.typ(),
+            MoveType::Capture | MoveType::PromotionCaptureN | MoveType::PromotionCaptureB
+                              | MoveType::PromotionCaptureR | MoveType::PromotionCaptureQ 
+                              | MoveType::Enpassant
+        )
+    }
+
 }
 
 

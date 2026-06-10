@@ -120,10 +120,6 @@ impl Depth {
     }
 }
 
-fn is_tactical(m: Move) -> bool {
-    m.typ() == MoveType::Capture || m.typ().is_promotion()
-}
-
 fn start_searching(
     target_depth: Option<u8>,
     shared: Arc<SharedData>,
@@ -380,7 +376,7 @@ fn search_step<const IS_PV_NODE: bool>(
         } else if !IS_PV_NODE
             && depth.current > 2
             && !sh.pos_mut().in_check()
-            && !is_tactical(m)
+            && !m.is_tactical()
         {
             -search_step::<false>(
                 sh,

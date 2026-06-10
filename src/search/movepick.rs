@@ -59,7 +59,7 @@ impl MovePicker {
         let mut scores = vec![0; movelist.len()];
 
         for (i, m) in movelist.iter().enumerate() {
-            if is_capture(m) {
+            if m.is_capture() {
                 scores[i] = pos.see(*m);
             }
         }
@@ -90,7 +90,7 @@ impl Iterator for MovePicker {
                     .iter()
                     .enumerate()
                     .skip(self.idx)
-                    .filter(|(i, m)| is_capture(m) && self.scores[*i] >= EVEN_THRESHOLD)
+                    .filter(|(i, m)| m.is_capture() && self.scores[*i] >= EVEN_THRESHOLD)
                     .max_by_key(|(i, _)| self.scores[*i])
                 {
                     self.moves.swap(self.idx, i);
@@ -136,7 +136,7 @@ impl Iterator for MovePicker {
                     .iter()
                     .enumerate()
                     .skip(self.idx)
-                    .find(|(_, m)| !is_capture(m))
+                    .find(|(_, m)| !m.is_capture())
                 {
                     self.moves.swap(idx, self.idx);
                     self.scores.swap(idx, self.idx);
@@ -167,16 +167,6 @@ impl Iterator for MovePicker {
             MovePickingStage::Finished => None,
         }
     }
-}
-
-#[inline]
-fn is_capture(m: &Move) -> bool {
-    matches!(
-        m.typ(),
-        MoveType::Capture | MoveType::PromotionCaptureN | MoveType::PromotionCaptureB
-                          | MoveType::PromotionCaptureR | MoveType::PromotionCaptureQ 
-                          | MoveType::Enpassant
-    )
 }
 
 #[cfg(test)]
