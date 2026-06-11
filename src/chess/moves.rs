@@ -312,16 +312,3 @@ fn display_promotion(m: &Move) -> String {
     }
 }
 
-
-#[inline]
-fn u32_to_piece(p: u32) -> Piece {
-    match p {
-        0 => Piece::King,
-        1 => Piece::Queen,
-        2 => Piece::Bishop,
-        3 => Piece::Knight,
-        4 => Piece::Rook,
-        5 => Piece::Pawn,
-        _ => panic!("Tried to decompress invalid move."),
-    }
-}

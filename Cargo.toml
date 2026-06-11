@@ -5,9 +5,6 @@ authors = ["jgroene <jannik.groene@gmail.com>"]
 edition = "2024"
 build="src/build.rs"
 
-[build]
-rustflags = ["-C", "target-cpu=native"]
-
 [lib]
 name = "kf_internals"
 bench = true
@@ -20,7 +17,6 @@ opt-level = 3
 lto = "fat"
 codegen-units = 1
 panic = "abort"
-debug = true
 
 [profile.test]
 opt-level = 3
@@ -34,9 +30,6 @@ debug = true
 [dependencies]
 rand = "0.8.4"
 arrayvec = { version = "0.7.2" }
-lazy_static = "1.4.0"
-nnue = {path="../nnue"}
-parking_lot = { version = "0.12.5" }
 
 [build-dependencies]
 rand = { version = "0.8.4", features = ["small_rng"] }

@@ -46,8 +46,6 @@ impl SearchManager {
     pub fn do_move(&mut self, m: Move) {
         self.pos.do_move(m);
     }
-    pub fn set_use_nnue(&mut self, _use_nnue: bool) {
-    }
     pub fn stop(&mut self) {
         self.shared.stop_flag.store(true, Ordering::Release);
     }

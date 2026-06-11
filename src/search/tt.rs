@@ -2,7 +2,6 @@ use crate::{
     chess::Move,
     evaluate::{Bound, Eval, Value},
 };
-use std::sync::Arc;
 use std::cell::UnsafeCell;
 
 pub struct TranspositionTable {
@@ -17,10 +16,6 @@ unsafe impl Sync for TranspositionTable {}
 impl TranspositionTable {
     pub fn new(size: usize) -> Self {
         let mut hash_vec = vec![(TTEntry::UNCHECKED, TTEntry::UNCHECKED); size];
-//            Vec::with_capacity(size);
-//        for _ in 0..size {
-//            hash_vec.push((TTEntry::UNCHECKED, TTEntry::UNCHECKED));
-//        }
         hash_vec.shrink_to_fit();
         TranspositionTable {
             size,
@@ -33,10 +28,6 @@ impl TranspositionTable {
                 *entry = (TTEntry::UNCHECKED, TTEntry::UNCHECKED);
             }
         }
-    }
-    #[inline]
-    pub fn size(&self) -> usize {
-        self.size
     }
     #[inline]
     pub fn get(&self, zobrist_key: u64) -> Option<TTEntry> {
@@ -110,6 +101,7 @@ impl TTEntry {
 #[test]
 fn write_and_read_tt() {
     use crate::chess::Square;
+    use std::sync::Arc;
     let hash = Arc::new(TranspositionTable::new(10000));
     let mv = Move::new(Square::B1, Square::C1, crate::chess::MoveType::Normal);
     let entry = TTEntry::new(

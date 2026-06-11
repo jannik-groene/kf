@@ -17,7 +17,6 @@ pub const fn piece_zobrist(p: Piece, c: Color, sq: Square) -> u64 {
         (Color::Black, Piece::Knight) => BLACK_KNIGHT_ZOBRIST[sq as usize],
         (Color::Black, Piece::Rook) => BLACK_ROOK_ZOBRIST[sq as usize],
         (Color::Black, Piece::Pawn) => BLACK_PAWN_ZOBRIST[sq as usize],
-        _ => panic!("Invalid piece"),
     }
 }
 
@@ -102,6 +101,5 @@ pub const fn piece_value(p: Piece) -> i32 {
         Piece::Rook => 530,
         Piece::Queen => 1000,
         Piece::King => 100000,
-        Piece::Any => 0,
     }
 }

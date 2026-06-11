@@ -19,7 +19,6 @@ pub enum Piece {
     Knight,
     Rook,
     Pawn,
-    Any,
 }
 
 #[derive(PartialEq, Clone, Copy, Debug)]
@@ -179,14 +178,11 @@ impl Position {
     }
 
     //Create a new position in whch the move was applied
-    pub fn from_move(&self, m: Move) -> Position {
-        let mut pos = self.clone();
+    #[cfg(test)]
+    pub fn from_move(pos: Self, m: Move) -> Self {
+        let mut pos = pos.clone();
         pos.do_move(m);
         pos
-    }
-
-    pub fn castling_rights(&self) -> [[bool; 2]; 2] {
-        self.ply_info.castling_rights
     }
 
     #[inline]
@@ -776,6 +772,7 @@ impl Position {
         self.history.iter().any(|info| info.zobrist == zobrist)
     }
 
+    #[allow(dead_code)]
     pub fn is_repetition(&self) -> bool {
         self.history.iter().any(|info| info.zobrist == self.ply_info.zobrist)
     }

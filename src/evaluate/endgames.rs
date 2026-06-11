@@ -1,3 +1,5 @@
+#![allow(clippy::all)]
+#![allow(warnings)]
 use crate::chess::{BitBoard, Position, Square, Color, Piece};
 
 pub enum State {

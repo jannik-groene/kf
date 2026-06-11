@@ -9,21 +9,21 @@ use crate::{
 
 #[derive(Clone, PartialEq)]
 enum OptionValue {
-    Check(bool),
+    // Check(bool),
     Spin(i64),
-    //    COMBO(String),
-    //    BUTTON,
-    String(String),
+    // Combo(String),
+    // Button,
+    // String(String),
 }
 
 impl Display for OptionValue {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Self::Check(b) => write!(f, "{}", b),
+            // Self::Check(b) => write!(f, "{}", b),
             Self::Spin(n) => write!(f, "{}", n),
-            //            Self::COMBO(s) => write!(f, "{}", s),
-            //            Self::BUTTON => write!(f, ""),
-            Self::String(s) => write!(f, "{}", s),
+            // Self::Combo(s) => write!(f, "{}", s),
+            // Self::Button => write!(f, ""),
+            // Self::String(s) => write!(f, "{}", s),
         }
     }
 }
@@ -60,22 +60,6 @@ impl EngineConfig {
                 max: Some(OptionValue::Spin(8)),
                 vars: None,
             },
-            ConfigOption {
-                id: "UseNNUE".to_string(),
-                value: OptionValue::Check(false),
-                default: Some(OptionValue::Check(false)),
-                min: None,
-                max: None,
-                vars: None,
-            },
-            ConfigOption {
-                id: "NNUEPath".to_string(),
-                value: OptionValue::String("nn-33c9d39e5eb6.nnue".to_string()),
-                default: Some(OptionValue::String("nn-33c9d39e5eb6.nnue".to_string())),
-                min: None,
-                max: None,
-                vars: None,
-            },
         ];
         EngineConfig { options }
     }
@@ -84,10 +68,10 @@ impl EngineConfig {
             print!("option name {} type ", option.id);
             match option.value {
                 OptionValue::Spin(_) => print!("spin"),
-                OptionValue::Check(_) => print!("check"),
-                //                OptionValue::COMBO(_) => print!("combo"),
-                //                OptionValue::BUTTON => print!("button"),
-                OptionValue::String(_) => print!("string"),
+                // OptionValue::Check(_) => print!("check"),
+                // OptionValue::Combo(_) => print!("combo"),
+                // OptionValue::Button => print!("button"),
+                // OptionValue::String(_) => print!("string"),
             }
             if let Some(default) = &option.default {
                 print!(" default {}", default);
@@ -122,14 +106,14 @@ impl EngineConfig {
                     *n = k;
                 }
             }
-            OptionValue::Check(b) => {
-                if value == "true" {
-                    *b = true;
-                } else if value == "false" {
-                    *b = false;
-                }
-            }
-            OptionValue::String(s) => *s = value.to_string(),
+            // OptionValue::Check(b) => {
+            //     if value == "true" {
+            //         *b = true;
+            //     } else if value == "false" {
+            //         *b = false;
+            //     }
+            // }
+            // OptionValue::String(s) => *s = value.to_string(),
         }
     }
 }
@@ -137,49 +121,26 @@ impl EngineConfig {
 pub struct Engine {
     search: SearchManager,
     pub config: EngineConfig,
-    //ID of the current search
-    search_id: u64,
     channel: (Sender<EngineIO>, Receiver<EngineIO>),
 }
 
 #[derive(Clone)]
 pub enum EngineIO {
     UciInput(String),
-    SearchEnded(u64),
-    TimerEnded(u64),
+    TimerEnded,
 }
 
 impl Engine {
     pub fn new() -> Engine {
         let config = EngineConfig::new();
         let mut search = SearchManager::new();
-        let threads = match config.get_option("Threads").unwrap() {
-            OptionValue::Spin(n) => n,
-            _ => 1,
-        };
-        let hash_size = match config.get_option("Hash").unwrap() {
-            OptionValue::Spin(n) => n,
-            _ => 1,
-        };
-        let use_nnue = match config.get_option("UseNNUE").unwrap() {
-            OptionValue::Check(b) => b,
-            _ => false,
-        };
+        let OptionValue::Spin(threads) = config.get_option("Threads").unwrap();
+        let OptionValue::Spin(hash_size) = config.get_option("Hash").unwrap();
         search.set_threads(threads as usize);
         search.set_hash_size(hash_size as usize);
-        search.set_use_nnue(use_nnue);
-        if use_nnue {
-            let nnue_path = match config.get_option("NNUEPath").unwrap() {
-                OptionValue::String(s) => s,
-                _ => "".to_string(),
-            };
-            let path = std::path::Path::new(&nnue_path);
-            crate::evaluate::nnue::load_model(path).unwrap();
-        }
         Engine {
             search,
             config,
-            search_id: 1,
             channel: std::sync::mpsc::channel(),
         }
     }
@@ -196,46 +157,20 @@ impl Engine {
         self.search.set_position(pos);
     }
     pub fn start_search(&mut self, depth: Option<u8>) {
-        self.search_id += 1;
         self.search
             .search(depth);
     }
     pub fn stop_search(&mut self) {
         self.search.stop();
     }
-    pub fn increase_search_id(&mut self) {
-        self.search_id += 1;
-    }
     pub fn color(&self) -> Color {
         self.search.color()
     }
-    pub fn search_id(&self) -> u64 {
-        self.search_id
-    }
     pub fn apply_options(&mut self) {
-        let threads = match self.config.get_option("Threads").unwrap() {
-            OptionValue::Spin(n) => n,
-            _ => unreachable!(),
-        };
+        let OptionValue::Spin(threads) = self.config.get_option("Threads").unwrap();
         self.search.set_threads(threads as usize);
-        let hash_size = match self.config.get_option("Hash").unwrap() {
-            OptionValue::Spin(n) => n,
-            _ => unreachable!(),
-        };
+        let OptionValue::Spin(hash_size) = self.config.get_option("Hash").unwrap();
         self.search.set_hash_size(hash_size as usize);
-        let use_nnue = match self.config.get_option("UseNNUE").unwrap() {
-            OptionValue::Check(b) => b,
-            _ => unreachable!(),
-        };
-        self.search.set_use_nnue(use_nnue);
-        if use_nnue {
-            let nnue_path = match self.config.get_option("NNUEPath").unwrap() {
-                OptionValue::String(s) => s,
-                _ => unreachable!(),
-            };
-            let path = std::path::Path::new(&nnue_path);
-            crate::evaluate::nnue::load_model(path).unwrap();
-        }
     }
     pub fn reset_hash(&mut self) {
         self.search.reset_hash();

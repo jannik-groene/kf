@@ -26,7 +26,7 @@ struct TimeSpec {
 }
 //Timer for execution. To achieve high precision we first sleep the thread to within a safetymargin
 //of the target and the spin until we reach the target time.
-fn timer(time: TimeSpec, id: u64, ch: Sender<EngineIO>) {
+fn timer(time: TimeSpec, ch: Sender<EngineIO>) {
     const SAFETY_DELTA: std::time::Duration = std::time::Duration::from_millis(1);
     let now = std::time::Instant::now();
     //We play with increment
@@ -60,7 +60,7 @@ fn timer(time: TimeSpec, id: u64, ch: Sender<EngineIO>) {
     while now.elapsed() < movetime - std::time::Duration::from_micros(10) {
         std::hint::spin_loop();
     }
-    drop(ch.send(EngineIO::TimerEnded(id)));
+    drop(ch.send(EngineIO::TimerEnded));
 }
 
 pub trait UCIHandler {
@@ -89,10 +89,9 @@ impl UCIHandler for Engine {
             if let Ok(io) = self.receiver().recv() {
                 match io {
                     EngineIO::UciInput(s) => self.handle_input(s),
-                    EngineIO::TimerEnded(_) => {
+                    EngineIO::TimerEnded => {
                         self.stop_search();
                     }
-                    EngineIO::SearchEnded(id) => { }
                 }
             }
         }
@@ -195,7 +194,6 @@ impl UCIHandler for Engine {
             }
         }
         let tx = self.get_sender();
-        let id = self.search_id() + 1;
         let time = match self.color() {
             Color::White => TimeSpec {
                 ustime: wtime,
@@ -210,7 +208,7 @@ impl UCIHandler for Engine {
                 movetime,
             },
         };
-        std::thread::spawn(move || timer(time, id, tx));
+        std::thread::spawn(move || timer(time, tx));
         self.start_search(None);
     }
     fn handle_stop(&mut self) {

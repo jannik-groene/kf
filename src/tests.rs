@@ -39,7 +39,7 @@ fn simple_en_passant() {
     .unwrap();
     let m = chess::Move::new(35u8.into(), 42u8.into(), chess::MoveType::Enpassant);
     assert!(pos.get_moves::<true>().contains(&m));
-    let npos1 = pos.from_move(m);
+    let npos1 = chess::Position::from_move(pos, m);
     println!("{}", npos1.board);
     let npos2 = chess::Position::from_fen(String::from(
         "rnbqkbnr/pp3ppp/2P5/4p3/5P2/8/PPPP2PP/RNBQKBNR b KQkq - 0 4",
@@ -56,7 +56,7 @@ fn simple_castle() {
     .unwrap();
     let m = chess::Move::new(60u8.into(), 62u8.into(), chess::MoveType::Castle);
     assert!(pos.get_moves::<true>().contains(&m));
-    let npos1 = pos.from_move(m);
+    let npos1 = chess::Position::from_move(pos, m);
     let npos2 = chess::Position::from_fen(String::from(
         "rn1q1rk1/1p2bppp/p2pbn2/4p3/4P3/1NN1BP2/PPPQ2PP/R3KB1R w KQ - 3 10",
     ))
@@ -137,7 +137,7 @@ fn simple_pinned_pawn_attack() {
     let mut pos =
         chess::Position::from_fen(String::from("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 2"))
             .unwrap();
-    pos = pos.from_move(chess::Move::new(12u8.into(), 28u8.into(), chess::MoveType::Normal));
+    pos.do_move(chess::Move::new(12u8.into(), 28u8.into(), chess::MoveType::Normal));
     println!("Found {} moves, expected 16.", pos.get_moves::<true>().len());
     for m in pos.get_moves::<true>() {
         println!("Move from {} to {}", m.from(), m.to());
@@ -187,7 +187,7 @@ fn simple_rook_capture() {
         "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N1Q3/PPPBBPpP/R3K2R b KQkq - 1 2",
     ))
     .unwrap();
-    pos = pos.from_move(chess::Move::new(14u8.into(), 7u8.into(), chess::MoveType::PromotionCaptureN));
+    pos.do_move(chess::Move::new(14u8.into(), 7u8.into(), chess::MoveType::PromotionCaptureN));
     assert!(pos.get_moves::<true>().len() == 47);
 }
 
@@ -198,7 +198,6 @@ fn rook_capture_no_castling() {
     )).unwrap();
     pos.do_move(Move::new(chess::Square::D1, chess::Square::D2, chess::MoveType::Normal));
     pos.do_move(Move::new(chess::Square::F2, chess::Square::H1, chess::MoveType::Capture));
-    println!("{:?}", pos.castling_rights());
     assert_eq!(pos.get_moves::<true>().len(), 41);
 }
 
@@ -218,7 +217,10 @@ fn do_perft(pos: &mut chess::Position, depth: usize) -> usize {
         1
     } else {
         pos.get_moves::<true>().iter().fold(0, |sum, m| {
-            sum + do_perft(&mut pos.from_move(*m), depth - 1)
+            pos.do_move(*m);
+            let a = do_perft(pos, depth - 1);
+            pos.undo_move();
+            sum + a
         })
     }
 }

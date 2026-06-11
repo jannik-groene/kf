@@ -4,10 +4,10 @@ use std::io::Write;
 use std::path::Path;
 
 use std::arch::x86_64::{_pext_u64,_pdep_u64};
-use rand::{self, Rng, RngCore, SeedableRng, rngs::SmallRng};
+use rand::{self, RngCore, SeedableRng, rngs::SmallRng};
 
 fn write_pawn_attacks(f: &mut File) {
-    writeln!(f, "const PAWN_ATTACKS: [[u64; 64]; 2] = [[").unwrap();
+    writeln!(f, "static PAWN_ATTACKS: [[u64; 64]; 2] = [[").unwrap();
     for sq in 0..64 {
         let mut attacks = 0u64;
         if (8..56).contains(&sq) && sq % 8 != 0 {
@@ -35,7 +35,7 @@ fn write_pawn_attacks(f: &mut File) {
 fn write_knight_attacks(f: &mut File) {
     let moves = [6, 15, 17, 10, -10, -17, -15, -6];
 
-    writeln!(f, "const KNIGHT_ATTACKS: [u64; 64] = [").unwrap();
+    writeln!(f, "static KNIGHT_ATTACKS: [u64; 64] = [").unwrap();
     for sq in 0i32..64 {
         let mut attacks = 0u64;
         for m in moves {
@@ -50,7 +50,7 @@ fn write_knight_attacks(f: &mut File) {
 
 fn write_neighbours(f: &mut File) {
     let moves = [-1, 7, 8, 9, 1, -9, -8, -7];
-    writeln!(f, "const NEIGHBOURS: [u64; 64] = [").unwrap();
+    writeln!(f, "static NEIGHBOURS: [u64; 64] = [").unwrap();
     for sq in 0i32..64 {
         let mut attacks = 0u64;
         for m in moves {
@@ -65,7 +65,7 @@ fn write_neighbours(f: &mut File) {
     let moves = [
         -2, 6, 14, 15, 16, 17, 18, 10, 2, -10, -18, -17, -16, -15, -14, -6,
     ];
-    writeln!(f, "const NEXT_NEIGHBOURS: [u64; 64] = [").unwrap();
+    writeln!(f, "static NEXT_NEIGHBOURS: [u64; 64] = [").unwrap();
     for sq in 0i32..64 {
         let mut attacks = 0u64;
         for m in moves {
@@ -98,7 +98,7 @@ fn write_bishop_attacks(f: &mut File) {
     let dirs = [7, 9, -7, -9];
 
     let mut masks = Vec::new();
-    writeln!(f, "const BISHOP_MASKS: [u64; 64] = [").unwrap();
+    writeln!(f, "static BISHOP_MASKS: [u64; 64] = [").unwrap();
     for sq in 0..64 {
         let mut mask = 0;
         for d in dirs {
@@ -110,7 +110,7 @@ fn write_bishop_attacks(f: &mut File) {
     writeln!(f, "\n];").unwrap();
 
     let mut offsets = vec![0];
-    writeln!(f, "const BISHOP_ATTACKS: [u64; 5248] = [").unwrap();
+    writeln!(f, "static BISHOP_ATTACKS: [u64; 5248] = [").unwrap();
     for (sq, m) in masks.iter().enumerate() {
         #[cfg(target_feature="bmi2")] {
             let max = unsafe { _pext_u64(u64::MAX, *m) };
@@ -129,7 +129,7 @@ fn write_bishop_attacks(f: &mut File) {
     writeln!(f, "\n];").unwrap();
 
     offsets.pop();
-    writeln!(f, "const BISHOP_ATTACK_OFFSETS: [usize; 64] = [").unwrap();
+    writeln!(f, "static BISHOP_ATTACK_OFFSETS: [usize; 64] = [").unwrap();
     for offset in offsets {
         write!(f, "0x{:x},", offset).unwrap();
     }
@@ -141,7 +141,7 @@ fn write_rook_attacks(f: &mut File) {
     let borders: [u64; 4] = [0x0101010101010101, 0xff << 56, 0x8080808080808080, 0xff];
 
     let mut masks = Vec::new();
-    writeln!(f, "const ROOK_MASKS: [u64; 64] = [").unwrap();
+    writeln!(f, "static ROOK_MASKS: [u64; 64] = [").unwrap();
     for sq in 0..64 {
         let mut mask = 0;
         for (d, b) in dirs.iter().zip(borders) {
@@ -172,7 +172,7 @@ fn write_rook_attacks(f: &mut File) {
     writeln!(f, "\n];").unwrap();
 
     offsets.pop();
-    writeln!(f, "const ROOK_ATTACK_OFFSETS: [usize; 64] = [").unwrap();
+    writeln!(f, "static ROOK_ATTACK_OFFSETS: [usize; 64] = [").unwrap();
     for offset in offsets {
         write!(f, "0x{:x},", offset).unwrap();
     }
@@ -180,7 +180,7 @@ fn write_rook_attacks(f: &mut File) {
 }
 
 fn write_rays(f: &mut File) {
-    writeln!(f, "const RAYS: [[u64; 64]; 64] = [").unwrap();
+    writeln!(f, "static RAYS: [[u64; 64]; 64] = [").unwrap();
     for a in 0..64 {
         writeln!(f, "[").unwrap();
         for b in 0..64 {
@@ -209,7 +209,7 @@ fn write_rays(f: &mut File) {
 }
 
 fn write_connecting_rays(f: &mut File) {
-    writeln!(f, "const CONNECTING_RAYS: [[u64; 64]; 64] = [").unwrap();
+    writeln!(f, "static CONNECTING_RAYS: [[u64; 64]; 64] = [").unwrap();
     for a in 0..64 {
         writeln!(f, "[").unwrap();
         for b in 0..64 {
@@ -242,7 +242,7 @@ fn write_zobrist_numbers(f: &mut File) {
 
     for piece in ["KING", "QUEEN", "BISHOP", "KNIGHT", "ROOK", "PAWN"] {
         for color in ["WHITE", "BLACK"] {
-            writeln!(f, "const {}_{}_ZOBRIST: [u64; 64] = [", color, piece).unwrap();
+            writeln!(f, "static {}_{}_ZOBRIST: [u64; 64] = [", color, piece).unwrap();
             for _ in 0..64 {
                 write!(f, "0x{:x},", rng.next_u64()).unwrap();
             }
@@ -250,19 +250,19 @@ fn write_zobrist_numbers(f: &mut File) {
         }
     }
 
-    writeln!(f, "const CASTLING_ZOBRIST: [u64; 4] = [").unwrap();
+    writeln!(f, "static CASTLING_ZOBRIST: [u64; 4] = [").unwrap();
     for _ in 0..4 {
         write!(f, "0x{:x},", rng.next_u64()).unwrap();
     }
     writeln!(f, "\n];").unwrap();
 
-    writeln!(f, "const ENPASSANT_ZOBRIST: [u64; 8] = [").unwrap();
+    writeln!(f, "static ENPASSANT_ZOBRIST: [u64; 8] = [").unwrap();
     for _ in 0..8 {
         write!(f, "0x{:x},", rng.next_u64()).unwrap();
     }
     writeln!(f, "\n];").unwrap();
 
-    writeln!(f, "const COLOR_ZOBRIST: u64 = 0x{:x};", rng.next_u64()).unwrap();
+    writeln!(f, "static COLOR_ZOBRIST: u64 = 0x{:x};", rng.next_u64()).unwrap();
 }
 
 fn main() {

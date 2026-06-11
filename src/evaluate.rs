@@ -1,5 +1,4 @@
 mod eval;
-pub mod nnue;
 mod piecetables;
 mod endgames;
 
@@ -48,7 +47,6 @@ fn piece_table_value(p: Piece, c: Color, s: Square, phase: i32) -> i32 {
                 + piecetables::KING_LATE_VALUES[index] * (OPENING_PHASE - phase))
                 / OPENING_PHASE
         }
-        _ => 0,
     }
 }
 

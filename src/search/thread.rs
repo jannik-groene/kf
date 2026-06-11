@@ -4,7 +4,7 @@ use std::time::Instant;
 
 use crate::{
     chess::{Move, Position},
-    evaluate::{evaluate, nnue::NNUEState, Eval},
+    evaluate::{evaluate, Eval},
 };
 
 use super::tt::TranspositionTable;
@@ -37,7 +37,6 @@ pub struct SearchResult {
 pub struct SearchHead {
     pub pos: Position,
     pub killers: Vec<([Option<Move>; 2], [u8; 2])>,
-    pub nnue: Option<NNUEState>,
     pub pv: [Move; 256],
     pub start_time: Instant,
     pub result: Option<SearchResult>,
@@ -53,7 +52,6 @@ impl SearchHead {
         SearchHead {
             pos,
             killers: Vec::new(),
-            nnue: None,
             pv: [Move::ZERO; 256],
             start_time: Instant::now(),
             result: None,
@@ -73,18 +71,12 @@ impl SearchHead {
     }
     #[inline]
     pub fn do_move(&mut self, m: Move) {
-        if let Some(nnue) = &mut self.nnue {
-            nnue.do_move(m, &self.pos);
-        }
         self.pos.do_move(m);
         self.shared.nodes.fetch_add(1, Ordering::Relaxed);
     }
     #[inline]
     pub fn undo_move(&mut self) {
         self.pos.undo_move();
-        if let Some(nnue) = &mut self.nnue {
-            nnue.undo_move();
-        }
     }
     #[inline]
     pub fn do_null_move(&mut self) {
@@ -97,11 +89,7 @@ impl SearchHead {
     }
     #[inline]
     pub fn evaluate(&mut self) -> Eval {
-        if let Some(nnue) = &self.nnue {
-            Eval::exact_from_cents(nnue.evaluate_position(self.pos(), self.pos.color()))
-        } else {
-            evaluate(self.pos_mut())
-        }
+        evaluate(self.pos_mut())
     }
     #[inline]
     pub fn register_killer(&mut self, ply: u8, m: Move) {
