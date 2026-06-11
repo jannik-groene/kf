@@ -7,7 +7,7 @@ use std::fmt;
 pub struct Board {
     piece_boards: [BitBoard; 6],
     color_boards: [BitBoard; 2],
-    piece_table:  [Option<Piece>; 64],
+    piece_table: [Option<Piece>; 64],
 }
 
 impl Default for Board {
@@ -77,7 +77,7 @@ impl Board {
         Board {
             piece_boards: [BitBoard::EMPTY; 6],
             color_boards: [BitBoard::EMPTY; 2],
-            piece_table:  [None; 64],
+            piece_table: [None; 64],
         }
     }
     #[inline]
@@ -154,17 +154,19 @@ impl Board {
             (Color::Black, Color::White)
         };
         let piece = self.piece_at(m.from()).unwrap();
-        let our_piece = if let Some(p) = m.typ().promotion_piece() {p} else {piece};
+        let our_piece = if let Some(p) = m.typ().promotion_piece() {
+            p
+        } else {
+            piece
+        };
         self.unset(m.from(), us);
         match m.typ() {
-            MoveType::Capture | MoveType::PromotionCaptureN 
-                              | MoveType::PromotionCaptureB 
-                              | MoveType::PromotionCaptureR 
-                              | MoveType::PromotionCaptureQ => self.unset(m.to(), them),
-            MoveType::Enpassant => self.unset(
-                m.to().file().ep_cap_square().relative(them),
-                them
-            ),
+            MoveType::Capture
+            | MoveType::PromotionCaptureN
+            | MoveType::PromotionCaptureB
+            | MoveType::PromotionCaptureR
+            | MoveType::PromotionCaptureQ => self.unset(m.to(), them),
+            MoveType::Enpassant => self.unset(m.to().file().ep_cap_square().relative(them), them),
             MoveType::Castle => self.move_castling_rooks(m.to()),
             _ => {}
         }
@@ -220,7 +222,6 @@ impl Board {
     }
 }
 
-
 //translate a fen symbol (kqbnrpKQBNRP) into a (Color, Piece) pair
 fn fen_to_type(c: char) -> Option<(Color, Piece)> {
     match c {
@@ -239,7 +240,6 @@ fn fen_to_type(c: char) -> Option<(Color, Piece)> {
         _ => None,
     }
 }
-
 
 fn write_piece_to_position(c: char, pos: BitBoard, cboard: &mut [[char; 8]; 8]) {
     for p in pos {

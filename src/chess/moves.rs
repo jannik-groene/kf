@@ -25,7 +25,17 @@ pub enum MoveType {
 
 impl MoveType {
     pub fn is_promotion(self) -> bool {
-        matches!(self, Self::PromotionN | Self::PromotionB | Self::PromotionR | Self::PromotionQ | Self::PromotionCaptureN | Self::PromotionCaptureB | Self::PromotionCaptureR | Self::PromotionCaptureQ)
+        matches!(
+            self,
+            Self::PromotionN
+                | Self::PromotionB
+                | Self::PromotionR
+                | Self::PromotionQ
+                | Self::PromotionCaptureN
+                | Self::PromotionCaptureB
+                | Self::PromotionCaptureR
+                | Self::PromotionCaptureQ
+        )
     }
     pub fn promotion_piece(self) -> Option<Piece> {
         match self {
@@ -44,13 +54,12 @@ pub struct Move {
 }
 
 impl Move {
-
     pub const ZERO: Move = Move { data: 0 };
 
     #[inline(always)]
     pub fn new(from: Square, to: Square, typ: MoveType) -> Move {
         Move {
-            data: u16::from(from) | ((u16::from(to) << 6) | ((typ as u16) << 12))
+            data: u16::from(from) | ((u16::from(to) << 6) | ((typ as u16) << 12)),
         }
     }
 
@@ -95,9 +104,7 @@ impl Move {
     }
 
     pub fn decompress(m: u16) -> Option<Move> {
-        Some(Move {
-            data: m, 
-        })
+        Some(Move { data: m })
     }
 
     pub fn compress(&self) -> u16 {
@@ -212,23 +219,22 @@ impl Move {
         }
     }
 
-
     pub fn is_tactical(&self) -> bool {
         self.typ() == MoveType::Capture || self.typ().is_promotion()
     }
 
-
     pub fn is_capture(&self) -> bool {
         matches!(
             self.typ(),
-            MoveType::Capture | MoveType::PromotionCaptureN | MoveType::PromotionCaptureB
-                              | MoveType::PromotionCaptureR | MoveType::PromotionCaptureQ 
-                              | MoveType::Enpassant
+            MoveType::Capture
+                | MoveType::PromotionCaptureN
+                | MoveType::PromotionCaptureB
+                | MoveType::PromotionCaptureR
+                | MoveType::PromotionCaptureQ
+                | MoveType::Enpassant
         )
     }
-
 }
-
 
 // This hashing implementation aims to enable move voting.
 // We can therefore assume that there is only one unique move between two squares.
@@ -249,35 +255,32 @@ fn determine_move_type(
     let piece = board.piece_at(from).unwrap();
     match piece {
         Piece::King => {
-            if from == Square::E1 && (to == Square::G1 || to == Square::C1)
-            {
+            if from == Square::E1 && (to == Square::G1 || to == Square::C1) {
                 return MoveType::Castle;
             }
-            if from == Square::E8 && (to == Square::G8 || to == Square::C8)
-            {
+            if from == Square::E8 && (to == Square::G8 || to == Square::C8) {
                 return MoveType::Castle;
             }
         }
         Piece::Pawn => {
             if !board.occupation().is_set(to) && to.file() != from.file() {
                 return MoveType::Enpassant;
-            } 
-            else if let Some(p) = promote {
+            } else if let Some(p) = promote {
                 if board.occupation().is_set(to) {
                     return match p {
                         Piece::Knight => MoveType::PromotionCaptureN,
                         Piece::Bishop => MoveType::PromotionCaptureB,
-                        Piece::Rook   => MoveType::PromotionCaptureR,
-                        Piece::Queen  => MoveType::PromotionCaptureQ,
-                        _             => panic!("Invalid promotion.")
+                        Piece::Rook => MoveType::PromotionCaptureR,
+                        Piece::Queen => MoveType::PromotionCaptureQ,
+                        _ => panic!("Invalid promotion."),
                     };
                 } else {
                     return match p {
                         Piece::Knight => MoveType::PromotionN,
                         Piece::Bishop => MoveType::PromotionB,
-                        Piece::Rook   => MoveType::PromotionR,
-                        Piece::Queen  => MoveType::PromotionQ,
-                        _             => panic!("Invalid promotion.")
+                        Piece::Rook => MoveType::PromotionR,
+                        Piece::Queen => MoveType::PromotionQ,
+                        _ => panic!("Invalid promotion."),
                     };
                 }
             }
@@ -311,4 +314,3 @@ fn display_promotion(m: &Move) -> String {
         _ => "".to_string(),
     }
 }
-

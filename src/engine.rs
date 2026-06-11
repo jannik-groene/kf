@@ -1,9 +1,9 @@
 use std::fmt::Display;
-use std::io::{stdout, Write};
+use std::io::{Write, stdout};
 use std::sync::mpsc::{Receiver, Sender};
 
 use crate::{
-    chess::{Color, Position, Move},
+    chess::{Color, Move, Position},
     search::SearchManager,
 };
 
@@ -106,14 +106,6 @@ impl EngineConfig {
                     *n = k;
                 }
             }
-            // OptionValue::Check(b) => {
-            //     if value == "true" {
-            //         *b = true;
-            //     } else if value == "false" {
-            //         *b = false;
-            //     }
-            // }
-            // OptionValue::String(s) => *s = value.to_string(),
         }
     }
 }
@@ -157,8 +149,7 @@ impl Engine {
         self.search.set_position(pos);
     }
     pub fn start_search(&mut self, depth: Option<u8>) {
-        self.search
-            .search(depth);
+        self.search.search(depth);
     }
     pub fn stop_search(&mut self) {
         self.search.stop();

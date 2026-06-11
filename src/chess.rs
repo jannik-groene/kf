@@ -9,8 +9,6 @@ pub use bitboard::{BitBoard, File, Rank, Square};
 pub use board::Board;
 pub use moves::{Move, MoveList, MoveType};
 
-
-
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub enum Piece {
     King,
@@ -428,9 +426,11 @@ impl Position {
                 .is_empty()
         {
             unsafe {
-                moves.push_unchecked(Move::new(Square::E1.relative(self.to_move),
-                                               Square::G1.relative(self.to_move),
-                                               MoveType::Castle));
+                moves.push_unchecked(Move::new(
+                    Square::E1.relative(self.to_move),
+                    Square::G1.relative(self.to_move),
+                    MoveType::Castle,
+                ));
             }
         }
 
@@ -444,7 +444,7 @@ impl Position {
             moves.push(Move::new(
                 Square::E1.relative(self.to_move),
                 Square::C1.relative(self.to_move),
-                MoveType::Castle
+                MoveType::Castle,
             ));
         }
     }
@@ -532,7 +532,6 @@ impl Position {
                 moves.push_unchecked(Move::new(from, to, MoveType::PromotionQ));
             }
         }
-
     }
 
     pub fn get_moves<const GEN_QUIETS: bool>(&mut self) -> MoveList {
@@ -548,8 +547,7 @@ impl Position {
 
         let ksq = self.board.get_bb(self.to_move, Piece::King).least_square();
         //Generate King moves first (except castling)
-        let mut king_moves =
-            constants::king_moves(ksq);
+        let mut king_moves = constants::king_moves(ksq);
         king_moves &= !self.board.get_color_bb(self.to_move);
         king_moves &= !self.ply_info.attacked_squares;
 
@@ -646,16 +644,20 @@ impl Position {
 
     #[inline]
     fn update_castling_rights(&mut self, m: Move, piece: Piece) {
-        if self.ply_info.castling_rights == [[false; 2] ;2] {return;}
+        if self.ply_info.castling_rights == [[false; 2]; 2] {
+            return;
+        }
 
         //If the king was moves we lose all castling rights
         if piece == Piece::King {
             if self.ply_info.castling_rights[self.to_move as usize][0] {
-                self.ply_info.zobrist ^= constants::castle_zobrist(Square::G1.relative(self.to_move));
+                self.ply_info.zobrist ^=
+                    constants::castle_zobrist(Square::G1.relative(self.to_move));
             }
 
             if self.ply_info.castling_rights[self.to_move as usize][1] {
-                self.ply_info.zobrist ^= constants::castle_zobrist(Square::C1.relative(self.to_move));
+                self.ply_info.zobrist ^=
+                    constants::castle_zobrist(Square::C1.relative(self.to_move));
             }
 
             self.ply_info.castling_rights[self.to_move as usize] = [false, false];
@@ -665,10 +667,8 @@ impl Position {
         if self.ply_info.castling_rights[0][1] && (m.to() == Square::A1 || m.from() == Square::A1) {
             self.ply_info.castling_rights[0][1] = false;
             self.ply_info.zobrist ^= constants::castle_zobrist(Square::C1);
-        } 
-        if self.ply_info.castling_rights[0][0]
-            && (m.to() == Square::H1 || m.from() == Square::H1)
-        {
+        }
+        if self.ply_info.castling_rights[0][0] && (m.to() == Square::H1 || m.from() == Square::H1) {
             self.ply_info.castling_rights[0][0] = false;
             self.ply_info.zobrist ^= constants::castle_zobrist(Square::G1);
         }
@@ -704,7 +704,6 @@ impl Position {
         //Actually do the move on the board
         self.board.do_move(m);
 
-
         self.update_castling_rights(m, piece);
 
         //Adjust other state information
@@ -725,8 +724,12 @@ impl Position {
 
     pub fn undo_move(&mut self) {
         assert!(self.ply_info.last_move != Move::ZERO);
-        assert_eq!(self.ply_info.last_move.is_capture(), self.ply_info.capture.is_some());
-        self.board.undo_move(self.ply_info.last_move, self.ply_info.capture);
+        assert_eq!(
+            self.ply_info.last_move.is_capture(),
+            self.ply_info.capture.is_some()
+        );
+        self.board
+            .undo_move(self.ply_info.last_move, self.ply_info.capture);
         self.ply_info = self.history.pop().unwrap();
         self.to_move = self.to_move.other();
     }
@@ -755,7 +758,6 @@ impl Position {
         self.to_move = self.to_move.other();
     }
 
-
     #[inline]
     pub fn in_check(&mut self) -> bool {
         if self.ply_info.attacked_squares.is_empty() {
@@ -768,17 +770,25 @@ impl Position {
         if m.typ() != MoveType::Normal || self.ply_info.ep_square.is_some() {
             return false;
         }
-        let zobrist = self.ply_info.zobrist ^ m.zobrist(&self.board, self.to_move) ^ constants::color_zobrist();
+        let zobrist = self.ply_info.zobrist
+            ^ m.zobrist(&self.board, self.to_move)
+            ^ constants::color_zobrist();
         self.history.iter().any(|info| info.zobrist == zobrist)
     }
 
     #[allow(dead_code)]
     pub fn is_repetition(&self) -> bool {
-        self.history.iter().any(|info| info.zobrist == self.ply_info.zobrist)
+        self.history
+            .iter()
+            .any(|info| info.zobrist == self.ply_info.zobrist)
     }
 
     pub fn is_threefold(&self) -> bool {
-        self.history.iter().filter(|info| info.zobrist == self.ply_info.zobrist).count() > 1
+        self.history
+            .iter()
+            .filter(|info| info.zobrist == self.ply_info.zobrist)
+            .count()
+            > 1
     }
 
     #[inline]
@@ -911,8 +921,11 @@ impl Position {
             .get_bb(self.color().other(), Piece::King)
             .least_square();
 
-        let final_piece = if let Some(p) = m.typ().promotion_piece() {p} 
-                          else {self.board.piece_at(m.from()).unwrap()}; 
+        let final_piece = if let Some(p) = m.typ().promotion_piece() {
+            p
+        } else {
+            self.board.piece_at(m.from()).unwrap()
+        };
 
         match final_piece {
             Piece::Knight => constants::knight_moves(kpos).is_set(m.to()),
@@ -942,7 +955,10 @@ fn simple_sse() {
     ))
     .unwrap();
     let mov2 = Move::new(Square::D3, Square::E5, MoveType::Capture);
-    assert_eq!(pos2.see(mov2), constants::piece_value(Piece::Pawn) - constants::piece_value(Piece::Knight));
+    assert_eq!(
+        pos2.see(mov2),
+        constants::piece_value(Piece::Pawn) - constants::piece_value(Piece::Knight)
+    );
 }
 
 #[test]

@@ -4,7 +4,7 @@ use std::time::Instant;
 
 use crate::{
     chess::{Move, Position},
-    evaluate::{evaluate, Eval},
+    evaluate::{Eval, evaluate},
 };
 
 use super::tt::TranspositionTable;
@@ -19,15 +19,15 @@ unsafe impl Sync for SharedData {}
 
 impl SharedData {
     pub fn new() -> Self {
-        SharedData { 
-            nodes: AtomicU64::new(0), 
-            tt: TranspositionTable::new(2), 
-            stop_flag: AtomicBool::new(true) 
+        SharedData {
+            nodes: AtomicU64::new(0),
+            tt: TranspositionTable::new(2),
+            stop_flag: AtomicBool::new(true),
         }
     }
 }
 
-#[derive(Copy,Clone)]
+#[derive(Copy, Clone)]
 pub struct SearchResult {
     pub eval: Eval,
     pub mv: Move,
@@ -44,18 +44,14 @@ pub struct SearchHead {
 }
 
 impl SearchHead {
-    pub fn new(
-        pos: Position,
-        shared: Arc<SharedData>,
-        _use_nnue: bool,
-    ) -> SearchHead {
+    pub fn new(pos: Position, shared: Arc<SharedData>, _use_nnue: bool) -> SearchHead {
         SearchHead {
             pos,
             killers: Vec::new(),
             pv: [Move::ZERO; 256],
             start_time: Instant::now(),
             result: None,
-            shared
+            shared,
         }
     }
     #[inline]
@@ -123,9 +119,9 @@ impl SearchHead {
             self.killers[ply as usize + 1].1 = [0, 0];
         }
     }
-//    pub fn clear_killers(&mut self) {
-//        self.killers.clear();
-//    }
+    //    pub fn clear_killers(&mut self) {
+    //        self.killers.clear();
+    //    }
 
     pub fn write_uci_info(&self, eval: Eval, depth: u8) {
         let nodes = self.shared.nodes.load(Ordering::Relaxed);
@@ -134,11 +130,18 @@ impl SearchHead {
             nodes,
             1000 * nodes as u128 / self.start_time.elapsed().as_millis().clamp(1, u128::MAX)
         );
-        print!(" {} depth {} time {}", eval, depth, self.start_time.elapsed().as_millis());
+        print!(
+            " {} depth {} time {}",
+            eval,
+            depth,
+            self.start_time.elapsed().as_millis()
+        );
         if self.pv[0].compress() != 0 {
             print!(" pv");
             for m in self.pv.iter() {
-                if m.compress() == 0 { break; } 
+                if m.compress() == 0 {
+                    break;
+                }
                 print!(" {}", m);
             }
         }

@@ -1,4 +1,4 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use criterion_cycles_per_byte::CyclesPerByte;
 use kf_internals::chess;
 
@@ -7,7 +7,9 @@ fn move_gen_in_opening(c: &mut Criterion<CyclesPerByte>) {
         "r3kb1r/1pp1npp1/p1p2q2/4p2p/4P1b1/3P1N1P/PPPN1PP1/R1BQ1RK1 w kq - 3 9",
     ))
     .unwrap();
-    c.bench_function("move_gen_in_opening", |b| b.iter(|| pos.get_moves::<true>()));
+    c.bench_function("move_gen_in_opening", |b| {
+        b.iter(|| pos.get_moves::<true>())
+    });
 }
 
 fn attack_gen_in_opening(c: &mut Criterion<CyclesPerByte>) {

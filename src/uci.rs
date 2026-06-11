@@ -82,7 +82,7 @@ pub trait UCIHandler {
 
 impl UCIHandler for Engine {
     fn uci_loop(&mut self) {
-//        println!("{}", std::mem::size_of::<Move>());
+        //        println!("{}", std::mem::size_of::<Move>());
         let tx = self.get_sender();
         std::thread::spawn(|| read_input(tx));
         loop {
@@ -146,8 +146,16 @@ impl UCIHandler for Engine {
         let (offset, mut pos) = if tokens[1] == "startpos" {
             (2, Position::new())
         } else if tokens[1] == "fen" {
-            let fen_tokens: Vec<&str> = tokens.iter().skip(2).take_while(|&s| *s != "moves").copied().collect();
-            (2+fen_tokens.len(), Position::from_fen(fen_tokens[0..].join(" ")).unwrap())
+            let fen_tokens: Vec<&str> = tokens
+                .iter()
+                .skip(2)
+                .take_while(|&s| *s != "moves")
+                .copied()
+                .collect();
+            (
+                2 + fen_tokens.len(),
+                Position::from_fen(fen_tokens[0..].join(" ")).unwrap(),
+            )
         } else {
             return;
         };

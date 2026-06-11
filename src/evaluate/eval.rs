@@ -225,11 +225,11 @@ impl Eval {
             Bound::Upper => 1,
             Bound::Exact => 2,
         };
-        let (kind,value) = match self.value {
-            Value::Centis(c) => (0,c),
-            Value::Mate(n)   => (1,n),
-            Value::Infty     => (2,0),
-            Value::NegInfty  => (3,0),
+        let (kind, value) = match self.value {
+            Value::Centis(c) => (0, c),
+            Value::Mate(n) => (1, n),
+            Value::Infty => (2, 0),
+            Value::NegInfty => (3, 0),
         };
         btype ^ (kind << 2) ^ ((value as u64) << 4)
     }
@@ -246,10 +246,7 @@ impl Eval {
             2 => Value::Infty,
             _ => Value::NegInfty,
         };
-        Eval {
-            bound,
-            value,
-        }
+        Eval { bound, value }
     }
 }
 

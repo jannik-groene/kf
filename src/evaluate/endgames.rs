@@ -1,6 +1,6 @@
 #![allow(clippy::all)]
 #![allow(warnings)]
-use crate::chess::{BitBoard, Position, Square, Color, Piece};
+use crate::chess::{BitBoard, Color, Piece, Position, Square};
 
 pub enum State {
     Won,
@@ -11,14 +11,16 @@ pub enum State {
 
 pub fn kkx(pos: &Position) -> State {
     let decisive_out = if pos.get_board().get_color_bb(pos.color()).count() > 1 {
-                            State::Won
-                        } else {
-                            State::Lost
-                        };
+        State::Won
+    } else {
+        State::Lost
+    };
     if !pos.get_board().get_piece_bb(Piece::Pawn).is_empty() {
         kkp(pos)
     } else if !(pos.get_board().get_piece_bb(Piece::Rook)
-                | pos.get_board().get_piece_bb(Piece::Queen)).is_empty() {
+        | pos.get_board().get_piece_bb(Piece::Queen))
+    .is_empty()
+    {
         decisive_out
     } else {
         State::Drawn
@@ -33,14 +35,13 @@ pub fn kkp(pos: &Position) -> State {
 //king with two minor pieces vs king
 pub fn kkmm(pos: &Position) -> State {
     let decisive_out = if pos.get_board().get_color_bb(pos.color()).count() > 1 {
-                            State::Won
-                        } else {
-                            State::Lost
-                        };
+        State::Won
+    } else {
+        State::Lost
+    };
     if pos.get_board().get_piece_bb(Piece::Bishop).is_empty() {
         State::Drawn
     } else {
         decisive_out
     }
 }
-

@@ -2,16 +2,16 @@ mod movepick;
 mod thread;
 mod tt;
 
-use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, AtomicBool, Ordering};
 use std::collections::HashMap;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use crate::{
     chess::{Color, Move, MoveType, Piece, Position},
     constants::piece_value,
-    evaluate::{has_major_pieces, has_minor_pieces, is_material_draw, Bound, Eval, Value},
+    evaluate::{Bound, Eval, Value, has_major_pieces, has_minor_pieces, is_material_draw},
 };
-use thread::{SearchHead, SharedData, SearchResult};
+use thread::{SearchHead, SearchResult, SharedData};
 use tt::{TTEntry, TranspositionTable};
 
 pub struct SearchManager {
@@ -32,7 +32,9 @@ impl SearchManager {
         if self.shared.stop_flag.load(Ordering::Acquire) {
             self.shared = Arc::new(SharedData {
                 nodes: AtomicU64::new(0),
-                tt: TranspositionTable::new(size * 1_000_000 / std::mem::size_of::<(TTEntry, TTEntry)>()),
+                tt: TranspositionTable::new(
+                    size * 1_000_000 / std::mem::size_of::<(TTEntry, TTEntry)>(),
+                ),
                 stop_flag: AtomicBool::new(true),
             });
         }
@@ -59,18 +61,11 @@ impl SearchManager {
         self.pos.clone()
     }
 
-
-    pub fn search(
-        &mut self,
-        target_depth: Option<u8>,
-    ) {
+    pub fn search(&mut self, target_depth: Option<u8>) {
         let pos = self.pos.clone();
         let threads = self.threads;
         let shared = self.shared.clone();
-        std::thread::spawn(move || start_searching(target_depth, 
-                                                   shared,
-                                                   pos, 
-                                                   threads));
+        std::thread::spawn(move || start_searching(target_depth, shared, pos, threads));
     }
 }
 
@@ -125,17 +120,17 @@ fn start_searching(
 
     let mut search_head = SearchHead::new(pos.clone(), shared.clone(), false);
 
-    let main_handle = std::thread::spawn(move || iterative_deepening::<true>(&mut search_head, depth));
+    let main_handle =
+        std::thread::spawn(move || iterative_deepening::<true>(&mut search_head, depth));
 
     let mut helper_handles = Vec::new();
 
     for _ in 1..threads {
-
         let mut search_head = SearchHead::new(pos.clone(), shared.clone(), false);
 
-        helper_handles.push(
-            std::thread::spawn(move || iterative_deepening::<false>(&mut search_head, depth))
-        );
+        helper_handles.push(std::thread::spawn(move || {
+            iterative_deepening::<false>(&mut search_head, depth)
+        }));
     }
 
     let mut move_votes = Vec::new();
@@ -156,20 +151,25 @@ fn start_searching(
         *vote_map.entry(vote.mv.compress()).or_insert(0) += vote.depth as i32 * weight;
     }
 
-    if let Some((m,_)) = vote_map.iter().max_by(|(_,v),(_,v2)| v.cmp(v2)) && *m != 0 {
+    if let Some((m, _)) = vote_map.iter().max_by(|(_, v), (_, v2)| v.cmp(v2))
+        && *m != 0
+    {
         println!("bestmove {}", Move::decompress(*m).unwrap());
     } else {
         println!("bestmove (null)");
     }
 }
 
-fn iterative_deepening<const IS_MAIN: bool>(search_head: &mut SearchHead, depth: u8) -> Option<SearchResult> {
+fn iterative_deepening<const IS_MAIN: bool>(
+    search_head: &mut SearchHead,
+    depth: u8,
+) -> Option<SearchResult> {
     let depth = if IS_MAIN { depth } else { u8::MAX };
     let mut alpha = Eval::MIN;
     let mut beta = Eval::MAX;
     for d in 1..=depth {
         let mut fail_highs = 0;
-        let mut fail_lows  = 0;
+        let mut fail_lows = 0;
         let mut eval;
         loop {
             eval = search_step::<true>(search_head, Depth::new(d as i16), 0, alpha, beta);
@@ -186,7 +186,7 @@ fn iterative_deepening<const IS_MAIN: bool>(search_head: &mut SearchHead, depth:
             match eval.bound() {
                 Bound::Exact => {
                     alpha = eval.aspiration_lower(0);
-                    beta  = eval.aspiration_higher(0);
+                    beta = eval.aspiration_higher(0);
                     break;
                 }
                 Bound::Lower => {
@@ -201,7 +201,11 @@ fn iterative_deepening<const IS_MAIN: bool>(search_head: &mut SearchHead, depth:
         }
 
         // register our newest vote for the best move
-        search_head.result = Some(SearchResult {eval, mv: search_head.pv[0], depth: d});
+        search_head.result = Some(SearchResult {
+            eval,
+            mv: search_head.pv[0],
+            depth: d,
+        });
     }
     if IS_MAIN {
         search_head.shared.stop_flag.store(true, Ordering::Release);
@@ -357,11 +361,7 @@ fn search_step<const IS_PV_NODE: bool>(
                 alpha.neg_down(),
             )
         //Apply lmr at sufficiently high depths on non-PV nodes
-        } else if !IS_PV_NODE
-            && depth.current > 2
-            && !sh.pos_mut().in_check()
-            && !m.is_tactical()
-        {
+        } else if !IS_PV_NODE && depth.current > 2 && !sh.pos_mut().in_check() && !m.is_tactical() {
             -search_step::<false>(
                 sh,
                 depth.reduce(lmr).next(),
@@ -373,7 +373,7 @@ fn search_step<const IS_PV_NODE: bool>(
         } else {
             -search_step::<false>(
                 sh,
-                depth.reduce(lmr/3).next(),
+                depth.reduce(lmr / 3).next(),
                 null_moves,
                 alpha.zero_window().neg_down(),
                 alpha.neg_down(),
@@ -430,7 +430,7 @@ fn search_step<const IS_PV_NODE: bool>(
     assert!(bestmove.is_some());
     assert!(Eval::MIN < score && score < Eval::MAX);
 
-    if IS_PV_NODE && depth.current <= 255{
+    if IS_PV_NODE && depth.current <= 255 {
         sh.pv[depth.current as usize] = bestmove.unwrap();
     }
 
@@ -469,7 +469,7 @@ fn quiesce(sh: &mut SearchHead, mut alpha: Eval, beta: Eval, delta: i32) -> Eval
 
     //check for terminal position
     if cand_moves.is_empty() && sh.pos_mut().in_check() {
-            return Eval::MATE_NOW;
+        return Eval::MATE_NOW;
     }
 
     let static_eval = sh.evaluate();
@@ -490,8 +490,10 @@ fn quiesce(sh: &mut SearchHead, mut alpha: Eval, beta: Eval, delta: i32) -> Eval
                 MoveType::Capture => {
                     static_eval + sh.pos().see(*m) + delta > alpha && sh.pos().see(*m) > 0
                 }
-                MoveType::PromotionCaptureN | MoveType::PromotionCaptureB 
-                    | MoveType::PromotionCaptureR | MoveType::PromotionCaptureQ => true,
+                MoveType::PromotionCaptureN
+                | MoveType::PromotionCaptureB
+                | MoveType::PromotionCaptureR
+                | MoveType::PromotionCaptureQ => true,
                 MoveType::Enpassant => static_eval + delta + 100 > alpha,
                 _ => false,
             })
@@ -527,7 +529,12 @@ fn quiesce(sh: &mut SearchHead, mut alpha: Eval, beta: Eval, delta: i32) -> Eval
 
     for m in cand_moves {
         //stop if we receive the flag is set;
-        if sh.shared_data().stop_flag.load(std::sync::atomic::Ordering::Relaxed).eq(&true) {
+        if sh
+            .shared_data()
+            .stop_flag
+            .load(std::sync::atomic::Ordering::Relaxed)
+            .eq(&true)
+        {
             return alpha;
         }
 
@@ -544,4 +551,3 @@ fn quiesce(sh: &mut SearchHead, mut alpha: Eval, beta: Eval, delta: i32) -> Eval
     }
     alpha
 }
-

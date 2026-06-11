@@ -34,7 +34,7 @@ impl TranspositionTable {
         if self.size == 0 {
             return None;
         }
-        let entry = unsafe { (& *self.hash.get())[zobrist_key as usize % self.size] };
+        let entry = unsafe { (&*self.hash.get())[zobrist_key as usize % self.size] };
         if entry.0.zobrist_hash ^ entry.0.data == zobrist_key && entry.0.depth() != 0 {
             Some(entry.0)
         } else if entry.1.zobrist_hash ^ entry.1.data == zobrist_key && entry.1.depth() != 0 {
@@ -49,17 +49,22 @@ impl TranspositionTable {
         if self.size == 0 || matches!(entry.eval().value(), Value::Infty | Value::NegInfty) {
             return;
         }
-        let hash_entry = unsafe { (& *self.hash.get())[zobrist_key as usize % self.size] };
+        let hash_entry = unsafe { (&*self.hash.get())[zobrist_key as usize % self.size] };
         //Mate scores may be seen as having infinite depth
         if (hash_entry.0.depth() < entry.depth()
-            || (matches!(entry.eval().value(), Value::Mate(_)) && entry.eval() > hash_entry.0.eval()))
+            || (matches!(entry.eval().value(), Value::Mate(_))
+                && entry.eval() > hash_entry.0.eval()))
             && (hash_entry.0.depth() + 2 < entry.depth()
                 || entry.eval().bound() == Bound::Exact
                 || hash_entry.0.eval().bound() != Bound::Exact)
         {
-            unsafe { (&mut *self.hash.get())[zobrist_key as usize % self.size].0 = entry; }
+            unsafe {
+                (&mut *self.hash.get())[zobrist_key as usize % self.size].0 = entry;
+            }
         } else {
-            unsafe { (&mut *self.hash.get())[zobrist_key as usize % self.size].1 = entry; }
+            unsafe {
+                (&mut *self.hash.get())[zobrist_key as usize % self.size].1 = entry;
+            }
         }
     }
 }
@@ -104,25 +109,15 @@ fn write_and_read_tt() {
     use std::sync::Arc;
     let hash = Arc::new(TranspositionTable::new(10000));
     let mv = Move::new(Square::B1, Square::C1, crate::chess::MoveType::Normal);
-    let entry = TTEntry::new(
-        -Eval::MATE_NOW,
-        3,
-        1234628935786765,
-        mv
-    );
+    let entry = TTEntry::new(-Eval::MATE_NOW, 3, 1234628935786765, mv);
     hash.set(1234628935786765, entry);
     let ret = hash.get(1234628935786765).unwrap();
     assert!(hash.get(1234628935786765).unwrap() == entry);
     assert!(ret.eval() == -Eval::MATE_NOW);
     assert!(ret.depth() == 3);
     assert!(ret.mov().unwrap() == mv);
-    
-    let entry2 = TTEntry::new(
-        -Eval::MATE_NOW,
-        3,
-        1234628935786798,
-        mv,
-    );
+
+    let entry2 = TTEntry::new(-Eval::MATE_NOW, 3, 1234628935786798, mv);
     let entry4 = TTEntry::new(
         Eval::DRAW,
         2,
@@ -132,12 +127,7 @@ fn write_and_read_tt() {
     hash.set(1234628935786798, entry2);
     hash.set(1234628935786798, entry4);
     assert!(hash.get(1234628935786798).unwrap() == entry2);
-    let entry3 = TTEntry::new(
-        -Eval::MATE_NOW,
-        3,
-        1234628935786700,
-        mv,
-    );
+    let entry3 = TTEntry::new(-Eval::MATE_NOW, 3, 1234628935786700, mv);
     let hash_clone = hash.clone();
     std::thread::spawn(move || hash_clone.set(1234628935786700, entry3));
     std::thread::sleep(std::time::Duration::from_millis(100));

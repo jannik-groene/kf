@@ -42,7 +42,12 @@ impl MovePicker {
         }
     }
 
-    pub fn from_move_list(moves: MoveList, pos: &mut Position, killers: [Option<Move>; 2], ttmove: Option<Move>) -> Self { 
+    pub fn from_move_list(
+        moves: MoveList,
+        pos: &mut Position,
+        killers: [Option<Move>; 2],
+        ttmove: Option<Move>,
+    ) -> Self {
         let scores = Self::score_captures(&moves, pos);
 
         MovePicker {

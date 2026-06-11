@@ -3,8 +3,8 @@ use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 
-use std::arch::x86_64::{_pext_u64,_pdep_u64};
 use rand::{self, RngCore, SeedableRng, rngs::SmallRng};
+use std::arch::x86_64::{_pdep_u64, _pext_u64};
 
 fn write_pawn_attacks(f: &mut File) {
     writeln!(f, "static PAWN_ATTACKS: [[u64; 64]; 2] = [[").unwrap();
@@ -93,7 +93,6 @@ fn go_in_direction(mut base: i32, dir: i32, blockers: u64) -> u64 {
     attacks
 }
 
-
 fn write_bishop_attacks(f: &mut File) {
     let dirs = [7, 9, -7, -9];
 
@@ -112,7 +111,8 @@ fn write_bishop_attacks(f: &mut File) {
     let mut offsets = vec![0];
     writeln!(f, "static BISHOP_ATTACKS: [u64; 5248] = [").unwrap();
     for (sq, m) in masks.iter().enumerate() {
-        #[cfg(target_feature="bmi2")] {
+        #[cfg(target_feature = "bmi2")]
+        {
             let max = unsafe { _pext_u64(u64::MAX, *m) };
             for i in 0..=max {
                 let mut attacks = 0;
@@ -155,7 +155,8 @@ fn write_rook_attacks(f: &mut File) {
     let mut offsets = vec![0];
     writeln!(f, "static ROOK_ATTACKS: [u64; 102400] = [").unwrap();
     for (sq, m) in masks.iter().enumerate() {
-        #[cfg(target_feature="bmi2")] {
+        #[cfg(target_feature = "bmi2")]
+        {
             let max = unsafe { _pext_u64(u64::MAX, *m) };
             for i in 0..=max {
                 let mut attacks = 0;
