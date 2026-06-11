@@ -185,6 +185,10 @@ impl Position {
         pos
     }
 
+    pub fn castling_rights(&self) -> [[bool; 2]; 2] {
+        self.ply_info.castling_rights
+    }
+
     #[inline]
     pub fn get_board(&self) -> &Board {
         &self.board
@@ -646,7 +650,7 @@ impl Position {
 
     #[inline]
     fn update_castling_rights(&mut self, m: Move, piece: Piece) {
-        if self.ply_info.castling_rights[self.to_move as usize] == [false,false] {return;}
+        if self.ply_info.castling_rights == [[false; 2] ;2] {return;}
 
         //If the king was moves we lose all castling rights
         if piece == Piece::King {
@@ -665,7 +669,8 @@ impl Position {
         if self.ply_info.castling_rights[0][1] && (m.to() == Square::A1 || m.from() == Square::A1) {
             self.ply_info.castling_rights[0][1] = false;
             self.ply_info.zobrist ^= constants::castle_zobrist(Square::C1);
-        } else if self.ply_info.castling_rights[0][0]
+        } 
+        if self.ply_info.castling_rights[0][0]
             && (m.to() == Square::H1 || m.from() == Square::H1)
         {
             self.ply_info.castling_rights[0][0] = false;

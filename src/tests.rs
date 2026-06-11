@@ -1,4 +1,4 @@
-use crate::chess;
+use crate::chess::{self, Move};
 //use rand::{seq::SliceRandom, thread_rng};
 
 #[test]
@@ -189,6 +189,17 @@ fn simple_rook_capture() {
     .unwrap();
     pos = pos.from_move(chess::Move::new(14u8.into(), 7u8.into(), chess::MoveType::PromotionCaptureN));
     assert!(pos.get_moves::<true>().len() == 47);
+}
+
+#[test]
+fn rook_capture_no_castling() {
+    let mut pos = chess::Position::from_fen(String::from(
+            "rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8"
+    )).unwrap();
+    pos.do_move(Move::new(chess::Square::D1, chess::Square::D2, chess::MoveType::Normal));
+    pos.do_move(Move::new(chess::Square::F2, chess::Square::H1, chess::MoveType::Capture));
+    println!("{:?}", pos.castling_rights());
+    assert_eq!(pos.get_moves::<true>().len(), 41);
 }
 
 #[test]

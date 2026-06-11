@@ -181,7 +181,9 @@ mod tests {
         let mut count = 0;
         let picker = super::MovePicker::new(pos, [None, None], None);
         for m in picker {
-            count += perft_step(&mut pos.from_move(m), depth - 1);
+            pos.do_move(m);
+            count += perft_step(pos, depth - 1);
+            pos.undo_move();
         }
         count
     }
