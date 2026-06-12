@@ -6,6 +6,7 @@ use crate::{
     chess::{BitBoard, Board, Color, File, Piece, Position, Square},
     constants,
 };
+use endgames::State;
 pub use eval::{Bound, Eval, Value};
 
 #[allow(dead_code)]
@@ -453,6 +454,15 @@ fn evaluate_king_safety(pos: &Position, phase: i32, color: Color) -> i32 {
 }
 
 pub fn evaluate(pos: &Position) -> Eval {
+    const WINNING_THRESHOLD: i32 = 10_000;
+    if pos.get_board().occupation().count() <= 3 {
+        match endgames::kkx(pos) {
+            State::Won(n) => return Eval::exact_from_cents(n + WINNING_THRESHOLD),
+            State::Lost(n) => return Eval::exact_from_cents(-n - WINNING_THRESHOLD),
+            State::Drawn => return Eval::DRAW,
+            _ => {}
+        }
+    }
     let phase = phase_factor(pos);
     let mut res = pos.material_balance() + 20;
     res += evaluate_mobility(pos, phase);
