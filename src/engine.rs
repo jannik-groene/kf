@@ -119,7 +119,6 @@ pub struct Engine {
 #[derive(Clone)]
 pub enum EngineIO {
     UciInput(String),
-    TimerEnded,
 }
 
 impl Engine {
@@ -148,8 +147,8 @@ impl Engine {
     pub fn set_position(&mut self, pos: Position) {
         self.search.set_position(pos);
     }
-    pub fn start_search(&mut self, depth: Option<u8>) {
-        self.search.search(depth);
+    pub fn start_search(&mut self, depth: Option<u8>, time_limit: Option<std::time::Duration>) {
+        self.search.search(depth, time_limit);
     }
     pub fn stop_search(&mut self) {
         self.search.stop();

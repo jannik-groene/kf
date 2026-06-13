@@ -24,11 +24,11 @@ struct TimeSpec {
     movestogo: Option<u64>,
     movetime: Option<u64>,
 }
+
 //Timer for execution. To achieve high precision we first sleep the thread to within a safetymargin
 //of the target and the spin until we reach the target time.
-fn timer(time: TimeSpec, ch: Sender<EngineIO>) {
-    const SAFETY_DELTA: std::time::Duration = std::time::Duration::from_millis(1);
-    let now = std::time::Instant::now();
+fn time_limit(time: TimeSpec) -> Option<std::time::Duration> {
+    const SAFETY_DELTA: std::time::Duration = std::time::Duration::from_millis(10);
     //We play with increment
     let movetime = if let (Some(time), Some(inc)) = (time.ustime, time.usinc) {
         //We spend about 7% of the remaining time on each move.
@@ -51,16 +51,9 @@ fn timer(time: TimeSpec, ch: Sender<EngineIO>) {
     else if let Some(time) = time.movetime {
         std::time::Duration::from_millis(time)
     } else {
-        panic!("Invalid time control data!")
+        panic!("Invalid time spec");
     };
-    if movetime > SAFETY_DELTA {
-        std::thread::sleep(movetime - SAFETY_DELTA);
-    }
-    //Spin until we reach target time
-    while now.elapsed() < movetime - std::time::Duration::from_micros(100) {
-        std::hint::spin_loop();
-    }
-    drop(ch.send(EngineIO::TimerEnded));
+    Some(movetime - SAFETY_DELTA)
 }
 
 pub trait UCIHandler {
@@ -89,9 +82,6 @@ impl UCIHandler for Engine {
             if let Ok(io) = self.receiver().recv() {
                 match io {
                     EngineIO::UciInput(s) => self.handle_input(s),
-                    EngineIO::TimerEnded => {
-                        self.stop_search();
-                    }
                 }
             }
         }
@@ -177,11 +167,11 @@ impl UCIHandler for Engine {
             if tokens.len() < 3 {
                 return;
             }
-            self.start_search(tokens[2].parse::<u8>().ok());
+            self.start_search(tokens[2].parse::<u8>().ok(), None);
             return;
         }
         if tokens[1] == "infinite" {
-            self.start_search(None);
+            self.start_search(None, None);
             return;
         }
         let mut wtime = None;
@@ -201,7 +191,6 @@ impl UCIHandler for Engine {
                 _ => {}
             }
         }
-        let tx = self.get_sender();
         let time = match self.color() {
             Color::White => TimeSpec {
                 ustime: wtime,
@@ -216,8 +205,7 @@ impl UCIHandler for Engine {
                 movetime,
             },
         };
-        std::thread::spawn(move || timer(time, tx));
-        self.start_search(None);
+        self.start_search(None, time_limit(time));
     }
     fn handle_stop(&mut self) {
         self.stop_search();

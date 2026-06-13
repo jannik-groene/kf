@@ -453,6 +453,13 @@ fn evaluate_king_safety(pos: &Position, phase: i32, color: Color) -> i32 {
     res_early * phase / OPENING_PHASE
 }
 
+fn king_centrality(pos: &Position, color: Color) -> i32 {
+    let king_square = pos.get_board().king_square(color);
+    let rank = king_square.rank() as i32;
+    let file = king_square.file() as i32;
+    14 - (7 - 2 * rank).abs() + (7 - 2 * file).abs()
+}
+
 pub fn evaluate(pos: &Position) -> Eval {
     const WINNING_THRESHOLD: i32 = 10_000;
     if pos.get_board().occupation().count() <= 3 {
@@ -496,12 +503,16 @@ pub fn evaluate(pos: &Position) -> Eval {
     let remaining_pawns = (pos.board.get_bb(Color::White, Piece::Pawn)
         | pos.board.get_bb(Color::Black, Piece::Pawn))
     .count();
+    //in any endgame without pawns we really want to stay centralized to the best of our ability
+    if remaining_pawns == 0 && pos.board.occupation().count() < 7 {
+        res += (king_centrality(pos, pos.color()) - king_centrality(pos, pos.color().other())) * 10;
+    }
     //dampen eval quickly for low material difference
-    if remaining_pawns < 2 && pos.material_balance().abs() < 5 && pos.board.occupation().count() < 7
+    if remaining_pawns == 0
+        && pos.material_balance().abs() < 5
+        && pos.board.occupation().count() < 7
     {
-        res /= ((5 - pos.material_balance()) * (5 - pos.material_balance())
-            / (remaining_pawns as i32 + 1))
-            .clamp(1, 25);
+        res /= (6 - pos.material_balance().abs()) * (6 - pos.material_balance().abs()).clamp(1, 25);
     }
 
     //adjust evaluation to be lower near 50 move rule, since possibility of improvement may be

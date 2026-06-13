@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::time::Instant;
+use std::time::{Instant, Duration};
 
 use crate::{
     chess::{Move, Position},
@@ -8,6 +8,18 @@ use crate::{
 };
 
 use super::tt::TranspositionTable;
+
+#[derive(Clone, Copy)]
+pub struct TimeManager {
+    pub start_time: Instant,
+    pub limit: Option<Duration>,
+}
+
+impl TimeManager {
+    pub fn new(start_time: Instant, limit: Option<Duration>) -> Self {
+        TimeManager { start_time, limit }
+    }
+}
 
 pub struct SharedData {
     pub nodes: AtomicU64,
@@ -38,18 +50,18 @@ pub struct SearchHead {
     pub pos: Position,
     pub killers: Vec<([Option<Move>; 2], [u8; 2])>,
     pub pv: [Move; 256],
-    pub start_time: Instant,
+    pub time_manager: TimeManager,
     pub result: Option<SearchResult>,
     pub shared: Arc<SharedData>,
 }
 
 impl SearchHead {
-    pub fn new(pos: Position, shared: Arc<SharedData>, _use_nnue: bool) -> SearchHead {
+    pub fn new(pos: Position, shared: Arc<SharedData>, time_manager: TimeManager) -> SearchHead {
         SearchHead {
             pos,
             killers: Vec::new(),
             pv: [Move::ZERO; 256],
-            start_time: Instant::now(),
+            time_manager,
             result: None,
             shared,
         }
@@ -128,13 +140,19 @@ impl SearchHead {
         print!(
             "info nodes {} nps {}",
             nodes,
-            1000 * nodes as u128 / self.start_time.elapsed().as_millis().clamp(1, u128::MAX)
+            1000 * nodes as u128
+                / self
+                    .time_manager
+                    .start_time
+                    .elapsed()
+                    .as_millis()
+                    .clamp(1, u128::MAX)
         );
         print!(
             " {} depth {} time {}",
             eval,
             depth,
-            self.start_time.elapsed().as_millis()
+            self.time_manager.start_time.elapsed().as_millis()
         );
         if self.pv[0].compress() != 0 {
             print!(" pv");

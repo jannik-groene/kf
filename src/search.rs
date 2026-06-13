@@ -14,6 +14,8 @@ use crate::{
 use thread::{SearchHead, SearchResult, SharedData};
 use tt::{TTEntry, TranspositionTable};
 
+use thread::TimeManager;
+
 pub struct SearchManager {
     pos: Position,
     threads: usize,
@@ -61,11 +63,11 @@ impl SearchManager {
         self.pos.clone()
     }
 
-    pub fn search(&mut self, target_depth: Option<u8>) {
+    pub fn search(&mut self, target_depth: Option<u8>, time_limit: Option<std::time::Duration>) {
         let pos = self.pos.clone();
         let threads = self.threads;
         let shared = self.shared.clone();
-        std::thread::spawn(move || start_searching(target_depth, shared, pos, threads));
+        std::thread::spawn(move || start_searching(target_depth, time_limit, shared, pos, threads));
     }
 }
 
@@ -109,16 +111,18 @@ impl Depth {
 
 fn start_searching(
     target_depth: Option<u8>,
+    time_limit: Option<std::time::Duration>,
     shared: Arc<SharedData>,
     pos: Position,
     threads: usize,
 ) {
     let depth = target_depth.unwrap_or(u8::MAX);
+    let time_manager = TimeManager::new(std::time::Instant::now(), time_limit);
 
     shared.stop_flag.store(false, Ordering::Release);
     shared.nodes.store(0, Ordering::Release);
 
-    let mut search_head = SearchHead::new(pos.clone(), shared.clone(), false);
+    let mut search_head = SearchHead::new(pos.clone(), shared.clone(), time_manager);
 
     let main_handle =
         std::thread::spawn(move || iterative_deepening::<true>(&mut search_head, depth));
@@ -126,7 +130,7 @@ fn start_searching(
     let mut helper_handles = Vec::new();
 
     for _ in 1..threads {
-        let mut search_head = SearchHead::new(pos.clone(), shared.clone(), false);
+        let mut search_head = SearchHead::new(pos.clone(), shared.clone(), time_manager);
 
         helper_handles.push(std::thread::spawn(move || {
             iterative_deepening::<false>(&mut search_head, depth)
@@ -226,6 +230,14 @@ fn search_step<const IS_PV_NODE: bool>(
     mut alpha: Eval,
     beta: Eval,
 ) -> Eval {
+    if sh.shared.nodes.load(Ordering::Relaxed) & 0xff == 0
+        && let Some(limit) = sh.time_manager.limit
+        && sh.time_manager.start_time.elapsed() > limit
+    {
+        sh.shared.stop_flag.store(true, Ordering::Release);
+        return Eval::DRAW;
+    }
+
     //check for obviously drawn positions
     if is_material_draw(sh.pos()) {
         return Eval::DRAW;
@@ -455,6 +467,14 @@ fn search_step<const IS_PV_NODE: bool>(
 }
 
 fn quiesce(sh: &mut SearchHead, mut alpha: Eval, beta: Eval, delta: i32) -> Eval {
+    if sh.shared.nodes.load(Ordering::Relaxed) & 0xff == 0
+        && let Some(limit) = sh.time_manager.limit
+        && sh.time_manager.start_time.elapsed() > limit
+    {
+        sh.shared.stop_flag.store(true, Ordering::Release);
+        return Eval::DRAW;
+    }
+
     //check for obviously drawn positions
     if is_material_draw(sh.pos()) {
         return Eval::DRAW;
