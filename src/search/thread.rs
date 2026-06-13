@@ -1,12 +1,13 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::time::{Instant, Duration};
+use std::time::{Duration, Instant};
 
 use crate::{
     chess::{Move, Position},
     evaluate::{Eval, evaluate},
 };
 
+use super::history::History;
 use super::tt::TranspositionTable;
 
 #[derive(Clone, Copy)]
@@ -48,7 +49,7 @@ pub struct SearchResult {
 
 pub struct SearchHead {
     pub pos: Position,
-    pub killers: Vec<([Option<Move>; 2], [u8; 2])>,
+    pub history: History,
     pub pv: [Move; 256],
     pub time_manager: TimeManager,
     pub result: Option<SearchResult>,
@@ -59,7 +60,7 @@ impl SearchHead {
     pub fn new(pos: Position, shared: Arc<SharedData>, time_manager: TimeManager) -> SearchHead {
         SearchHead {
             pos,
-            killers: Vec::new(),
+            history: History::new(),
             pv: [Move::ZERO; 256],
             time_manager,
             result: None,
@@ -99,41 +100,18 @@ impl SearchHead {
     pub fn evaluate(&mut self) -> Eval {
         evaluate(self.pos_mut())
     }
-    #[inline]
-    pub fn register_killer(&mut self, ply: u8, m: Move) {
-        if self.killers.len() <= ply as usize {
-            self.killers
-                .resize(ply as usize + 1, ([None, None], [0, 0]));
-        }
-        if self.killers[ply as usize].0[0] == Some(m) {
-            self.killers[ply as usize].1[0] += 1;
-        } else if self.killers[ply as usize].0[1] == Some(m) {
-            self.killers[ply as usize].1[1] += 1;
-        } else if self.killers[ply as usize].1[0] > self.killers[ply as usize].1[1] {
-            self.killers[ply as usize].0[1] = Some(m);
-            self.killers[ply as usize].1[1] = 1;
-        } else {
-            self.killers[ply as usize].0[0] = Some(m);
-            self.killers[ply as usize].1[0] = 1;
-        }
-    }
-    #[inline]
-    pub fn get_killers(&self, ply: u8) -> &[Option<Move>; 2] {
-        if self.killers.len() <= ply as usize {
-            &[None, None]
-        } else {
-            &self.killers[ply as usize].0
-        }
-    }
-    #[inline]
-    pub fn invalidate_killers(&mut self, ply: u8) {
-        if self.killers.len() > ply as usize + 1 {
-            self.killers[ply as usize + 1].1 = [0, 0];
-        }
-    }
-    //    pub fn clear_killers(&mut self) {
-    //        self.killers.clear();
-    //    }
+//    #[inline]
+//    pub fn register_killer(&mut self, ply: u8, m: Move) {
+//        self.killers.register(m, ply as usize);
+//    }
+//    #[inline]
+//    pub fn get_killers(&self, ply: u8) -> &[Move; 2] {
+//        self.killers.get(ply as usize)
+//    }
+//    #[inline]
+//    pub fn invalidate_killers(&mut self, ply: u8) {
+//        self.killers.invalidate(ply as usize);
+//    }
 
     pub fn write_uci_info(&self, eval: Eval, depth: u8) {
         let nodes = self.shared.nodes.load(Ordering::Relaxed);

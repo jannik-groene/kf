@@ -1,12 +1,13 @@
-use crate::chess::{Move, MoveList, Piece, Position};
+use crate::chess::{Move, MoveList, Piece, Position, Color};
 use crate::constants::piece_value;
 
 use std::iter::Iterator;
 
+use super::history::History;
+
 enum MovePickingStage {
     TtMove,
     WinningCaptures,
-    Killers,
     Quiets,
     LosingCaptures,
     Finished,
@@ -18,25 +19,24 @@ enum MovePickingStage {
 const EVEN_THRESHOLD: i32 = piece_value(Piece::Knight) - piece_value(Piece::Bishop);
 
 pub struct MovePicker {
-    moves: MoveList,
+    pub moves: MoveList,
     scores: Vec<i32>,
     ttmove: Option<Move>,
-    killers: [Option<Move>; 2],
     stage: MovePickingStage,
     idx: usize,
 }
 
 impl MovePicker {
     #[allow(dead_code)]
-    pub fn new(pos: &mut Position, killers: [Option<Move>; 2], ttmove: Option<Move>) -> Self {
+    pub fn new(pos: &mut Position, d: i16, history: &History, ttmove: Option<Move>) -> Self {
         let moves = pos.get_moves::<true>();
-        let scores = Self::score_captures(&moves, pos);
+        let mut scores = Self::score_captures(&moves, pos);
+        Self::score_quiets(&mut scores, d, pos.color(), &moves, history);
 
         MovePicker {
             moves,
             scores,
             ttmove,
-            killers,
             stage: MovePickingStage::TtMove,
             idx: 0,
         }
@@ -44,17 +44,18 @@ impl MovePicker {
 
     pub fn from_move_list(
         moves: MoveList,
-        pos: &mut Position,
-        killers: [Option<Move>; 2],
+        pos: &Position,
+        d: i16,
+        history: &History,
         ttmove: Option<Move>,
     ) -> Self {
-        let scores = Self::score_captures(&moves, pos);
+        let mut scores = Self::score_captures(&moves, pos);
+        Self::score_quiets(&mut scores, d, pos.color(), &moves, history);
 
         MovePicker {
             moves,
             scores,
             ttmove,
-            killers,
             stage: MovePickingStage::TtMove,
             idx: 0,
         }
@@ -71,6 +72,19 @@ impl MovePicker {
         }
 
         scores
+    }
+
+    #[inline]
+    fn score_quiets(scores: &mut [i32], d: i16, c: Color, movelist: &MoveList, history: &History) {
+        let killers = history.killer.get(d as usize);
+        for (m, s) in movelist.iter().zip(scores.iter_mut()) {
+            if !m.is_capture() {
+                *s += history.quiet.get_score(c, *m);
+                if *m == killers[0] || *m == killers[1] {
+                    *s += 10_000 * d as i32;
+                }
+            }
+        }
     }
 }
 
@@ -104,34 +118,6 @@ impl Iterator for MovePicker {
                     self.idx += 1;
                     Some(self.moves[self.idx - 1])
                 } else {
-                    self.stage = MovePickingStage::Killers;
-                    self.next()
-                }
-            }
-            MovePickingStage::Killers => {
-                if let Some((idx, _)) = self
-                    .moves
-                    .iter()
-                    .enumerate()
-                    .skip(self.idx)
-                    .find(|&(_, m)| Some(*m) == self.killers[0])
-                {
-                    self.moves.swap(idx, self.idx);
-                    self.scores.swap(idx, self.idx);
-                    self.idx += 1;
-                    self.killers[0]
-                } else if let Some((idx, _)) = self
-                    .moves
-                    .iter()
-                    .enumerate()
-                    .skip(self.idx)
-                    .find(|&(_, m)| Some(*m) == self.killers[1])
-                {
-                    self.moves.swap(idx, self.idx);
-                    self.scores.swap(idx, self.idx);
-                    self.idx += 1;
-                    self.killers[1]
-                } else {
                     self.stage = MovePickingStage::Quiets;
                     self.next()
                 }
@@ -142,7 +128,8 @@ impl Iterator for MovePicker {
                     .iter()
                     .enumerate()
                     .skip(self.idx)
-                    .find(|(_, m)| !m.is_capture())
+                    .filter(|(_, m)| !m.is_capture())
+                    .max_by_key(|(i, _)| self.scores[*i])
                 {
                     self.moves.swap(idx, self.idx);
                     self.scores.swap(idx, self.idx);
@@ -178,13 +165,14 @@ impl Iterator for MovePicker {
 #[cfg(test)]
 mod tests {
     use crate::chess::Position;
+    use crate::search::history::History;
 
     fn perft_step(pos: &mut Position, depth: usize) -> u64 {
         if depth == 0 {
             return 1;
         }
         let mut count = 0;
-        let picker = super::MovePicker::new(pos, [None, None], None);
+        let picker = super::MovePicker::new(pos, 0, &History::new(), None);
         for m in picker {
             pos.do_move(m);
             count += perft_step(pos, depth - 1);

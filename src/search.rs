@@ -1,3 +1,4 @@
+mod history;
 mod movepick;
 mod thread;
 mod tt;
@@ -355,8 +356,7 @@ fn search_step<const IS_PV_NODE: bool>(
         depth = depth.extend(1);
     }
 
-    let killers = *sh.get_killers(depth.current as u8);
-    let move_picker = movepick::MovePicker::from_move_list(moves, sh.pos_mut(), killers, ttmove);
+    let move_picker = movepick::MovePicker::from_move_list(moves, sh.pos(), depth.current, &sh.history, ttmove);
 
     for (i, m) in move_picker.enumerate() {
         //lmr reduction depth
@@ -419,9 +419,9 @@ fn search_step<const IS_PV_NODE: bool>(
                 TTEntry::new(movescore.to_lowerbound(), depth_left, zh, m),
             );
             if !matches!(m.typ(), MoveType::Capture) && ttmove != Some(m) {
-                sh.register_killer(depth.current as u8, m);
+                sh.history.beta_cutoff(sh.pos.color(), m, depth.remaining());
             }
-            sh.invalidate_killers(depth.current as u8);
+            sh.history.killer.invalidate(depth.current as usize);
             return movescore.to_lowerbound();
         }
 
@@ -447,7 +447,7 @@ fn search_step<const IS_PV_NODE: bool>(
     }
 
     //reset the killer move counts for ply+1
-    sh.invalidate_killers(depth.current as u8);
+    sh.history.killer.invalidate(depth.current as usize);
 
     let zh = sh.pos().zobrist_hash();
 
@@ -456,6 +456,9 @@ fn search_step<const IS_PV_NODE: bool>(
             zh,
             TTEntry::new(score.to_upperbound(), depth_left, zh, bestmove.unwrap()),
         );
+        //for m in moves.iter().filter(|&m| !m.is_capture()) {
+        //    sh.history.alpha_cutoff(sh.pos.color(), *m, depth.remaining());
+        //}
         score.to_upperbound()
     } else {
         sh.shared.tt.set(
