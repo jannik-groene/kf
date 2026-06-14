@@ -100,18 +100,18 @@ impl SearchHead {
     pub fn evaluate(&mut self) -> Eval {
         evaluate(self.pos_mut())
     }
-//    #[inline]
-//    pub fn register_killer(&mut self, ply: u8, m: Move) {
-//        self.killers.register(m, ply as usize);
-//    }
-//    #[inline]
-//    pub fn get_killers(&self, ply: u8) -> &[Move; 2] {
-//        self.killers.get(ply as usize)
-//    }
-//    #[inline]
-//    pub fn invalidate_killers(&mut self, ply: u8) {
-//        self.killers.invalidate(ply as usize);
-//    }
+    //    #[inline]
+    //    pub fn register_killer(&mut self, ply: u8, m: Move) {
+    //        self.killers.register(m, ply as usize);
+    //    }
+    //    #[inline]
+    //    pub fn get_killers(&self, ply: u8) -> &[Move; 2] {
+    //        self.killers.get(ply as usize)
+    //    }
+    //    #[inline]
+    //    pub fn invalidate_killers(&mut self, ply: u8) {
+    //        self.killers.invalidate(ply as usize);
+    //    }
 
     pub fn write_uci_info(&self, eval: Eval, depth: u8) {
         let nodes = self.shared.nodes.load(Ordering::Relaxed);

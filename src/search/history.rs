@@ -7,14 +7,19 @@ pub struct History {
 
 impl History {
     pub fn new() -> Self {
-        History { killer: KillerHistory::new(), quiet: QuietHistory::new() }
+        History {
+            killer: KillerHistory::new(),
+            quiet: QuietHistory::new(),
+        }
     }
 
     #[inline]
     pub fn beta_cutoff(&mut self, c: Color, m: Move, d: i16) {
-        if m.is_capture() { return; }
+        if m.is_capture() {
+            return;
+        }
         self.killer.register(m, d as usize);
-        self.quiet.register(c, m, (d as i32)*100);
+        self.quiet.register(c, m, (d as i32) * 100);
     }
 
     #[inline]
@@ -95,6 +100,7 @@ impl QuietHistory {
     }
 
     pub fn register(&mut self, c: Color, m: Move, bonus: i32) {
+        let bonus = bonus.clamp(-Self::MAX_BONUS, Self::MAX_BONUS);
         self.scores[c as usize][m.from() as usize][m.to() as usize] += bonus
             - self.scores[c as usize][m.from() as usize][m.to() as usize] * bonus.abs()
                 / Self::MAX_BONUS;

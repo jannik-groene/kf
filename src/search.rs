@@ -262,9 +262,11 @@ fn search_step<const IS_PV_NODE: bool>(
     let hash_entry = sh.shared_data().tt.get(sh.pos().zobrist_hash());
 
     let mut ttmove = None;
+    let mut tteval = None;
 
     if let Some(entry) = hash_entry {
         ttmove = entry.mov();
+        tteval = Some(entry.eval());
 
         //make sure we do not return a repetition from tt, allowing a threefold
         let repetition = sh.pos.will_repeat(ttmove.unwrap());
@@ -292,7 +294,7 @@ fn search_step<const IS_PV_NODE: bool>(
     }
 
     //Check if this is a terminal position
-    let moves = sh.pos_mut().get_moves::<true>();
+    let mut moves = sh.pos_mut().get_moves::<true>();
 
     if moves.is_empty() && sh.pos_mut().in_check() {
         return Eval::MATE_NOW;
@@ -302,24 +304,19 @@ fn search_step<const IS_PV_NODE: bool>(
 
     //Calculate the depth we are still to search.
     let depth_left: u8 = depth.remaining().clamp(0, 255) as u8;
+    let eval = tteval.unwrap_or(sh.evaluate());
 
     //We extend the normal search if we are  in check, else go into quiescence
     if depth_left == 0 && !sh.pos_mut().in_check() {
         return quiesce(sh, alpha, beta, 200 - 20 * depth.reduction as i32);
     }
+
     //Futility pruning
-    else if depth.target > 3 && depth_left == 1 && !IS_PV_NODE {
-        let eval = sh.evaluate();
-        if eval + 300 < alpha {
-            return quiesce(sh, alpha, beta, 100);
-        }
-    }
-    //Extended futility pruning
-    else if depth.target > 3 && depth_left == 2 && !IS_PV_NODE {
-        let eval = sh.evaluate();
-        if eval + 500 < alpha {
-            return quiesce(sh, alpha, beta, 100);
-        }
+    if !IS_PV_NODE
+        && depth.target > 3
+        && ((depth_left == 1 && eval + 300 < alpha) || (depth_left == 2 && eval + 500 < alpha))
+    {
+        return quiesce(sh, alpha, beta, 100);
     }
 
     //Try a null move to find a beta cutoff; search the first three plys fully.
@@ -356,7 +353,13 @@ fn search_step<const IS_PV_NODE: bool>(
         depth = depth.extend(1);
     }
 
-    let move_picker = movepick::MovePicker::from_move_list(moves, sh.pos(), depth.current, &sh.history, ttmove);
+    let move_picker = movepick::MovePicker::from_move_list(
+        &mut moves,
+        sh.pos(),
+        depth.current,
+        &sh.history,
+        ttmove,
+    );
 
     for (i, m) in move_picker.enumerate() {
         //lmr reduction depth
@@ -456,9 +459,10 @@ fn search_step<const IS_PV_NODE: bool>(
             zh,
             TTEntry::new(score.to_upperbound(), depth_left, zh, bestmove.unwrap()),
         );
-        //for m in moves.iter().filter(|&m| !m.is_capture()) {
-        //    sh.history.alpha_cutoff(sh.pos.color(), *m, depth.remaining());
-        //}
+        for m in moves.iter().filter(|&m| !m.is_capture()) {
+            sh.history
+                .alpha_cutoff(sh.pos.color(), *m, depth.remaining());
+        }
         score.to_upperbound()
     } else {
         sh.shared.tt.set(

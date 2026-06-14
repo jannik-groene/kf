@@ -1,4 +1,4 @@
-use crate::chess::{Move, MoveList, Piece, Position, Color};
+use crate::chess::{Color, Move, MoveList, Piece, Position};
 use crate::constants::piece_value;
 
 use std::iter::Iterator;
@@ -18,39 +18,24 @@ enum MovePickingStage {
 //Threshold after which a trade is considered even in SEE
 const EVEN_THRESHOLD: i32 = piece_value(Piece::Knight) - piece_value(Piece::Bishop);
 
-pub struct MovePicker {
-    pub moves: MoveList,
+pub struct MovePicker<'a> {
+    moves: &'a mut MoveList,
     scores: Vec<i32>,
     ttmove: Option<Move>,
     stage: MovePickingStage,
     idx: usize,
 }
 
-impl MovePicker {
-    #[allow(dead_code)]
-    pub fn new(pos: &mut Position, d: i16, history: &History, ttmove: Option<Move>) -> Self {
-        let moves = pos.get_moves::<true>();
-        let mut scores = Self::score_captures(&moves, pos);
-        Self::score_quiets(&mut scores, d, pos.color(), &moves, history);
-
-        MovePicker {
-            moves,
-            scores,
-            ttmove,
-            stage: MovePickingStage::TtMove,
-            idx: 0,
-        }
-    }
-
+impl<'a> MovePicker<'a> {
     pub fn from_move_list(
-        moves: MoveList,
+        moves: &'a mut MoveList,
         pos: &Position,
         d: i16,
         history: &History,
         ttmove: Option<Move>,
     ) -> Self {
-        let mut scores = Self::score_captures(&moves, pos);
-        Self::score_quiets(&mut scores, d, pos.color(), &moves, history);
+        let mut scores = Self::score_captures(moves, pos);
+        Self::score_quiets(&mut scores, d, pos.color(), moves, history);
 
         MovePicker {
             moves,
@@ -88,7 +73,7 @@ impl MovePicker {
     }
 }
 
-impl Iterator for MovePicker {
+impl<'a> Iterator for MovePicker<'a> {
     type Item = Move;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -172,7 +157,8 @@ mod tests {
             return 1;
         }
         let mut count = 0;
-        let picker = super::MovePicker::new(pos, 0, &History::new(), None);
+        let mut moves = pos.get_moves::<true>();
+        let picker = super::MovePicker::from_move_list(&mut moves, pos, 0, &History::new(), None);
         for m in picker {
             pos.do_move(m);
             count += perft_step(pos, depth - 1);
