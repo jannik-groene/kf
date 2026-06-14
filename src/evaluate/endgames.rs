@@ -113,7 +113,7 @@ pub fn kkp(pos: &Position) -> State {
         && (w_kpos.file() != p_pos.file()
             || (w_kpos.rank().relative(wcolor) as u8) < p_pos.rank().relative(wcolor) as u8)
     {
-        return decisive_out(p_rank * 100);
+        return decisive_out(p_rank * 50);
     }
 
     // Basic blocking by the black king
@@ -135,11 +135,11 @@ pub fn kkp(pos: &Position) -> State {
         && to_move != wcolor;
     let sixth = w_kpos.rank().relative(wcolor) == Rank::Sixth;
 
-    if (opposition && wk_in_front) || (opposition && sixth) || (sixth && wk_in_front) {
-        return decisive_out(p_rank * 100);
+    if distance(w_kpos, p_pos) < distance(l_kpos, p_pos) + (to_move == wcolor) as i32
+        && ((opposition && wk_in_front) || (opposition && sixth) || (sixth && wk_in_front))
+    {
+        return decisive_out(p_rank * 50);
     }
-
-    // Key squares
 
     State::Unknown
 }
