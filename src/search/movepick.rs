@@ -1,4 +1,4 @@
-use crate::chess::{Color, Move, MoveList, Piece, Position};
+use crate::chess::{Move, MoveList, Piece, Position};
 use crate::constants::piece_value;
 
 use std::iter::Iterator;
@@ -34,8 +34,8 @@ impl<'a> MovePicker<'a> {
         history: &History,
         ttmove: Option<Move>,
     ) -> Self {
-        let mut scores = Self::score_captures(moves, pos);
-        Self::score_quiets(&mut scores, d, pos.color(), moves, history);
+        let mut scores = Self::score_captures(moves, pos, history);
+        Self::score_quiets(pos, &mut scores, d, moves, history);
 
         MovePicker {
             moves,
@@ -47,12 +47,14 @@ impl<'a> MovePicker<'a> {
     }
 
     #[inline]
-    fn score_captures(movelist: &MoveList, pos: &Position) -> Vec<i32> {
+    fn score_captures(movelist: &MoveList, pos: &Position, history: &History) -> Vec<i32> {
         let mut scores = vec![0; movelist.len()];
 
         for (i, m) in movelist.iter().enumerate() {
             if m.is_capture() {
-                scores[i] = pos.see(*m);
+                let cap = pos.get_board().piece_at(m.to()).unwrap_or(Piece::Pawn);
+                let p = pos.get_board().piece_at(m.from()).unwrap();
+                scores[i] = pos.see(*m) + history.capture.get(p, *m, cap) / 8;
             }
         }
 
@@ -60,13 +62,34 @@ impl<'a> MovePicker<'a> {
     }
 
     #[inline]
-    fn score_quiets(scores: &mut [i32], d: i16, c: Color, movelist: &MoveList, history: &History) {
+    fn score_quiets(
+        pos: &Position,
+        scores: &mut [i32],
+        d: i16,
+        movelist: &MoveList,
+        history: &History,
+    ) {
         let killers = history.killer.get(d as usize);
+        let last_move = pos.last_move();
+        let last_piece = if last_move.typ().is_promotion() {
+            Some(Piece::Pawn)
+        } else {
+            pos.get_board().piece_at(last_move.to())
+        };
         for (m, s) in movelist.iter().zip(scores.iter_mut()) {
             if !m.is_capture() {
-                *s += history.quiet.get_score(c, *m);
+                *s += history.quiet.get_score(pos.color(), *m);
                 if *m == killers[0] || *m == killers[1] {
-                    *s += 10_000 * d as i32;
+                    *s += 10_000;
+                }
+                if let Some(p) = last_piece {
+                    let piece = pos.get_board().piece_at(m.from()).unwrap();
+                    *s += history
+                        .continuation
+                        .get_score(pos.color(), p, last_move, piece, *m);
+                }
+                if pos.gives_check(m) {
+                    *s += 20_000;
                 }
             }
         }

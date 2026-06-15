@@ -421,8 +421,21 @@ fn search_step<const IS_PV_NODE: bool>(
                 zh,
                 TTEntry::new(movescore.to_lowerbound(), depth_left, zh, m),
             );
-            if !matches!(m.typ(), MoveType::Capture) && ttmove != Some(m) {
+            if !m.is_capture() {
                 sh.history.beta_cutoff(sh.pos.color(), m, depth.remaining());
+            } else {
+                let capture = if m.typ() == MoveType::Enpassant {
+                    Piece::Pawn
+                } else {
+                    sh.pos.get_board().piece_at(m.to()).unwrap()
+                };
+                let piece = if m.typ().is_promotion() {
+                    Piece::Pawn
+                } else {
+                    sh.pos.get_board().piece_at(m.from()).unwrap()
+                };
+                let bonus = 40 * depth.remaining() as i32 - 30;
+                sh.history.capture.register(piece, m, capture, bonus);
             }
             sh.history.killer.invalidate(depth.current as usize);
             return movescore.to_lowerbound();
@@ -452,6 +465,56 @@ fn search_step<const IS_PV_NODE: bool>(
     //reset the killer move counts for ply+1
     sh.history.killer.invalidate(depth.current as usize);
 
+    let bonus = 100 * depth.remaining() as i32 - 75;
+
+    //Data for history updates
+    let last_move = sh.pos().last_move();
+    let last_piece = if last_move.typ().is_promotion() {
+        Some(Piece::Pawn)
+    } else {
+        sh.pos().get_board().piece_at(last_move.to())
+    };
+    let piece = sh
+        .pos()
+        .get_board()
+        .piece_at(bestmove.unwrap().from())
+        .unwrap();
+
+    //Quiet Histories
+    if let Some(m) = bestmove
+        && !m.is_capture()
+    {
+        //Update Continuation History
+        if last_move != Move::ZERO {
+            sh.history.continuation.register(
+                sh.pos().color(),
+                last_piece.unwrap(),
+                last_move,
+                piece,
+                m,
+                bonus,
+            );
+        }
+
+        //Update Butterfly History
+        sh.history
+            .quiet
+            .register(sh.pos().color(), bestmove.unwrap(), bonus);
+    } else if let Some(m) = bestmove {
+        let capture = if m.typ() == MoveType::Enpassant {
+            Piece::Pawn
+        } else {
+            sh.pos.get_board().piece_at(m.to()).unwrap()
+        };
+        let piece = if m.typ().is_promotion() {
+            Piece::Pawn
+        } else {
+            sh.pos.get_board().piece_at(m.from()).unwrap()
+        };
+        let bonus = 40 * depth.remaining() as i32 - 30;
+        sh.history.capture.register(piece, m, capture, bonus);
+    }
+
     let zh = sh.pos().zobrist_hash();
 
     if fail_low {
@@ -459,16 +522,42 @@ fn search_step<const IS_PV_NODE: bool>(
             zh,
             TTEntry::new(score.to_upperbound(), depth_left, zh, bestmove.unwrap()),
         );
-        for m in moves.iter().filter(|&m| !m.is_capture()) {
-            sh.history
-                .alpha_cutoff(sh.pos.color(), *m, depth.remaining());
+        for m in moves {
+            if Some(m) == bestmove {
+                continue;
+            }
+            if !m.is_capture() {
+                sh.history.alpha_cutoff(
+                    sh.pos().color(),
+                    last_move,
+                    last_piece,
+                    m,
+                    piece,
+                    depth.remaining(),
+                );
+            } else {
+                let capture = if m.typ() == MoveType::Enpassant {
+                    Piece::Pawn
+                } else {
+                    sh.pos.get_board().piece_at(m.to()).unwrap()
+                };
+                let piece = if m.typ().is_promotion() {
+                    Piece::Pawn
+                } else {
+                    sh.pos.get_board().piece_at(m.from()).unwrap()
+                };
+                let malus = 20 * depth.remaining() as i32 - 15;
+                sh.history.capture.register(piece, m, capture, -malus);
+            }
         }
         score.to_upperbound()
     } else {
+        //Write to TT
         sh.shared.tt.set(
             zh,
             TTEntry::new(score.to_exact(), depth_left, zh, bestmove.unwrap()),
         );
+
         score.to_exact()
     }
 }

@@ -823,6 +823,11 @@ impl Position {
         self.ply_info.pinned_pieces
     }
 
+    #[inline]
+    pub fn last_move(&self) -> Move {
+        self.ply_info.last_move
+    }
+
     //X-ray attacks.
     //We ignore en passant here! Attackers are sorted by value!
     pub fn see(&self, m: Move) -> i32 {
