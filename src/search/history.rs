@@ -99,8 +99,12 @@ impl KillerHistory {
         self.moves[d + 1].scores = [0; 2];
     }
 
-    pub fn get(&self, d: usize) -> &[Move; 2] {
-        &self.moves[d].moves
+    pub fn get(&self, d: usize) -> Move {
+        if self.moves[d].scores[0] >= self.moves[d].scores[1] {
+            self.moves[d].moves[0]
+        } else {
+            self.moves[d].moves[1]
+        }
     }
 }
 
