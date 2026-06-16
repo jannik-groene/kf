@@ -1,3 +1,5 @@
+#![allow(clippy::pedantic)]
+
 include!(concat!(env!("OUT_DIR"), "/constants.rs"));
 
 use crate::chess::{BitBoard, Color, File, Piece, Square};
