@@ -8,6 +8,7 @@ use super::history::History;
 enum MovePickingStage {
     TtMove,
     WinningCaptures,
+    Killers,
     Quiets,
     LosingCaptures,
     Finished,
@@ -22,6 +23,7 @@ pub struct MovePicker<'a> {
     moves: &'a mut MoveList,
     scores: Vec<i32>,
     ttmove: Option<Move>,
+    killer: Move,
     stage: MovePickingStage,
     idx: usize,
 }
@@ -35,12 +37,14 @@ impl<'a> MovePicker<'a> {
         ttmove: Option<Move>,
     ) -> Self {
         let mut scores = Self::score_captures(moves, pos, history);
-        Self::score_quiets(pos, &mut scores, d, moves, history);
+        Self::score_quiets(pos, &mut scores, moves, history);
+        let killer = history.killer.get(d as usize);
 
         MovePicker {
             moves,
             scores,
             ttmove,
+            killer,
             stage: MovePickingStage::TtMove,
             idx: 0,
         }
@@ -65,11 +69,9 @@ impl<'a> MovePicker<'a> {
     fn score_quiets(
         pos: &Position,
         scores: &mut [i32],
-        d: i16,
         movelist: &MoveList,
         history: &History,
     ) {
-        let killers = history.killer.get(d as usize);
         let last_move = pos.last_move();
         let last_piece = if last_move.typ().is_promotion() {
             Some(Piece::Pawn)
@@ -79,9 +81,6 @@ impl<'a> MovePicker<'a> {
         for (m, s) in movelist.iter().zip(scores.iter_mut()) {
             if !m.is_capture() {
                 *s += history.quiet.get_score(pos.color(), *m);
-                if *m == killers[0] || *m == killers[1] {
-                    *s += 10_000;
-                }
                 if let Some(p) = last_piece {
                     let piece = pos.get_board().piece_at(m.from()).unwrap();
                     *s += history
@@ -126,7 +125,23 @@ impl<'a> Iterator for MovePicker<'a> {
                     self.idx += 1;
                     Some(self.moves[self.idx - 1])
                 } else {
-                    self.stage = MovePickingStage::Quiets;
+                    self.stage = MovePickingStage::Killers;
+                    self.next()
+                }
+            }
+            MovePickingStage::Killers => {
+                self.stage = MovePickingStage::Quiets;
+                if let Some(idx) = self
+                    .moves
+                    .iter()
+                    .skip(self.idx)
+                    .position(|&m| m == self.killer)
+                {
+                    self.moves.swap(0, idx);
+                    self.scores.swap(0, idx);
+                    self.idx += 1;
+                    Some(self.killer)
+                } else {
                     self.next()
                 }
             }
