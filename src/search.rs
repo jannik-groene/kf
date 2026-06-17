@@ -231,6 +231,13 @@ fn search_step<const IS_PV_NODE: bool>(
     mut alpha: Eval,
     beta: Eval,
 ) -> Eval {
+    const QUIET_BASE_SCALE: i32 = 100;
+    const CONTINUATION_BASE_SCALE: i32 = 120;
+    const CAPTURE_BASE_SCALE: i32 = 140;
+    const QUIET_REDUCTION_SCALE: i32 = 256;
+    const CONTINUATION_REDUCTION_SCALE: i32 = 1536;
+    const CAPTURE_REDUCTION_SCALE: i32 = 256;
+
     if sh.shared.nodes.load(Ordering::Relaxed) & 0xff == 0
         && let Some(limit) = sh.time_manager.limit
         && sh.time_manager.start_time.elapsed() > limit
@@ -304,12 +311,13 @@ fn search_step<const IS_PV_NODE: bool>(
 
     //Calculate the depth we are still to search.
     let depth_left: u8 = depth.remaining().clamp(0, 255) as u8;
-    let eval = tteval.unwrap_or(sh.evaluate());
 
     //We extend the normal search if we are  in check, else go into quiescence
     if depth_left == 0 && !sh.pos_mut().in_check() {
         return quiesce(sh, alpha, beta, 200 - 20 * depth.reduction as i32);
     }
+
+    let eval = tteval.unwrap_or(sh.evaluate());
 
     //Futility pruning
     if !IS_PV_NODE
@@ -421,21 +429,17 @@ fn search_step<const IS_PV_NODE: bool>(
                 zh,
                 TTEntry::new(movescore.to_lowerbound(), depth_left, zh, m),
             );
+
+            let quiet_bonus = (QUIET_BASE_SCALE * (4 * depth_left as i32 - 3) / 4).min(QUIET_BASE_SCALE*8);
+            let cont_bonus = (CONTINUATION_BASE_SCALE * (4 * depth_left as i32 - 3) / 4).min(CONTINUATION_BASE_SCALE*8);
+            let cap_bonus = (CAPTURE_BASE_SCALE * (4 * depth_left as i32 - 3) / 4).min(CAPTURE_BASE_SCALE*8);
+
             if !m.is_capture() {
-                sh.history.beta_cutoff(sh.pos.color(), m, depth.remaining());
+                sh.update_quiet_history(m, quiet_bonus);
+                sh.update_continuation_history(m, cont_bonus);
+                sh.history.killer.register(m, depth.current as usize);
             } else {
-                let capture = if m.typ() == MoveType::Enpassant {
-                    Piece::Pawn
-                } else {
-                    sh.pos.get_board().piece_at(m.to()).unwrap()
-                };
-                let piece = if m.typ().is_promotion() {
-                    Piece::Pawn
-                } else {
-                    sh.pos.get_board().piece_at(m.from()).unwrap()
-                };
-                let bonus = 40 * depth.remaining() as i32 - 30;
-                sh.history.capture.register(piece, m, capture, bonus);
+                sh.update_capture_history(m, cap_bonus);
             }
             sh.history.killer.invalidate(depth.current as usize);
             return movescore.to_lowerbound();
@@ -465,91 +469,55 @@ fn search_step<const IS_PV_NODE: bool>(
     //reset the killer move counts for ply+1
     sh.history.killer.invalidate(depth.current as usize);
 
-    let bonus = 100 * depth.remaining() as i32 - 75;
+    let mut quiet_bonus = (QUIET_BASE_SCALE * (4 * depth_left as i32 - 3) / 4).min(QUIET_BASE_SCALE*8);
+    let mut cont_bonus = (CONTINUATION_BASE_SCALE * (4 * depth_left as i32 - 3) / 4).min(CONTINUATION_BASE_SCALE*8);
+    let mut cap_bonus = (CAPTURE_BASE_SCALE * (4 * depth_left as i32 - 3) / 4).min(CAPTURE_BASE_SCALE*8);
 
-    //Data for history updates
-    let last_move = sh.pos().last_move();
-    let last_piece = if last_move.typ().is_promotion() {
-        Some(Piece::Pawn)
-    } else {
-        sh.pos().get_board().piece_at(last_move.to())
-    };
-    let piece = sh
-        .pos()
-        .get_board()
-        .piece_at(bestmove.unwrap().from())
-        .unwrap();
-
+    if !fail_low {
+        quiet_bonus += 200;
+        cont_bonus += 200;
+        cap_bonus += 200;
+    }
     //Quiet Histories
     if let Some(m) = bestmove
         && !m.is_capture()
     {
-        //Update Continuation History
-        if last_move != Move::ZERO {
-            sh.history.continuation.register(
-                sh.pos().color(),
-                last_piece.unwrap(),
-                last_move,
-                piece,
-                m,
-                bonus,
-            );
-        }
-
-        //Update Butterfly History
-        sh.history
-            .quiet
-            .register(sh.pos().color(), bestmove.unwrap(), bonus);
+        //Update Quiet Histories
+        sh.update_continuation_history(m, quiet_bonus);
+        sh.update_quiet_history(m, cont_bonus);
     } else if let Some(m) = bestmove {
-        let capture = if m.typ() == MoveType::Enpassant {
-            Piece::Pawn
-        } else {
-            sh.pos.get_board().piece_at(m.to()).unwrap()
-        };
-        let piece = if m.typ().is_promotion() {
-            Piece::Pawn
-        } else {
-            sh.pos.get_board().piece_at(m.from()).unwrap()
-        };
-        let bonus = 40 * depth.remaining() as i32 - 30;
-        sh.history.capture.register(piece, m, capture, bonus);
+        sh.update_capture_history(m, cap_bonus);
     }
 
     let zh = sh.pos().zobrist_hash();
+
+    let mut quiet_malus = quiet_bonus * QUIET_REDUCTION_SCALE / 1024;
+    let mut cont_malus = cont_bonus * CONTINUATION_REDUCTION_SCALE / 1024;
+    let mut cap_malus = cap_bonus * CAPTURE_REDUCTION_SCALE / 1024;
+
+    if !fail_low {
+        quiet_malus /= 4;
+        cont_malus /= 4;
+        cap_malus /= 4;
+    }
+
+    for m in moves {
+        if Some(m) == bestmove && !fail_low {
+            continue;
+        }
+        if !m.is_capture() {
+            sh.update_quiet_history(m, -quiet_malus);
+            sh.update_continuation_history(m, -cont_malus);
+        } else {
+            sh.update_capture_history(m, -cap_malus);
+        }
+    }
 
     if fail_low {
         sh.shared.tt.set(
             zh,
             TTEntry::new(score.to_upperbound(), depth_left, zh, bestmove.unwrap()),
         );
-        for m in moves {
-            if Some(m) == bestmove {
-                continue;
-            }
-            if !m.is_capture() {
-                sh.history.alpha_cutoff(
-                    sh.pos().color(),
-                    last_move,
-                    last_piece,
-                    m,
-                    piece,
-                    depth.remaining(),
-                );
-            } else {
-                let capture = if m.typ() == MoveType::Enpassant {
-                    Piece::Pawn
-                } else {
-                    sh.pos.get_board().piece_at(m.to()).unwrap()
-                };
-                let piece = if m.typ().is_promotion() {
-                    Piece::Pawn
-                } else {
-                    sh.pos.get_board().piece_at(m.from()).unwrap()
-                };
-                let malus = 20 * depth.remaining() as i32 - 15;
-                sh.history.capture.register(piece, m, capture, -malus);
-            }
-        }
         score.to_upperbound()
     } else {
         //Write to TT

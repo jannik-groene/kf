@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use crate::{
-    chess::{Move, Position},
+    chess::{Move, Position, Piece},
     evaluate::{Eval, evaluate},
 };
 
@@ -100,18 +100,30 @@ impl SearchHead {
     pub fn evaluate(&mut self) -> Eval {
         evaluate(self.pos_mut())
     }
-    //    #[inline]
-    //    pub fn register_killer(&mut self, ply: u8, m: Move) {
-    //        self.killers.register(m, ply as usize);
-    //    }
-    //    #[inline]
-    //    pub fn get_killers(&self, ply: u8) -> &[Move; 2] {
-    //        self.killers.get(ply as usize)
-    //    }
-    //    #[inline]
-    //    pub fn invalidate_killers(&mut self, ply: u8) {
-    //        self.killers.invalidate(ply as usize);
-    //    }
+    #[inline]
+    pub fn update_quiet_history(&mut self, m: Move, bonus: i32) {
+        self.history.quiet.register(self.pos().color(), m, bonus);
+    }
+    #[inline]
+    pub fn update_continuation_history(&mut self, m: Move, bonus: i32) {
+        let last_move = self.pos().last_move();
+        if last_move == Move::ZERO {
+            return;
+        }
+        let last_piece = if m.typ().is_promotion() {
+            Piece::Pawn
+        } else {
+            self.pos().get_board().piece_at(last_move.to()).unwrap()
+        };
+        let p = self.pos().get_board().piece_at(m.from()).unwrap();
+        self.history.continuation.register(self.pos().color(), last_piece, last_move, p, m, bonus);
+    }
+    #[inline]
+    pub fn update_capture_history(&mut self, m: Move, bonus: i32) {
+        let cap = self.pos().get_board().piece_at(m.to()).unwrap_or(Piece::Pawn);
+        let p = self.pos().get_board().piece_at(m.from()).unwrap();
+        self.history.capture.register(p, m, cap, bonus);
+    }
 
     pub fn write_uci_info(&self, eval: Eval, depth: u8) {
         let nodes = self.shared.nodes.load(Ordering::Relaxed);

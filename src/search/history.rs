@@ -16,34 +16,6 @@ impl History {
             capture: CaptureHistory::new(),
         }
     }
-
-    #[inline]
-    pub fn beta_cutoff(&mut self, c: Color, m: Move, d: i16) {
-        if m.is_capture() {
-            return;
-        }
-        self.killer.register(m, d as usize);
-        self.quiet.register(c, m, (d as i32) * 100 - 75);
-    }
-
-    #[inline]
-    pub fn alpha_cutoff(
-        &mut self,
-        c: Color,
-        pm: Move,
-        pp: Option<Piece>,
-        m: Move,
-        p: Piece,
-        d: i16,
-    ) {
-        self.quiet.register(c, m, 20 * d as i32 - 15);
-        if pm != Move::ZERO
-            && let Some(lp) = pp
-        {
-            self.continuation
-                .register(c, lp, pm, p, m, 20 * d as i32 - 15);
-        }
-    }
 }
 
 #[derive(Copy, Clone)]
@@ -114,7 +86,7 @@ pub struct QuietHistory {
 }
 
 impl QuietHistory {
-    const MAX_BONUS: i32 = (1 << 14) - 1;
+    const MAX_BONUS: i32 = (1 << 14);
 
     pub fn new() -> Self {
         QuietHistory {
@@ -125,7 +97,7 @@ impl QuietHistory {
     pub fn register(&mut self, c: Color, m: Move, bonus: i32) {
         let bonus = bonus.clamp(-Self::MAX_BONUS, Self::MAX_BONUS);
         self.scores[c as usize][m.from() as usize][m.to() as usize] += (bonus
-            - self.scores[c as usize][m.from() as usize][m.to() as usize] as i32 * bonus.abs()
+            - (self.scores[c as usize][m.from() as usize][m.to() as usize] as i32 * bonus.abs())
                 / Self::MAX_BONUS)
             as i16;
     }
@@ -141,7 +113,7 @@ pub struct ContinuationHistory {
 }
 
 impl ContinuationHistory {
-    const MAX_BONUS: i32 = (1 << 14) - 1;
+    const MAX_BONUS: i32 = (1 << 14);
 
     pub fn new() -> Self {
         ContinuationHistory {
@@ -153,9 +125,9 @@ impl ContinuationHistory {
         let bonus = bonus.clamp(-Self::MAX_BONUS, Self::MAX_BONUS);
         self.scores[c as usize][p1 as usize][m1.to() as usize][p2 as usize][m2.to() as usize] +=
             (bonus
-                - self.scores[c as usize][p1 as usize][m1.to() as usize][p2 as usize]
+                - (self.scores[c as usize][p1 as usize][m1.to() as usize][p2 as usize]
                     [m2.to() as usize] as i32
-                    * bonus.abs()
+                    * bonus.abs())
                     / Self::MAX_BONUS) as i16;
     }
 
@@ -169,7 +141,7 @@ pub struct CaptureHistory {
 }
 
 impl CaptureHistory {
-    const MAX_BONUS: i32 = (1 << 13) - 1;
+    const MAX_BONUS: i32 = (1 << 13);
 
     pub fn new() -> Self {
         Self {
@@ -180,7 +152,7 @@ impl CaptureHistory {
     pub fn register(&mut self, piece: Piece, m: Move, capture: Piece, bonus: i32) {
         let bonus = bonus.clamp(-Self::MAX_BONUS, Self::MAX_BONUS);
         self.scores[piece as usize][m.to() as usize][capture as usize] += (bonus
-            - self.scores[piece as usize][m.to() as usize][capture as usize] as i32 * bonus.abs()
+            - (self.scores[piece as usize][m.to() as usize][capture as usize] as i32 * bonus.abs())
                 / Self::MAX_BONUS)
             as i16;
     }
