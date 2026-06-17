@@ -317,14 +317,24 @@ fn search_step<const IS_PV_NODE: bool>(
         return quiesce(sh, alpha, beta, 200 - 20 * depth.reduction as i32);
     }
 
+    // If we have a tt entry use its eval, else do static eval
     let eval = tteval.unwrap_or(sh.evaluate());
 
-    //Futility pruning
+    //Razoring
     if !IS_PV_NODE
-        && depth.target > 3
-        && ((depth_left == 1 && eval + 300 < alpha) || (depth_left == 2 && eval + 500 < alpha))
+        && eval + 300 + 200 * (depth_left as i32 * depth_left as i32) < alpha
     {
         return quiesce(sh, alpha, beta, 100);
+    }
+
+    //Reverse futility pruning
+    if !IS_PV_NODE 
+        && !sh.pos_mut().in_check() 
+        && eval >= beta + 200 * depth_left as i32 
+        && !matches!(eval.value(), Value::Mate(_))
+        && !matches!(beta.value(), Value::Mate(_))
+    {
+        return eval;
     }
 
     //Try a null move to find a beta cutoff; search the first three plys fully.
