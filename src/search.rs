@@ -321,16 +321,14 @@ fn search_step<const IS_PV_NODE: bool>(
     let eval = tteval.unwrap_or(sh.evaluate());
 
     //Razoring
-    if !IS_PV_NODE
-        && eval + 300 + 200 * (depth_left as i32 * depth_left as i32) < alpha
-    {
+    if !IS_PV_NODE && eval + 300 + 200 * (depth_left as i32 * depth_left as i32) < alpha {
         return quiesce(sh, alpha, beta, 100);
     }
 
     //Reverse futility pruning
-    if !IS_PV_NODE 
-        && !sh.pos_mut().in_check() 
-        && eval >= beta + 200 * depth_left as i32 
+    if !IS_PV_NODE
+        && !sh.pos_mut().in_check()
+        && eval >= beta + 200 * depth_left as i32
         && !matches!(eval.value(), Value::Mate(_))
         && !matches!(beta.value(), Value::Mate(_))
     {
@@ -440,9 +438,12 @@ fn search_step<const IS_PV_NODE: bool>(
                 TTEntry::new(movescore.to_lowerbound(), depth_left, zh, m),
             );
 
-            let quiet_bonus = (QUIET_BASE_SCALE * (4 * depth_left as i32 - 3) / 4).min(QUIET_BASE_SCALE*8);
-            let cont_bonus = (CONTINUATION_BASE_SCALE * (4 * depth_left as i32 - 3) / 4).min(CONTINUATION_BASE_SCALE*8);
-            let cap_bonus = (CAPTURE_BASE_SCALE * (4 * depth_left as i32 - 3) / 4).min(CAPTURE_BASE_SCALE*8);
+            let quiet_bonus =
+                (QUIET_BASE_SCALE * (4 * depth_left as i32 - 3) / 4).min(QUIET_BASE_SCALE * 8);
+            let cont_bonus = (CONTINUATION_BASE_SCALE * (4 * depth_left as i32 - 3) / 4)
+                .min(CONTINUATION_BASE_SCALE * 8);
+            let cap_bonus =
+                (CAPTURE_BASE_SCALE * (4 * depth_left as i32 - 3) / 4).min(CAPTURE_BASE_SCALE * 8);
 
             if !m.is_capture() {
                 sh.update_quiet_history(m, quiet_bonus);
@@ -479,9 +480,12 @@ fn search_step<const IS_PV_NODE: bool>(
     //reset the killer move counts for ply+1
     sh.history.killer.invalidate(depth.current as usize);
 
-    let mut quiet_bonus = (QUIET_BASE_SCALE * (4 * depth_left as i32 - 3) / 4).min(QUIET_BASE_SCALE*8);
-    let mut cont_bonus = (CONTINUATION_BASE_SCALE * (4 * depth_left as i32 - 3) / 4).min(CONTINUATION_BASE_SCALE*8);
-    let mut cap_bonus = (CAPTURE_BASE_SCALE * (4 * depth_left as i32 - 3) / 4).min(CAPTURE_BASE_SCALE*8);
+    let mut quiet_bonus =
+        (QUIET_BASE_SCALE * (4 * depth_left as i32 - 3) / 4).min(QUIET_BASE_SCALE * 8);
+    let mut cont_bonus = (CONTINUATION_BASE_SCALE * (4 * depth_left as i32 - 3) / 4)
+        .min(CONTINUATION_BASE_SCALE * 8);
+    let mut cap_bonus =
+        (CAPTURE_BASE_SCALE * (4 * depth_left as i32 - 3) / 4).min(CAPTURE_BASE_SCALE * 8);
 
     if !fail_low {
         quiet_bonus += 200;

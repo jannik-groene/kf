@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use crate::{
-    chess::{Move, Position, Piece},
+    chess::{Move, Piece, Position},
     evaluate::{Eval, evaluate},
 };
 
@@ -116,11 +116,17 @@ impl SearchHead {
             self.pos().get_board().piece_at(last_move.to()).unwrap()
         };
         let p = self.pos().get_board().piece_at(m.from()).unwrap();
-        self.history.continuation.register(self.pos().color(), last_piece, last_move, p, m, bonus);
+        self.history
+            .continuation
+            .register(self.pos().color(), last_piece, last_move, p, m, bonus);
     }
     #[inline]
     pub fn update_capture_history(&mut self, m: Move, bonus: i32) {
-        let cap = self.pos().get_board().piece_at(m.to()).unwrap_or(Piece::Pawn);
+        let cap = self
+            .pos()
+            .get_board()
+            .piece_at(m.to())
+            .unwrap_or(Piece::Pawn);
         let p = self.pos().get_board().piece_at(m.from()).unwrap();
         self.history.capture.register(p, m, cap, bonus);
     }

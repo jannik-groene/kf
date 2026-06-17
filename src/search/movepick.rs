@@ -66,12 +66,7 @@ impl<'a> MovePicker<'a> {
     }
 
     #[inline]
-    fn score_quiets(
-        pos: &Position,
-        scores: &mut [i32],
-        movelist: &MoveList,
-        history: &History,
-    ) {
+    fn score_quiets(pos: &Position, scores: &mut [i32], movelist: &MoveList, history: &History) {
         let last_move = pos.last_move();
         let last_piece = if last_move.typ().is_promotion() {
             Some(Piece::Pawn)
