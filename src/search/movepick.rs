@@ -26,6 +26,7 @@ pub struct MovePicker<'a> {
     killer: Move,
     stage: MovePickingStage,
     idx: usize,
+    cutoff: Option<i32>,
 }
 
 impl<'a> MovePicker<'a> {
@@ -35,6 +36,7 @@ impl<'a> MovePicker<'a> {
         d: i16,
         history: &History,
         ttmove: Option<Move>,
+        cutoff: Option<i32>,
     ) -> Self {
         let mut scores = Self::score_captures(moves, pos, history);
         Self::score_quiets(pos, &mut scores, moves, history);
@@ -47,6 +49,7 @@ impl<'a> MovePicker<'a> {
             killer,
             stage: MovePickingStage::TtMove,
             idx: 0,
+            cutoff,
         }
     }
 
@@ -107,12 +110,13 @@ impl<'a> Iterator for MovePicker<'a> {
                 }
             }
             MovePickingStage::WinningCaptures => {
+                let threshold = self.cutoff.unwrap_or(EVEN_THRESHOLD);
                 if let Some((i, _)) = self
                     .moves
                     .iter()
                     .enumerate()
                     .skip(self.idx)
-                    .filter(|(i, m)| m.is_capture() && self.scores[*i] >= EVEN_THRESHOLD)
+                    .filter(|(i, m)| m.is_capture() && self.scores[*i] >= threshold)
                     .max_by_key(|(i, _)| self.scores[*i])
                 {
                     self.moves.swap(self.idx, i);
@@ -120,6 +124,9 @@ impl<'a> Iterator for MovePicker<'a> {
                     self.idx += 1;
                     Some(self.moves[self.idx - 1])
                 } else {
+                    if self.cutoff.is_some() {
+                        return None;
+                    }
                     self.stage = MovePickingStage::Killers;
                     self.next()
                 }
@@ -191,7 +198,8 @@ mod tests {
         }
         let mut count = 0;
         let mut moves = pos.get_moves::<true>();
-        let picker = super::MovePicker::from_move_list(&mut moves, pos, 0, &History::new(), None);
+        let picker =
+            super::MovePicker::from_move_list(&mut moves, pos, 0, &History::new(), None, None);
         for m in picker {
             pos.do_move(m);
             count += perft_step(pos, depth - 1);

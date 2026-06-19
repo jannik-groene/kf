@@ -7,9 +7,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
+use crate::search::movepick::MovePicker;
 use crate::{
-    chess::{Color, Move, MoveType, Piece, Position},
-    constants::piece_value,
+    chess::{Color, Move, Piece, Position},
     evaluate::{Bound, Eval, Value, has_major_pieces, has_minor_pieces, is_material_draw},
 };
 use thread::{SearchHead, SearchResult, SharedData};
@@ -321,7 +321,7 @@ fn search_step<const IS_PV_NODE: bool>(
 
     //We extend the normal search if we are  in check, else go into quiescence
     if depth_left == 0 && !sh.pos_mut().in_check() {
-        return quiesce(sh, alpha, beta, 200 - 20 * depth.reduction as i32);
+        return quiesce(sh, alpha, beta, 0);
     }
 
     let static_eval = sh.evaluate();
@@ -409,6 +409,7 @@ fn search_step<const IS_PV_NODE: bool>(
         depth.current,
         &sh.history,
         ttmove,
+        None,
     );
 
     for (i, m) in move_picker.enumerate() {
@@ -586,6 +587,21 @@ fn quiesce(sh: &mut SearchHead, mut alpha: Eval, beta: Eval, delta: i32) -> Eval
         return Eval::DRAW;
     }
 
+    //Check if the move is already hashed
+    let hash_entry = sh.shared_data().tt.get(sh.pos().zobrist_hash());
+
+    let ttmove = hash_entry.and_then(|e| e.mov());
+    let tteval = hash_entry.map(|e| e.eval());
+
+    if let Some(eval) = tteval
+        && !matches!(eval.value(), Value::Mate(_))
+        && ((eval.bound() == Bound::Upper && eval < alpha)
+            || (eval.bound() == Bound::Lower && eval >= beta)
+            || eval.bound() == Bound::Exact)
+    {
+        return eval;
+    }
+
     //Search all evasions, else only captures.
     let mut cand_moves = if sh.pos_mut().in_check() {
         sh.pos_mut().get_moves::<true>()
@@ -609,51 +625,42 @@ fn quiesce(sh: &mut SearchHead, mut alpha: Eval, beta: Eval, delta: i32) -> Eval
             alpha = static_eval;
         }
 
-        cand_moves = cand_moves
-            .iter()
-            .copied()
-            .filter(|m| match m.typ() {
-                MoveType::Capture => {
-                    static_eval + sh.pos().see(*m) + delta > alpha && sh.pos().see(*m) > 0
-                }
-                MoveType::PromotionCaptureN
-                | MoveType::PromotionCaptureB
-                | MoveType::PromotionCaptureR
-                | MoveType::PromotionCaptureQ => true,
-                MoveType::Enpassant => static_eval + delta + 100 > alpha,
-                _ => false,
-            })
-            .collect();
         if cand_moves.is_empty() {
             return static_eval;
         }
-        cand_moves.sort_by_key(|m| -match m.typ() {
-            MoveType::Capture => sh.pos().see(*m),
-            MoveType::PromotionN => piece_value(Piece::Knight) - piece_value(Piece::Pawn),
-            MoveType::PromotionB => piece_value(Piece::Bishop) - piece_value(Piece::Pawn),
-            MoveType::PromotionR => piece_value(Piece::Rook) - piece_value(Piece::Pawn),
-            MoveType::PromotionQ => piece_value(Piece::Queen) - piece_value(Piece::Pawn),
-            MoveType::PromotionCaptureN => {
-                let q = sh.pos().get_board().piece_at(m.to()).unwrap();
-                piece_value(Piece::Knight) + piece_value(q) - piece_value(Piece::Pawn)
-            }
-            MoveType::PromotionCaptureB => {
-                let q = sh.pos().get_board().piece_at(m.to()).unwrap();
-                piece_value(Piece::Knight) + piece_value(q) - piece_value(Piece::Pawn)
-            }
-            MoveType::PromotionCaptureR => {
-                let q = sh.pos().get_board().piece_at(m.to()).unwrap();
-                piece_value(Piece::Knight) + piece_value(q) - piece_value(Piece::Pawn)
-            }
-            MoveType::PromotionCaptureQ => {
-                let q = sh.pos().get_board().piece_at(m.to()).unwrap();
-                piece_value(Piece::Knight) + piece_value(q) - piece_value(Piece::Pawn)
-            }
-            _ => 0,
-        });
     }
 
-    for m in cand_moves {
+    let val = match alpha.value() {
+        Value::Centis(n) => n,
+        Value::Mate(n) => {
+            if n % 2 == 0 {
+                i32::MIN
+            } else {
+                i32::MAX
+            }
+        }
+        Value::Infty => i32::MAX,
+        Value::NegInfty => i32::MIN,
+    } - if let Value::Centis(c) = static_eval.value() {
+        c
+    } else {
+        0
+    } - delta;
+
+    let cutoff = if !sh.pos.in_check() { Some(val) } else { None };
+
+    let move_picker =
+        MovePicker::from_move_list(&mut cand_moves, &sh.pos, 255, &sh.history, ttmove, cutoff);
+
+    let mut best_score = if !sh.pos.in_check() {
+        static_eval
+    } else {
+        Eval::MIN
+    };
+
+    alpha = alpha.max(best_score);
+
+    for (i, m) in move_picker.enumerate() {
         //stop if we receive the flag is set;
         if sh
             .shared_data()
@@ -661,19 +668,26 @@ fn quiesce(sh: &mut SearchHead, mut alpha: Eval, beta: Eval, delta: i32) -> Eval
             .load(std::sync::atomic::Ordering::Relaxed)
             .eq(&true)
         {
-            return alpha;
+            return Eval::DRAW;
+        }
+
+        if i >= 3 && !matches!(beta.value(), Value::Mate(_)) && !sh.pos.gives_check(&m) {
+            continue;
         }
 
         sh.do_move(m);
         //The deeper we are the more valuable captures need to be
-        let score = -quiesce(sh, -beta, -alpha, delta - 20);
+        let score = -quiesce(sh, beta.neg_down(), alpha.neg_down(), delta - 50);
         sh.undo_move();
 
         if score >= beta {
             return score.to_lowerbound();
-        } else if alpha < score {
-            alpha = score;
+        } else if best_score < score {
+            best_score = score;
+            if best_score > alpha {
+                alpha = best_score;
+            }
         }
     }
-    alpha
+    best_score
 }
