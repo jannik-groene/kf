@@ -88,6 +88,7 @@ impl UCIHandler for Engine {
     }
     fn handle_input(&mut self, s: String) {
         let tokens: Vec<&str> = s.split_whitespace().collect();
+        if tokens.is_empty() { return; }
         match tokens[0] {
             "uci" => self.handle_uci(),
             "debug" => self.handle_debug(tokens),
