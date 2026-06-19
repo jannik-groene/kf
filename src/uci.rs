@@ -28,11 +28,12 @@ struct TimeSpec {
 //Timer for execution. To achieve high precision we first sleep the thread to within a safetymargin
 //of the target and the spin until we reach the target time.
 fn time_limit(time: TimeSpec) -> Option<std::time::Duration> {
-    const SAFETY_DELTA: std::time::Duration = std::time::Duration::from_millis(10);
+    const SAFETY_DELTA: std::time::Duration = std::time::Duration::from_millis(2);
     //We play with increment
     let movetime = if let (Some(time), Some(inc)) = (time.ustime, time.usinc) {
         //We spend about 7% of the remaining time on each move.
-        std::time::Duration::from_millis(inc) + std::time::Duration::from_micros((time - inc) * 70)
+        std::time::Duration::from_millis(inc)
+            + std::time::Duration::from_micros((time - inc).clamp(0, u64::MAX) * 70)
     }
     //We play with time per x moves, we split evenly and spend a little more earlier
     else if let (Some(time), Some(togo)) = (time.ustime, time.movestogo) {
@@ -88,7 +89,9 @@ impl UCIHandler for Engine {
     }
     fn handle_input(&mut self, s: String) {
         let tokens: Vec<&str> = s.split_whitespace().collect();
-        if tokens.is_empty() { return; }
+        if tokens.is_empty() {
+            return;
+        }
         match tokens[0] {
             "uci" => self.handle_uci(),
             "debug" => self.handle_debug(tokens),
