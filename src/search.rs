@@ -78,6 +78,7 @@ struct Depth {
     pub current: i16,
     pub reduction: i16,
     pub extension: i16,
+    pub next_null: i16,
 }
 
 impl Depth {
@@ -87,6 +88,7 @@ impl Depth {
             current: 0,
             reduction: 0,
             extension: 0,
+            next_null: 0,
         }
     }
 
@@ -101,6 +103,11 @@ impl Depth {
 
     fn extend(mut self, extension: i16) -> Self {
         self.extension += extension;
+        self
+    }
+
+    fn next_null(mut self, null_depth: i16) -> Self {
+        self.next_null = null_depth;
         self
     }
 
@@ -177,7 +184,7 @@ fn iterative_deepening<const IS_MAIN: bool>(
         let mut fail_lows = 0;
         let mut eval;
         loop {
-            eval = search_step::<true>(search_head, Depth::new(d as i16), 0, alpha, beta);
+            eval = search_step::<true>(search_head, Depth::new(d as i16), alpha, beta, false);
 
             // Make sure we only ever update with values that are from a complete search
             if search_head.shared_data().stop_flag.load(Ordering::Acquire) {
@@ -227,9 +234,9 @@ fn iterative_deepening<const IS_MAIN: bool>(
 fn search_step<const IS_PV_NODE: bool>(
     sh: &mut SearchHead,
     mut depth: Depth,
-    null_moves: u8,
     mut alpha: Eval,
     beta: Eval,
+    cut_node: bool,
 ) -> Eval {
     const QUIET_BASE_SCALE: i32 = 100;
     const CONTINUATION_BASE_SCALE: i32 = 120;
@@ -317,8 +324,18 @@ fn search_step<const IS_PV_NODE: bool>(
         return quiesce(sh, alpha, beta, 200 - 20 * depth.reduction as i32);
     }
 
+    let static_eval = sh.evaluate();
     // If we have a tt entry use its eval, else do static eval
-    let eval = tteval.unwrap_or(sh.evaluate());
+    let eval = if let Some(v) = tteval
+        && (v.bound() == Bound::Exact
+            || v.bound() == Bound::Upper && v < static_eval
+            || v.bound() == Bound::Lower && v > static_eval)
+    {
+        v
+    } else {
+        static_eval
+    }
+    .to_exact();
 
     //Razoring
     if !IS_PV_NODE && eval + 300 + 200 * (depth_left as i32 * depth_left as i32) < alpha {
@@ -332,31 +349,48 @@ fn search_step<const IS_PV_NODE: bool>(
         && !matches!(eval.value(), Value::Mate(_))
         && !matches!(beta.value(), Value::Mate(_))
     {
-        return eval;
+        return eval.to_lowerbound();
     }
 
-    //Try a null move to find a beta cutoff; search the first three plys fully.
-    //Should maybe avoid in late game?
-    if !IS_PV_NODE
-        && null_moves < std::cmp::max(depth.target as u8 / 6 + 1, 2)
+    //Try a null move to find a beta cutoff; verify by re-searching
+    if !IS_PV_NODE // This should check for cut node, but that somehow loses ELO. Added bonus in
+                   // cutoff estimate instead for now.
+        && depth.next_null <= depth.current
         && (has_minor_pieces(sh.pos()) || has_major_pieces(sh.pos()))
         && !sh.pos_mut().in_check()
         && moves.len() > 2
-        && depth.current > 2
         && !matches!(alpha.value(), Value::Mate(_))
         && !matches!(beta.value(), Value::Mate(_))
+        && (!ttmove.is_some_and(|m| m.is_capture())
+            || !tteval.is_some_and(|e| e.bound() == Bound::Lower)
+            || sh
+                .pos
+                .board
+                .piece_at(ttmove.unwrap().to())
+                .is_some_and(|p| p != Piece::Pawn))
+        && eval >= beta + 50 - 20 * depth_left as i32 - 50 * cut_node as i32
     {
+        let reduction = 5 + (depth_left as i16 + cut_node as i16) / 4;
         sh.do_null_move();
         let null_score = -search_step::<false>(
             sh,
-            depth.reduce(3).next(),
-            null_moves + 1,
+            depth.reduce(reduction).next(),
             beta.neg_down(),
             alpha.neg_down(),
+            false,
         );
         sh.undo_null_move();
-        if null_score >= beta {
-            return null_score.to_lowerbound();
+        if null_score >= beta && !matches!(null_score.value(), Value::Mate(_)) {
+            if depth.next_null != 0 {
+                return null_score.to_lowerbound();
+            }
+
+            let ndepth = depth.next_null(depth.current + ((depth.remaining() - reduction) * 3 / 4));
+            let veri_score = search_step::<false>(sh, ndepth.reduce(reduction), alpha, beta, false);
+
+            if veri_score >= beta {
+                return null_score.to_lowerbound();
+            }
         }
     }
 
@@ -384,30 +418,24 @@ fn search_step<const IS_PV_NODE: bool>(
         sh.do_move(m);
 
         let mut movescore = if i == 0 && IS_PV_NODE {
-            -search_step::<true>(
-                sh,
-                depth.next(),
-                null_moves,
-                beta.neg_down(),
-                alpha.neg_down(),
-            )
+            -search_step::<true>(sh, depth.next(), beta.neg_down(), alpha.neg_down(), false)
         //Apply lmr at sufficiently high depths on non-PV nodes
         } else if !IS_PV_NODE && depth.current > 2 && !sh.pos_mut().in_check() && !m.is_tactical() {
             -search_step::<false>(
                 sh,
                 depth.reduce(lmr).next(),
-                null_moves,
                 beta.neg_down(),
                 alpha.neg_down(),
+                !cut_node,
             )
         //search late nodes in PV-nodes as zero windows
         } else {
             -search_step::<false>(
                 sh,
                 depth.reduce(lmr / 3).next(),
-                null_moves,
                 alpha.zero_window().neg_down(),
                 alpha.neg_down(),
+                !cut_node,
             )
         };
 
@@ -416,9 +444,9 @@ fn search_step<const IS_PV_NODE: bool>(
             movescore = -search_step::<true>(
                 sh,
                 depth.next(),
-                null_moves,
                 beta.neg_down(),
                 movescore.neg_down(),
+                false,
             );
         }
 
