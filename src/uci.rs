@@ -76,7 +76,6 @@ pub trait UCIHandler {
 
 impl UCIHandler for Engine {
     fn uci_loop(&mut self) {
-        //        println!("{}", std::mem::size_of::<Move>());
         let tx = self.get_sender();
         std::thread::spawn(|| read_input(tx));
         loop {
