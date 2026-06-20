@@ -134,7 +134,7 @@ impl UCIHandler for Engine {
     //You can't, but you can try..
     fn handle_register(&self) {}
     fn handle_ucinewgame(&mut self) {
-        self.reset_hash();
+        self.reset_all();
     }
     fn handle_position(&mut self, tokens: Vec<&str>) {
         let (offset, mut pos) = if tokens[1] == "startpos" {

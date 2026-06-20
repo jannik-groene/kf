@@ -1,49 +1,49 @@
 mod history;
 mod movepick;
 mod thread;
+mod threadpool;
 mod tt;
 
-use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::Ordering;
 
 use crate::search::movepick::MovePicker;
 use crate::{
     chess::{Color, Move, Piece, Position},
     evaluate::{Bound, Eval, Value, has_major_pieces, has_minor_pieces, is_material_draw},
 };
-use thread::{SearchHead, SearchResult, SharedData};
-use tt::{TTEntry, TranspositionTable};
+use thread::{SearchHead, SharedData};
+use threadpool::ThreadPool;
+use tt::TTEntry;
 
 use thread::TimeManager;
 
 pub struct SearchManager {
     pos: Position,
-    threads: usize,
+    threadpool: ThreadPool,
     shared: Arc<SharedData>,
 }
 
 impl SearchManager {
     pub fn new() -> SearchManager {
+        let shared = Arc::new(SharedData::new());
         SearchManager {
             pos: Position::new(),
-            threads: 1,
-            shared: Arc::new(SharedData::new()),
+            threadpool: ThreadPool::new(shared.clone(), 1),
+            shared,
         }
     }
     pub fn set_hash_size(&mut self, size: usize) {
         if self.shared.stop_flag.load(Ordering::Acquire) {
-            self.shared = Arc::new(SharedData {
-                nodes: AtomicU64::new(0),
-                tt: TranspositionTable::new(
-                    size * 1_000_000 / std::mem::size_of::<(TTEntry, TTEntry)>(),
-                ),
-                stop_flag: AtomicBool::new(true),
-            });
+            unsafe {
+                self.shared
+                    .tt
+                    .resize(size * 1_000_000 / std::mem::size_of::<(TTEntry, TTEntry)>());
+            }
         }
     }
     pub fn set_threads(&mut self, threads: usize) {
-        self.threads = threads;
+        self.threadpool.set_threads(threads);
     }
     pub fn set_position(&mut self, pos: Position) {
         self.pos = pos;
@@ -60,15 +60,16 @@ impl SearchManager {
     pub fn reset_hash(&mut self) {
         self.shared.tt.clear();
     }
+    pub fn reset_thread_data(&mut self) {
+        self.threadpool.reset_threads();
+    }
     pub fn root_position(&self) -> Position {
         self.pos.clone()
     }
 
     pub fn search(&mut self, target_depth: Option<u8>, time_limit: Option<std::time::Duration>) {
-        let pos = self.pos.clone();
-        let threads = self.threads;
-        let shared = self.shared.clone();
-        std::thread::spawn(move || start_searching(target_depth, time_limit, shared, pos, threads));
+        self.threadpool
+            .start_searching(&self.pos, target_depth, time_limit);
     }
 }
 
@@ -117,69 +118,11 @@ impl Depth {
     }
 }
 
-fn start_searching(
-    target_depth: Option<u8>,
-    time_limit: Option<std::time::Duration>,
-    shared: Arc<SharedData>,
-    pos: Position,
-    threads: usize,
-) {
-    let depth = target_depth.unwrap_or(u8::MAX);
-    let time_manager = TimeManager::new(std::time::Instant::now(), time_limit);
-
-    shared.stop_flag.store(false, Ordering::Release);
-    shared.nodes.store(0, Ordering::Release);
-
-    let mut search_head = SearchHead::new(pos.clone(), shared.clone(), time_manager);
-
-    let main_handle =
-        std::thread::spawn(move || iterative_deepening::<true>(&mut search_head, depth));
-
-    let mut helper_handles = Vec::new();
-
-    for _ in 1..threads {
-        let mut search_head = SearchHead::new(pos.clone(), shared.clone(), time_manager);
-
-        helper_handles.push(std::thread::spawn(move || {
-            iterative_deepening::<false>(&mut search_head, depth)
-        }));
-    }
-
-    let mut move_votes = Vec::new();
-
-    move_votes.push(main_handle.join().unwrap());
-
-    for handle in helper_handles {
-        move_votes.push(handle.join().unwrap());
-    }
-
-    let mut vote_map = HashMap::new();
-    for vote in move_votes.iter().filter_map(|&x| x) {
-        let weight = match vote.eval.value() {
-            Value::Centis(n) => n,
-            Value::Mate(n) => 10_000 - n,
-            _ => 0,
-        };
-        *vote_map.entry(vote.mv.compress()).or_insert(0) += vote.depth as i32 * weight;
-    }
-
-    if let Some((m, _)) = vote_map.iter().max_by(|(_, v), (_, v2)| v.cmp(v2))
-        && *m != 0
-    {
-        println!("bestmove {}", Move::decompress(*m).unwrap());
-    } else {
-        println!("bestmove (null)");
-    }
-}
-
-fn iterative_deepening<const IS_MAIN: bool>(
-    search_head: &mut SearchHead,
-    depth: u8,
-) -> Option<SearchResult> {
-    let depth = if IS_MAIN { depth } else { u8::MAX };
+fn iterative_deepening(id: usize, search_head: &mut SearchHead, depth: u8) {
+    let depth = if id == 0 { depth } else { u8::MAX };
     let mut alpha = Eval::MIN;
     let mut beta = Eval::MAX;
-    for d in 1..=depth {
+    'depth: for d in 1..=depth {
         let mut fail_highs = 0;
         let mut fail_lows = 0;
         let mut eval;
@@ -188,10 +131,10 @@ fn iterative_deepening<const IS_MAIN: bool>(
 
             // Make sure we only ever update with values that are from a complete search
             if search_head.shared_data().stop_flag.load(Ordering::Acquire) {
-                return search_head.result;
+                break 'depth;
             }
 
-            if IS_MAIN {
+            if id == 0 {
                 search_head.write_uci_info(eval, d);
             }
 
@@ -213,16 +156,15 @@ fn iterative_deepening<const IS_MAIN: bool>(
         }
 
         // register our newest vote for the best move
-        search_head.result = Some(SearchResult {
-            eval,
-            mv: search_head.pv[0],
-            depth: d,
-        });
+        let res =
+            (eval.pack_for_tt() << 24) ^ ((search_head.pv[0].compress() as u64) << 8) ^ d as u64;
+
+        search_head.shared.results[id].store(res, Ordering::Release);
     }
-    if IS_MAIN {
+    if id == 0 {
         search_head.shared.stop_flag.store(true, Ordering::Release);
+        search_head.write_best_move();
     }
-    search_head.result
 }
 
 //Parameters:

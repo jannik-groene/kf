@@ -162,8 +162,9 @@ impl Engine {
         let OptionValue::Spin(hash_size) = self.config.get_option("Hash").unwrap();
         self.search.set_hash_size(hash_size as usize);
     }
-    pub fn reset_hash(&mut self) {
+    pub fn reset_all(&mut self) {
         self.search.reset_hash();
+        self.search.reset_thread_data();
     }
     fn perft_step(pos: &mut Position, d: u8) -> usize {
         if d == 0 {

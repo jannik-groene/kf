@@ -29,6 +29,12 @@ impl TranspositionTable {
             }
         }
     }
+    // SAFETY: Make sure you have EXCLUSIVE access when resizing
+    pub unsafe fn resize(&self, size: usize) {
+        unsafe {
+            (&mut *self.hash.get()).resize(size, (TTEntry::UNCHECKED, TTEntry::UNCHECKED));
+        }
+    }
     #[inline]
     pub fn get(&self, zobrist_key: u64) -> Option<TTEntry> {
         if self.size == 0 {

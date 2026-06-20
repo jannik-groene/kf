@@ -1,10 +1,11 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use crate::{
     chess::{Move, Piece, Position},
-    evaluate::{Eval, evaluate},
+    evaluate::{Eval, Value, evaluate},
 };
 
 use super::history::History;
@@ -26,6 +27,7 @@ pub struct SharedData {
     pub nodes: AtomicU64,
     pub tt: TranspositionTable,
     pub stop_flag: AtomicBool,
+    pub results: [AtomicU64; 8],
 }
 
 unsafe impl Sync for SharedData {}
@@ -36,15 +38,18 @@ impl SharedData {
             nodes: AtomicU64::new(0),
             tt: TranspositionTable::new(2),
             stop_flag: AtomicBool::new(true),
+            results: [
+                AtomicU64::new(0),
+                AtomicU64::new(0),
+                AtomicU64::new(0),
+                AtomicU64::new(0),
+                AtomicU64::new(0),
+                AtomicU64::new(0),
+                AtomicU64::new(0),
+                AtomicU64::new(0),
+            ],
         }
     }
-}
-
-#[derive(Copy, Clone)]
-pub struct SearchResult {
-    pub eval: Eval,
-    pub mv: Move,
-    pub depth: u8,
 }
 
 pub struct SearchHead {
@@ -52,7 +57,6 @@ pub struct SearchHead {
     pub history: History,
     pub pv: [Move; 256],
     pub time_manager: TimeManager,
-    pub result: Option<SearchResult>,
     pub shared: Arc<SharedData>,
 }
 
@@ -63,7 +67,6 @@ impl SearchHead {
             history: History::new(),
             pv: [Move::ZERO; 256],
             time_manager,
-            result: None,
             shared,
         }
     }
@@ -160,5 +163,35 @@ impl SearchHead {
             }
         }
         println!();
+    }
+
+    pub fn write_best_move(&self) {
+        let mut vote_map = HashMap::new();
+        for vote in self.shared.results.iter().filter_map(|x| {
+            let res = x.load(Ordering::Acquire);
+            if res == 0 { None } else { Some(res) }
+        }) {
+            let mv = ((vote >> 8) & 0xffff) as u16;
+            let depth = vote & 0xff;
+            let eval = Eval::from_packed(vote >> 24);
+            let weight = match eval.value() {
+                Value::Centis(n) => n,
+                Value::Mate(n) => 10_000 - n,
+                _ => 0,
+            };
+            *vote_map.entry(mv).or_insert(0) += depth as i32 * weight;
+        }
+
+        if let Some((m, _)) = vote_map.iter().max_by(|(_, v), (_, v2)| v.cmp(v2))
+            && *m != 0
+        {
+            println!("bestmove {}", Move::decompress(*m).unwrap());
+        } else {
+            println!("bestmove (null)");
+        }
+        // Clear out results before next search
+        for res in self.shared.results.iter() {
+            res.store(0, Ordering::Release);
+        }
     }
 }
