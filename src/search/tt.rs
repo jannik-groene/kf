@@ -7,7 +7,6 @@ use std::cell::UnsafeCell;
 pub struct TranspositionTable {
     //We run with two buckets. One replace on depth, on always replace
     hash: UnsafeCell<Vec<(TTEntry, TTEntry)>>,
-    size: usize,
 }
 
 unsafe impl Send for TranspositionTable {}
@@ -18,7 +17,6 @@ impl TranspositionTable {
         let mut hash_vec = vec![(TTEntry::UNCHECKED, TTEntry::UNCHECKED); size];
         hash_vec.shrink_to_fit();
         TranspositionTable {
-            size,
             hash: UnsafeCell::new(hash_vec),
         }
     }
@@ -32,15 +30,16 @@ impl TranspositionTable {
     // SAFETY: Make sure you have EXCLUSIVE access when resizing
     pub unsafe fn resize(&self, size: usize) {
         unsafe {
-            (&mut *self.hash.get()).resize(size, (TTEntry::UNCHECKED, TTEntry::UNCHECKED));
+            *self.hash.get() = vec![(TTEntry::UNCHECKED, TTEntry::UNCHECKED); size];
         }
     }
     #[inline]
     pub fn get(&self, zobrist_key: u64) -> Option<TTEntry> {
-        if self.size == 0 {
+        let size = unsafe{ (*self.hash.get()).len() };
+        if size == 0 {
             return None;
         }
-        let entry = unsafe { (&*self.hash.get())[zobrist_key as usize % self.size] };
+        let entry = unsafe { (&*self.hash.get())[zobrist_key as usize % size] };
         if entry.0.zobrist_hash ^ entry.0.data == zobrist_key && entry.0.depth() != 0 {
             Some(entry.0)
         } else if entry.1.zobrist_hash ^ entry.1.data == zobrist_key && entry.1.depth() != 0 {
@@ -51,11 +50,12 @@ impl TranspositionTable {
     }
     #[inline]
     pub fn set(&self, zobrist_key: u64, entry: TTEntry) {
+        let size = unsafe{ (*self.hash.get()).len() };
         //do not commit invalid scores or low depths to the hashtable
-        if self.size == 0 || matches!(entry.eval().value(), Value::Infty | Value::NegInfty) {
+        if size == 0 || matches!(entry.eval().value(), Value::Infty | Value::NegInfty) {
             return;
         }
-        let hash_entry = unsafe { (&*self.hash.get())[zobrist_key as usize % self.size] };
+        let hash_entry = unsafe { (&*self.hash.get())[zobrist_key as usize % size] };
         //Mate scores may be seen as having infinite depth
         if (hash_entry.0.depth() < entry.depth()
             || (matches!(entry.eval().value(), Value::Mate(_))
@@ -65,11 +65,11 @@ impl TranspositionTable {
                 || hash_entry.0.eval().bound() != Bound::Exact)
         {
             unsafe {
-                (&mut *self.hash.get())[zobrist_key as usize % self.size].0 = entry;
+                (&mut *self.hash.get())[zobrist_key as usize % size].0 = entry;
             }
         } else {
             unsafe {
-                (&mut *self.hash.get())[zobrist_key as usize % self.size].1 = entry;
+                (&mut *self.hash.get())[zobrist_key as usize % size].1 = entry;
             }
         }
     }

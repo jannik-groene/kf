@@ -165,6 +165,7 @@ fn iterative_deepening(id: usize, search_head: &mut SearchHead, depth: u8) {
         search_head.shared.stop_flag.store(true, Ordering::Release);
         search_head.write_best_move();
     }
+    search_head.pv.fill(Move::ZERO);
 }
 
 //Parameters:
