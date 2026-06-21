@@ -181,13 +181,6 @@ fn search_step<const IS_PV_NODE: bool>(
     beta: Eval,
     cut_node: bool,
 ) -> Eval {
-    const QUIET_BASE_SCALE: i32 = 100;
-    const CONTINUATION_BASE_SCALE: i32 = 120;
-    const CAPTURE_BASE_SCALE: i32 = 140;
-    const QUIET_REDUCTION_SCALE: i32 = 256;
-    const CONTINUATION_REDUCTION_SCALE: i32 = 1536;
-    const CAPTURE_REDUCTION_SCALE: i32 = 256;
-
     if sh.shared.nodes.load(Ordering::Relaxed) & 0xff == 0
         && let Some(limit) = sh.time_manager.limit
         && sh.time_manager.start_time.elapsed() > limit
@@ -410,18 +403,14 @@ fn search_step<const IS_PV_NODE: bool>(
                 TTEntry::new(movescore.to_lowerbound(), depth_left, zh, m),
             );
 
-            let quiet_bonus =
-                (QUIET_BASE_SCALE * (4 * depth_left as i32 - 3) / 4).min(QUIET_BASE_SCALE * 8);
-            let cont_bonus = (CONTINUATION_BASE_SCALE * (4 * depth_left as i32 - 3) / 4)
-                .min(CONTINUATION_BASE_SCALE * 8);
-            let cap_bonus =
-                (CAPTURE_BASE_SCALE * (4 * depth_left as i32 - 3) / 4).min(CAPTURE_BASE_SCALE * 8);
-
             if !m.is_capture() {
+                let quiet_bonus = (100 * depth_left as i32 - 75).min(800);
+                let cont_bonus = (60 * depth_left as i32 - 45).min(480);
                 sh.update_quiet_history(m, quiet_bonus);
                 sh.update_continuation_history(m, cont_bonus);
                 sh.history.killer.register(m, depth.current as usize);
             } else {
+                let cap_bonus = (140 * depth_left as i32 - 105).min(1120);
                 sh.update_capture_history(m, cap_bonus);
             }
             sh.history.killer.invalidate(depth.current as usize);
@@ -452,18 +441,15 @@ fn search_step<const IS_PV_NODE: bool>(
     //reset the killer move counts for ply+1
     sh.history.killer.invalidate(depth.current as usize);
 
-    let mut quiet_bonus =
-        (QUIET_BASE_SCALE * (4 * depth_left as i32 - 3) / 4).min(QUIET_BASE_SCALE * 8);
-    let mut cont_bonus = (CONTINUATION_BASE_SCALE * (4 * depth_left as i32 - 3) / 4)
-        .min(CONTINUATION_BASE_SCALE * 8);
-    let mut cap_bonus =
-        (CAPTURE_BASE_SCALE * (4 * depth_left as i32 - 3) / 4).min(CAPTURE_BASE_SCALE * 8);
+    let quiet_bonus = (100 * depth_left as i32 - 75).min(800);
+    let quiet_malus = quiet_bonus / 4;
 
-    if !fail_low {
-        quiet_bonus += 200;
-        cont_bonus += 200;
-        cap_bonus += 200;
-    }
+    let cont_bonus = (60 * depth_left as i32 - 45).min(480);
+    let cont_malus = cont_bonus * 3 / 2;
+
+    let cap_bonus = (140 * depth_left as i32 - 105).min(1120);
+    let cap_malus = cap_bonus / 4;
+
     //Quiet Histories
     if let Some(m) = bestmove
         && !m.is_capture()
@@ -477,24 +463,15 @@ fn search_step<const IS_PV_NODE: bool>(
 
     let zh = sh.pos().zobrist_hash();
 
-    let mut quiet_malus = quiet_bonus * QUIET_REDUCTION_SCALE / 1024;
-    let mut cont_malus = cont_bonus * CONTINUATION_REDUCTION_SCALE / 1024;
-    let mut cap_malus = cap_bonus * CAPTURE_REDUCTION_SCALE / 1024;
-
-    if !fail_low {
-        quiet_malus /= 4;
-        cont_malus /= 4;
-        cap_malus /= 4;
-    }
-
     for m in moves {
-        if Some(m) == bestmove && !fail_low {
+        if Some(m) == bestmove {
             continue;
         }
-        if !m.is_capture() {
+        if !m.is_capture() && bestmove.is_some_and(|bm| !bm.is_capture()) {
+            // Only update quiet history if the best move is quiet
             sh.update_quiet_history(m, -quiet_malus);
             sh.update_continuation_history(m, -cont_malus);
-        } else {
+        } else if m.is_capture() {
             sh.update_capture_history(m, -cap_malus);
         }
     }

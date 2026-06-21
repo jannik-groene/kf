@@ -113,7 +113,7 @@ pub struct ContinuationHistory {
 }
 
 impl ContinuationHistory {
-    const MAX_BONUS: i32 = (1 << 14);
+    const MAX_BONUS: i32 = (1 << 15);
 
     pub fn new() -> Self {
         ContinuationHistory {
