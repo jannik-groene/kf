@@ -230,7 +230,16 @@ fn search_step<const IS_PV_NODE: bool>(
                     }
                 }
                 Bound::Lower => {
-                    if entry.eval() >= beta {
+                    if let Some(m) = ttmove && entry.eval() >= beta {
+                        if !m.is_capture() {
+                            let quiet_bonus = (100 * depth.remaining() as i32 - 75).min(800);
+                            let cont_bonus = (60 * depth.remaining() as i32 - 45).min(480);
+                            sh.update_quiet_history(m, quiet_bonus);
+                            sh.update_continuation_history(m, cont_bonus);
+                        } else {
+                            let cap_bonus = (140 * depth.remaining() as i32 - 105).min(1120);
+                            sh.update_capture_history(m, cap_bonus);
+                        }
                         return entry.eval();
                     }
                 }
