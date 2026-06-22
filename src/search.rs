@@ -317,6 +317,16 @@ fn search_step<const IS_PV_NODE: bool>(
     );
 
     for (i, m) in move_picker.enumerate() {
+        //LMP
+        if i > 3 + (depth * depth) as usize
+            && !m.is_capture()
+            && !sh.pos.in_check()
+            && !sh.pos.gives_check(&m)
+            && !matches!(beta.value(), Value::Mate(_))
+        {
+            continue;
+        }
+
         sh.do_move(m);
 
         let mut movescore = if i == 0 && IS_PV_NODE {
@@ -331,7 +341,7 @@ fn search_step<const IS_PV_NODE: bool>(
         //Apply lmr at sufficiently high depths
         } else if depth >= 2 && i > 0 {
             //lmr reduction depth
-            let mut reduction = 200 * (depth.ilog2() * (i+1).ilog2()) as i32;
+            let mut reduction = 200 * (depth.ilog2() * (i + 1).ilog2()) as i32;
             reduction += 900 * cut_node as i32;
             reduction += 1500 * !m.is_capture() as i32;
             reduction -= 1500 * IS_PV_NODE as i32;
@@ -361,7 +371,7 @@ fn search_step<const IS_PV_NODE: bool>(
             val
         // Reduce less otherwise
         } else {
-            let mut reduction = 100 * (depth.ilog2() * (i+1).ilog2()) as i32;
+            let mut reduction = 100 * (depth.ilog2() * (i + 1).ilog2()) as i32;
             reduction += 200 * cut_node as i32;
             reduction += 1000 * !m.is_capture() as i32;
             reduction -= 1000 * IS_PV_NODE as i32;
