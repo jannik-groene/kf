@@ -255,7 +255,7 @@ fn search_step<const IS_PV_NODE: bool>(
     //Try a null move to find a beta cutoff; verify by re-searching
     if !IS_PV_NODE // This should check for cut node, but that somehow loses ELO. Added bonus in
                    // cutoff estimate instead for now.
-        && sh.next_null <= depth
+        && sh.next_null <= ply as i32
         && (has_minor_pieces(sh.pos()) || has_major_pieces(sh.pos()))
         && !sh.pos_mut().in_check()
         && moves.len() > 2
@@ -274,7 +274,7 @@ fn search_step<const IS_PV_NODE: bool>(
         sh.do_null_move();
         let null_score = -search_step::<false>(
             sh,
-            depth - reduction - 1,
+            depth - reduction,
             ply + 1,
             beta.neg_down(),
             alpha.neg_down(),
@@ -282,12 +282,13 @@ fn search_step<const IS_PV_NODE: bool>(
         );
         sh.undo_null_move();
         if null_score >= beta && !matches!(null_score.value(), Value::Mate(_)) {
-            if sh.next_null != 0 {
+            if sh.next_null != 0 || depth < 8 {
                 return null_score.to_lowerbound();
             }
 
             sh.next_null = ply as i32 + ((depth - reduction) * 3 / 4);
             let veri_score = search_step::<false>(sh, depth - reduction, ply, alpha, beta, false);
+            sh.next_null = 0;
 
             if veri_score >= beta {
                 return null_score.to_lowerbound();
@@ -330,13 +331,10 @@ fn search_step<const IS_PV_NODE: bool>(
         //Apply lmr at sufficiently high depths
         } else if depth >= 2 && i > 0 {
             //lmr reduction depth
-            let mut reduction = 300 * depth.ilog2() as i32 + 900 * cut_node as i32;
-            if !m.is_capture() {
-                reduction += 1500;
-            }
-            if IS_PV_NODE {
-                reduction -= 1500;
-            }
+            let mut reduction = 200 * (depth.ilog2() * (i+1).ilog2()) as i32;
+            reduction += 900 * cut_node as i32;
+            reduction += 1500 * !m.is_capture() as i32;
+            reduction -= 1500 * IS_PV_NODE as i32;
             if cut_node && ttmove.is_none() {
                 reduction += 500
             }
@@ -363,13 +361,10 @@ fn search_step<const IS_PV_NODE: bool>(
             val
         // Reduce less otherwise
         } else {
-            let mut reduction = 100 * depth.ilog2() as i32 + 200 * cut_node as i32;
-            if !m.is_capture() {
-                reduction += 700;
-            }
-            if IS_PV_NODE {
-                reduction -= 1000;
-            }
+            let mut reduction = 100 * (depth.ilog2() * (i+1).ilog2()) as i32;
+            reduction += 200 * cut_node as i32;
+            reduction += 1000 * !m.is_capture() as i32;
+            reduction -= 1000 * IS_PV_NODE as i32;
             if Some(m) == ttmove {
                 reduction -= 1000;
             } else if cut_node && ttmove.is_none() {
@@ -378,7 +373,7 @@ fn search_step<const IS_PV_NODE: bool>(
 
             -search_step::<false>(
                 sh,
-                depth - (reduction / 1024).clamp(0, 1) - 1,
+                depth - (reduction / 2048).clamp(0, 2) - 1,
                 ply + 1,
                 alpha.zero_window().neg_down(),
                 alpha.neg_down(),

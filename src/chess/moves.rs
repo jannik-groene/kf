@@ -219,6 +219,7 @@ impl Move {
         }
     }
 
+    #[allow(dead_code)]
     pub fn is_tactical(&self) -> bool {
         self.typ() == MoveType::Capture || self.typ().is_promotion()
     }
