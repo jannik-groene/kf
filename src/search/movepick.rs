@@ -33,14 +33,18 @@ impl<'a> MovePicker<'a> {
     pub fn from_move_list(
         moves: &'a mut MoveList,
         pos: &Position,
-        d: i16,
+        d: i32,
         history: &History,
         ttmove: Option<Move>,
         cutoff: Option<i32>,
     ) -> Self {
         let mut scores = Self::score_captures(moves, pos, history);
         Self::score_quiets(pos, &mut scores, moves, history);
-        let killer = history.killer.get(d as usize);
+        let killer = if (0..=255).contains(&d) {
+            history.killer.get(d as usize)
+        } else {
+            Move::ZERO
+        };
 
         MovePicker {
             moves,

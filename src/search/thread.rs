@@ -58,6 +58,7 @@ pub struct SearchHead {
     pub pv: [Move; 256],
     pub time_manager: TimeManager,
     pub shared: Arc<SharedData>,
+    pub next_null: i32,
 }
 
 impl SearchHead {
@@ -68,6 +69,7 @@ impl SearchHead {
             pv: [Move::ZERO; 256],
             time_manager,
             shared,
+            next_null: 0,
         }
     }
     #[inline]

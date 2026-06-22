@@ -73,51 +73,6 @@ impl SearchManager {
     }
 }
 
-#[derive(Copy, Clone)]
-struct Depth {
-    pub target: i16,
-    pub current: i16,
-    pub reduction: i16,
-    pub extension: i16,
-    pub next_null: i16,
-}
-
-impl Depth {
-    fn new(target: i16) -> Self {
-        Self {
-            target,
-            current: 0,
-            reduction: 0,
-            extension: 0,
-            next_null: 0,
-        }
-    }
-
-    fn remaining(&self) -> i16 {
-        self.target + self.extension - self.current - self.reduction
-    }
-
-    fn reduce(mut self, reduction: i16) -> Self {
-        self.reduction += reduction;
-        self
-    }
-
-    fn extend(mut self, extension: i16) -> Self {
-        self.extension += extension;
-        self
-    }
-
-    fn next_null(mut self, null_depth: i16) -> Self {
-        self.next_null = null_depth;
-        self
-    }
-
-    fn next(mut self) -> Self {
-        self.current += 1;
-        self
-    }
-}
-
 fn iterative_deepening(id: usize, search_head: &mut SearchHead, depth: u8) {
     let depth = if id == 0 { depth } else { u8::MAX };
     let mut alpha = Eval::MIN;
@@ -127,7 +82,7 @@ fn iterative_deepening(id: usize, search_head: &mut SearchHead, depth: u8) {
         let mut fail_lows = 0;
         let mut eval;
         loop {
-            eval = search_step::<true>(search_head, Depth::new(d as i16), alpha, beta, false);
+            eval = search_step::<true>(search_head, d as i32, 0, alpha, beta, false);
 
             // Make sure we only ever update with values that are from a complete search
             if search_head.shared_data().stop_flag.load(Ordering::Acquire) {
@@ -176,7 +131,8 @@ fn iterative_deepening(id: usize, search_head: &mut SearchHead, depth: u8) {
 // beta: the beta of the current ab search
 fn search_step<const IS_PV_NODE: bool>(
     sh: &mut SearchHead,
-    mut depth: Depth,
+    depth: i32,
+    ply: usize,
     mut alpha: Eval,
     beta: Eval,
     cut_node: bool,
@@ -204,8 +160,8 @@ fn search_step<const IS_PV_NODE: bool>(
         return Eval::mate_in(1).to_upperbound();
     }
 
-    if IS_PV_NODE && depth.current <= 255 {
-        sh.pv[depth.current as usize] = Move::ZERO;
+    if IS_PV_NODE && ply <= 255 {
+        sh.pv[ply] = Move::ZERO;
     }
 
     //Check if the move is already hashed
@@ -222,22 +178,24 @@ fn search_step<const IS_PV_NODE: bool>(
         let repetition = sh.pos.will_repeat(ttmove.unwrap());
 
         //see if we have a TT-hit
-        if entry.depth() as i16 >= depth.remaining() && !repetition && !IS_PV_NODE {
+        if entry.depth() as i32 >= depth && !repetition && !IS_PV_NODE {
             match entry.eval().bound() {
                 Bound::Exact => {
-                    if depth.current > 0 {
+                    if ply > 0 {
                         return entry.eval();
                     }
                 }
                 Bound::Lower => {
-                    if let Some(m) = ttmove && entry.eval() >= beta {
+                    if let Some(m) = ttmove
+                        && entry.eval() >= beta
+                    {
                         if !m.is_capture() {
-                            let quiet_bonus = (100 * depth.remaining() as i32 - 75).min(800);
-                            let cont_bonus = (60 * depth.remaining() as i32 - 45).min(480);
+                            let quiet_bonus = (100 * depth - 75).min(800);
+                            let cont_bonus = (60 * depth - 45).min(480);
                             sh.update_quiet_history(m, quiet_bonus);
                             sh.update_continuation_history(m, cont_bonus);
                         } else {
-                            let cap_bonus = (140 * depth.remaining() as i32 - 105).min(1120);
+                            let cap_bonus = (140 * depth - 105).min(1120);
                             sh.update_capture_history(m, cap_bonus);
                         }
                         return entry.eval();
@@ -261,11 +219,8 @@ fn search_step<const IS_PV_NODE: bool>(
         return Eval::STALEMATE;
     }
 
-    //Calculate the depth we are still to search.
-    let depth_left: u8 = depth.remaining().clamp(0, 255) as u8;
-
     //We extend the normal search if we are  in check, else go into quiescence
-    if depth_left == 0 && !sh.pos_mut().in_check() {
+    if depth <= 0 {
         return quiesce(sh, alpha, beta, 0);
     }
 
@@ -283,14 +238,14 @@ fn search_step<const IS_PV_NODE: bool>(
     .to_exact();
 
     //Razoring
-    if !IS_PV_NODE && eval + 300 + 200 * (depth_left as i32 * depth_left as i32) < alpha {
+    if !IS_PV_NODE && eval + 300 + 200 * (depth * depth) < alpha {
         return quiesce(sh, alpha, beta, 100);
     }
 
     //Reverse futility pruning
     if !IS_PV_NODE
         && !sh.pos_mut().in_check()
-        && eval >= beta + 200 * depth_left as i32
+        && eval >= beta + 200 * depth
         && !matches!(eval.value(), Value::Mate(_))
         && !matches!(beta.value(), Value::Mate(_))
     {
@@ -300,7 +255,7 @@ fn search_step<const IS_PV_NODE: bool>(
     //Try a null move to find a beta cutoff; verify by re-searching
     if !IS_PV_NODE // This should check for cut node, but that somehow loses ELO. Added bonus in
                    // cutoff estimate instead for now.
-        && depth.next_null <= depth.current
+        && sh.next_null <= depth
         && (has_minor_pieces(sh.pos()) || has_major_pieces(sh.pos()))
         && !sh.pos_mut().in_check()
         && moves.len() > 2
@@ -313,25 +268,26 @@ fn search_step<const IS_PV_NODE: bool>(
                 .board
                 .piece_at(ttmove.unwrap().to())
                 .is_some_and(|p| p != Piece::Pawn))
-        && eval >= beta + 50 - 20 * depth_left as i32 - 50 * cut_node as i32
+        && eval >= beta + 50 - 20 * depth - 50 * cut_node as i32
     {
-        let reduction = 5 + (depth_left as i16 + cut_node as i16) / 4;
+        let reduction = 5 + (depth + cut_node as i32) / 4;
         sh.do_null_move();
         let null_score = -search_step::<false>(
             sh,
-            depth.reduce(reduction).next(),
+            depth - reduction - 1,
+            ply + 1,
             beta.neg_down(),
             alpha.neg_down(),
             false,
         );
         sh.undo_null_move();
         if null_score >= beta && !matches!(null_score.value(), Value::Mate(_)) {
-            if depth.next_null != 0 {
+            if sh.next_null != 0 {
                 return null_score.to_lowerbound();
             }
 
-            let ndepth = depth.next_null(depth.current + ((depth.remaining() - reduction) * 3 / 4));
-            let veri_score = search_step::<false>(sh, ndepth.reduce(reduction), alpha, beta, false);
+            sh.next_null = ply as i32 + ((depth - reduction) * 3 / 4);
+            let veri_score = search_step::<false>(sh, depth - reduction, ply, alpha, beta, false);
 
             if veri_score >= beta {
                 return null_score.to_lowerbound();
@@ -344,41 +300,86 @@ fn search_step<const IS_PV_NODE: bool>(
     let mut fail_low = true;
     let mut bestmove = None;
 
+    let mut extension = 0;
+
     if moves.len() == 1 {
-        depth = depth.extend(1);
+        extension += 1;
     }
 
     let move_picker = movepick::MovePicker::from_move_list(
         &mut moves,
         sh.pos(),
-        depth.current,
+        depth,
         &sh.history,
         ttmove,
         None,
     );
 
     for (i, m) in move_picker.enumerate() {
-        //lmr reduction depth
-        let lmr = ((depth_left as f32).sqrt() * (i as f32).sqrt() / 5.) as i16;
-
         sh.do_move(m);
 
         let mut movescore = if i == 0 && IS_PV_NODE {
-            -search_step::<true>(sh, depth.next(), beta.neg_down(), alpha.neg_down(), false)
-        //Apply lmr at sufficiently high depths on non-PV nodes
-        } else if !IS_PV_NODE && depth.current > 2 && !sh.pos_mut().in_check() && !m.is_tactical() {
-            -search_step::<false>(
+            -search_step::<true>(
                 sh,
-                depth.reduce(lmr).next(),
+                depth + extension - 1,
+                ply + 1,
                 beta.neg_down(),
                 alpha.neg_down(),
-                !cut_node,
+                false,
             )
-        //search late nodes in PV-nodes as zero windows
+        //Apply lmr at sufficiently high depths
+        } else if depth >= 2 && i > 0 {
+            //lmr reduction depth
+            let mut reduction = 300 * depth.ilog2() as i32 + 900 * cut_node as i32;
+            if !m.is_capture() {
+                reduction += 1500;
+            }
+            if IS_PV_NODE {
+                reduction -= 1500;
+            }
+            if cut_node && ttmove.is_none() {
+                reduction += 500
+            }
+
+            let mut val = -search_step::<false>(
+                sh,
+                (depth - reduction / 1024 - 1).max(1),
+                ply + 1,
+                alpha.zero_window().neg_down(),
+                alpha.neg_down(),
+                !cut_node,
+            );
+            // Verify on fail high
+            if val > alpha {
+                val = -search_step::<false>(
+                    sh,
+                    depth - 1,
+                    ply + 1,
+                    alpha.zero_window().neg_down(),
+                    alpha.neg_down(),
+                    !cut_node,
+                );
+            }
+            val
+        // Reduce less otherwise
         } else {
+            let mut reduction = 100 * depth.ilog2() as i32 + 200 * cut_node as i32;
+            if !m.is_capture() {
+                reduction += 700;
+            }
+            if IS_PV_NODE {
+                reduction -= 1000;
+            }
+            if Some(m) == ttmove {
+                reduction -= 1000;
+            } else if cut_node && ttmove.is_none() {
+                reduction += 300
+            }
+
             -search_step::<false>(
                 sh,
-                depth.reduce(lmr / 3).next(),
+                depth - (reduction / 1024).clamp(0, 1) - 1,
+                ply + 1,
                 alpha.zero_window().neg_down(),
                 alpha.neg_down(),
                 !cut_node,
@@ -386,12 +387,13 @@ fn search_step<const IS_PV_NODE: bool>(
         };
 
         //Research if we failed high in a PV node
-        if IS_PV_NODE && i != 0 && movescore > alpha && movescore < beta {
+        if IS_PV_NODE && i != 0 && movescore > alpha {
             movescore = -search_step::<true>(
                 sh,
-                depth.next(),
+                depth + extension - 1,
+                ply + 1,
                 beta.neg_down(),
-                movescore.neg_down(),
+                alpha.neg_down(),
                 false,
             );
         }
@@ -409,20 +411,20 @@ fn search_step<const IS_PV_NODE: bool>(
 
             sh.shared.tt.set(
                 zh,
-                TTEntry::new(movescore.to_lowerbound(), depth_left, zh, m),
+                TTEntry::new(movescore.to_lowerbound(), depth.clamp(0, 255) as u8, zh, m),
             );
 
             if !m.is_capture() {
-                let quiet_bonus = (100 * depth_left as i32 - 75).min(800);
-                let cont_bonus = (60 * depth_left as i32 - 45).min(480);
+                let quiet_bonus = (100 * depth - 75).min(800);
+                let cont_bonus = (60 * depth - 45).min(480);
                 sh.update_quiet_history(m, quiet_bonus);
                 sh.update_continuation_history(m, cont_bonus);
-                sh.history.killer.register(m, depth.current as usize);
+                sh.history.killer.register(m, ply);
             } else {
-                let cap_bonus = (140 * depth_left as i32 - 105).min(1120);
+                let cap_bonus = (140 * depth - 105).min(1120);
                 sh.update_capture_history(m, cap_bonus);
             }
-            sh.history.killer.invalidate(depth.current as usize);
+            sh.history.killer.invalidate(ply);
             return movescore.to_lowerbound();
         }
 
@@ -443,20 +445,20 @@ fn search_step<const IS_PV_NODE: bool>(
     assert!(bestmove.is_some());
     assert!(Eval::MIN < score && score < Eval::MAX);
 
-    if IS_PV_NODE && depth.current <= 255 {
-        sh.pv[depth.current as usize] = bestmove.unwrap();
+    if IS_PV_NODE && ply <= 255 {
+        sh.pv[ply] = bestmove.unwrap();
     }
 
     //reset the killer move counts for ply+1
-    sh.history.killer.invalidate(depth.current as usize);
+    sh.history.killer.invalidate(ply);
 
-    let quiet_bonus = (100 * depth_left as i32 - 75).min(800);
+    let quiet_bonus = (100 * depth - 75).min(800);
     let quiet_malus = quiet_bonus / 4;
 
-    let cont_bonus = (60 * depth_left as i32 - 45).min(480);
+    let cont_bonus = (60 * depth - 45).min(480);
     let cont_malus = cont_bonus * 3 / 2;
 
-    let cap_bonus = (140 * depth_left as i32 - 105).min(1120);
+    let cap_bonus = (140 * depth - 105).min(1120);
     let cap_malus = cap_bonus / 4;
 
     //Quiet Histories
@@ -488,14 +490,24 @@ fn search_step<const IS_PV_NODE: bool>(
     if fail_low {
         sh.shared.tt.set(
             zh,
-            TTEntry::new(score.to_upperbound(), depth_left, zh, bestmove.unwrap()),
+            TTEntry::new(
+                score.to_upperbound(),
+                depth.clamp(0, 255) as u8,
+                zh,
+                bestmove.unwrap(),
+            ),
         );
         score.to_upperbound()
     } else {
         //Write to TT
         sh.shared.tt.set(
             zh,
-            TTEntry::new(score.to_exact(), depth_left, zh, bestmove.unwrap()),
+            TTEntry::new(
+                score.to_exact(),
+                depth.clamp(0, 255) as u8,
+                zh,
+                bestmove.unwrap(),
+            ),
         );
 
         score.to_exact()
