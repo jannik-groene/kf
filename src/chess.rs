@@ -970,13 +970,13 @@ fn simple_sse() {
 fn compress_and_decompress_move() {
     let m = Move::new(Square::A1, Square::B1, MoveType::Normal);
     let m2 = Move::decompress(m.compress());
-    assert!(m == m2.unwrap());
+    assert!(m == m2);
 
     let m = Move::new(Square::G7, Square::H8, MoveType::PromotionCaptureB);
     let m2 = Move::decompress(m.compress());
-    assert!(m == m2.unwrap());
+    assert!(m == m2);
 
     let m = Move::new(Square::G7, Square::H8, MoveType::Capture);
     let m2 = Move::decompress(m.compress());
-    assert!(m == m2.unwrap());
+    assert!(m == m2);
 }
