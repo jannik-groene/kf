@@ -111,8 +111,9 @@ fn iterative_deepening(id: usize, search_head: &mut SearchHead, depth: u8) {
         }
 
         // register our newest vote for the best move
-        let res =
-            (eval.pack_for_tt() << 24) ^ (u64::from(search_head.pv[0].compress()) << 8) ^ u64::from(d);
+        let res = (eval.pack_for_tt() << 24)
+            ^ (u64::from(search_head.pv[0].compress()) << 8)
+            ^ u64::from(d);
 
         search_head.shared.results[id].store(res, Ordering::Release);
     }
@@ -317,16 +318,26 @@ fn search_step<const IS_PV_NODE: bool>(
     );
 
     for (i, m) in move_picker.enumerate() {
-        //LMP
-        if i > 3 + (depth * depth) as usize
-            && ply > 0
+        //Quiet Pruning
+        if ply > 0
             && !m.is_capture()
             && !sh.pos.in_check()
             && !sh.pos.gives_check(m)
             && !matches!(beta.value(), Value::Mate(_))
             && !matches!(score.value(), Value::Mate(_))
         {
-            continue;
+            //LMP
+            if i > 3 + (depth * depth) as usize {
+                continue;
+            }
+
+            //Futility Pruning
+            if eval + 70 * depth <= alpha && depth < 7 && bestmove.is_some() && !IS_PV_NODE {
+                if score < eval + 70 * depth && !matches!(score.value(), Value::Mate(_)) {
+                    score = eval + 70 * depth
+                }
+                continue;
+            }
         }
 
         sh.do_move(m);
@@ -595,7 +606,7 @@ fn quiesce(sh: &mut SearchHead, mut alpha: Eval, beta: Eval, delta: i32) -> Eval
         0
     } - delta;
 
-    let cutoff = if sh.pos.in_check() { None } else {  Some(val) };
+    let cutoff = if sh.pos.in_check() { None } else { Some(val) };
 
     let move_picker =
         MovePicker::from_move_list(&mut cand_moves, &sh.pos, 255, &sh.history, ttmove, cutoff);
