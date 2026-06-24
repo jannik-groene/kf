@@ -107,9 +107,11 @@ impl QuietHistory {
     }
 }
 
+type PieceTo<T> = [[T; 64]; 6];
+
 pub struct ContinuationHistory {
     // scores[color][piece][to][piece][to]
-    scores: Box<[[[[[i16; 64]; 6]; 64]; 6]; 2]>,
+    scores: Box<[PieceTo<PieceTo<i16>>; 2]>,
 }
 
 impl ContinuationHistory {
