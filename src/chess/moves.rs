@@ -89,25 +89,25 @@ impl Move {
     }
 
     #[inline(always)]
-    pub fn from(&self) -> Square {
+    pub fn from(self) -> Square {
         (self.data & 0b111111).into()
     }
 
     #[inline(always)]
-    pub fn to(&self) -> Square {
+    pub fn to(self) -> Square {
         ((self.data >> 6) & 0b111111).into()
     }
 
     #[inline(always)]
-    pub fn typ(&self) -> MoveType {
+    pub fn typ(self) -> MoveType {
         unsafe { std::mem::transmute((self.data >> 12) as u8) }
     }
 
-    pub fn decompress(m: u16) -> Option<Move> {
-        Some(Move { data: m })
+    pub fn decompress(m: u16) -> Move {
+        Move { data: m }
     }
 
-    pub fn compress(&self) -> u16 {
+    pub fn compress(self) -> u16 {
         self.data
     }
 
@@ -115,7 +115,7 @@ impl Move {
     //This does not include castling and enpassant numbers, since these depend on the total state
     //of the position.
     #[inline]
-    pub fn zobrist(&self, board: &Board, c: Color) -> u64 {
+    pub fn zobrist(self, board: &Board, c: Color) -> u64 {
         match self.typ() {
             MoveType::Castle => match self.to() {
                 Square::C1 => {
@@ -220,11 +220,11 @@ impl Move {
     }
 
     #[allow(dead_code)]
-    pub fn is_tactical(&self) -> bool {
+    pub fn is_tactical(self) -> bool {
         self.typ() == MoveType::Capture || self.typ().is_promotion()
     }
 
-    pub fn is_capture(&self) -> bool {
+    pub fn is_capture(self) -> bool {
         matches!(
             self.typ(),
             MoveType::Capture
@@ -298,11 +298,11 @@ fn determine_move_type(
 
 impl fmt::Display for Move {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}{}{}", self.from(), self.to(), display_promotion(self))
+        write!(f, "{}{}{}", self.from(), self.to(), display_promotion(*self))
     }
 }
 
-fn display_promotion(m: &Move) -> String {
+fn display_promotion(m: Move) -> String {
     match m.typ() {
         MoveType::PromotionQ => "q".to_string(),
         MoveType::PromotionR => "r".to_string(),

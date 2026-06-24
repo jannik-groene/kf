@@ -141,7 +141,7 @@ impl SearchHead {
         print!(
             "info nodes {} nps {}",
             nodes,
-            1000 * nodes as u128
+            1000 * u128::from(nodes)
                 / self
                     .time_manager
                     .start_time
@@ -157,11 +157,11 @@ impl SearchHead {
         );
         if self.pv[0].compress() != 0 {
             print!(" pv");
-            for m in self.pv.iter() {
+            for m in &self.pv {
                 if m.compress() == 0 {
                     break;
                 }
-                print!(" {}", m);
+                print!(" {m}");
             }
         }
         println!();
@@ -187,12 +187,12 @@ impl SearchHead {
         if let Some((m, _)) = vote_map.iter().max_by(|(_, v), (_, v2)| v.cmp(v2))
             && *m != 0
         {
-            println!("bestmove {}", Move::decompress(*m).unwrap());
+            println!("bestmove {}", Move::decompress(*m));
         } else {
             println!("bestmove (null)");
         }
         // Clear out results before next search
-        for res in self.shared.results.iter() {
+        for res in &self.shared.results {
             res.store(0, Ordering::Release);
         }
     }

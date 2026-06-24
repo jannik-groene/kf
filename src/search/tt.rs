@@ -87,13 +87,13 @@ impl TTEntry {
         data: 0,
     };
     #[inline]
-    pub fn mov(&self) -> Option<Move> {
+    pub fn mov(&self) -> Move {
         Move::decompress(((self.data >> 8) & 0xffff) as u16)
     }
     pub fn new(eval: Eval, depth: u8, zobrist_hash: u64, mov: Move) -> TTEntry {
-        let dam = ((mov.compress() as u32) << 8) ^ (depth as u32);
+        let dam = (u32::from(mov.compress()) << 8) ^ u32::from(depth);
         let ev = eval.pack_for_tt();
-        let data = (ev << 24) ^ (dam as u64);
+        let data = (ev << 24) ^ u64::from(dam);
         TTEntry {
             zobrist_hash: zobrist_hash ^ data,
             data,
@@ -121,7 +121,7 @@ fn write_and_read_tt() {
     assert!(hash.get(1234628935786765).unwrap() == entry);
     assert!(ret.eval() == -Eval::MATE_NOW);
     assert!(ret.depth() == 3);
-    assert!(ret.mov().unwrap() == mv);
+    assert!(ret.mov() == mv);
 
     let entry2 = TTEntry::new(-Eval::MATE_NOW, 3, 1234628935786798, mv);
     let entry4 = TTEntry::new(

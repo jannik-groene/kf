@@ -6,7 +6,7 @@ use std::sync::mpsc::Sender;
 
 const VERSION_STRING: &str = "kf-0.0.8-4dev";
 
-fn read_input(ch: Sender<EngineIO>) {
+fn read_input(ch: &Sender<EngineIO>) {
     let sin = std::io::stdin();
     loop {
         let mut s = String::new();
@@ -27,7 +27,7 @@ struct TimeSpec {
 
 //Timer for execution. To achieve high precision we first sleep the thread to within a safetymargin
 //of the target and the spin until we reach the target time.
-fn time_limit(time: TimeSpec) -> Option<std::time::Duration> {
+fn time_limit(time: &TimeSpec) -> Option<std::time::Duration> {
     const SAFETY_DELTA: std::time::Duration = std::time::Duration::from_millis(2);
     //We play with increment
     let movetime = if let (Some(time), Some(inc)) = (time.ustime, time.usinc) {
@@ -52,7 +52,7 @@ fn time_limit(time: TimeSpec) -> Option<std::time::Duration> {
     else if let Some(time) = time.movetime {
         std::time::Duration::from_millis(time)
     } else {
-        panic!("Invalid time spec");
+        return None;
     };
     Some(movetime - SAFETY_DELTA)
 }
@@ -77,7 +77,7 @@ pub trait UCIHandler {
 impl UCIHandler for Engine {
     fn uci_loop(&mut self) {
         let tx = self.get_sender();
-        std::thread::spawn(|| read_input(tx));
+        std::thread::spawn(move || read_input(&tx));
         loop {
             if let Ok(io) = self.receiver().recv() {
                 match io {
@@ -109,13 +109,13 @@ impl UCIHandler for Engine {
         }
     }
     fn handle_uci(&self) {
-        println!("id name {}", VERSION_STRING);
+        println!("id name {VERSION_STRING}");
         println!("id author Jannik Gröne");
         self.print_config();
         println!("uciok");
     }
     fn handle_debug(&mut self, _tokens: Vec<&str>) {
-        println!("{}", self.position().get_board())
+        println!("{}", self.position().get_board());
     }
     //If we are not ready we will not parse in the first place.
     fn handle_isready(&self) {
@@ -154,7 +154,7 @@ impl UCIHandler for Engine {
         };
         self.set_position(pos.clone());
         if tokens.len() > offset && tokens[offset] == "moves" {
-            for m in tokens[offset + 1..].iter() {
+            for m in &tokens[offset + 1..] {
                 //TODO: Somewhat hacky fix
                 let mv = Move::from_str(m, pos.get_board());
                 self.do_move(mv);
@@ -208,7 +208,11 @@ impl UCIHandler for Engine {
                 movetime,
             },
         };
-        self.start_search(None, time_limit(time));
+        let limit = time_limit(&time);
+        if limit.is_none() {
+            println!("info string invalid time spec ignored")
+        }
+        self.start_search(None, limit);
     }
     fn handle_stop(&mut self) {
         self.stop_search();
@@ -217,7 +221,7 @@ impl UCIHandler for Engine {
     fn handle_perft(&self, tokens: Vec<&str>) {
         let start = std::time::Instant::now();
         self.perft(tokens[1].parse::<u8>().unwrap());
-        let delta = std::time::Instant::now() - start;
+        let delta = start.elapsed();
         println!("\n{}ms elapsed.", delta.as_millis());
     }
     fn handle_eval(&self) {

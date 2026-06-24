@@ -91,15 +91,15 @@ impl BitBoard {
         BitBoard { bits }
     }
     #[inline]
-    pub fn is_empty(&self) -> bool {
+    pub fn is_empty(self) -> bool {
         self.bits == 0
     }
     #[inline]
-    pub fn least_square(&self) -> Square {
+    pub fn least_square(self) -> Square {
         self.bits.trailing_zeros().into()
     }
     #[inline]
-    pub fn count(&self) -> u32 {
+    pub fn count(self) -> u32 {
         self.bits.count_ones()
     }
     #[inline]
@@ -111,8 +111,8 @@ impl BitBoard {
         *self &= !BitBoard::from(sq);
     }
     #[inline]
-    pub fn is_set(&self, sq: Square) -> bool {
-        *self & sq.into() != Self::EMPTY
+    pub fn is_set(self, sq: Square) -> bool {
+        self & sq.into() != Self::EMPTY
     }
     #[inline]
     pub fn from_file(file: File) -> Self {
@@ -123,7 +123,7 @@ impl BitBoard {
         Self::new(0b11111111 << (8 * rank as u8))
     }
     #[inline]
-    pub fn shifted_forward(&self, c: Color) -> Self {
+    pub fn shifted_forward(self, c: Color) -> Self {
         BitBoard {
             bits: match c {
                 Color::White => self.bits << 8,
@@ -132,7 +132,7 @@ impl BitBoard {
         }
     }
     #[inline]
-    pub fn shifted_by(&self, i: i32) -> Self {
+    pub fn shifted_by(self, i: i32) -> Self {
         if i >= 0 {
             BitBoard {
                 bits: self.bits << i,
@@ -248,16 +248,16 @@ impl Square {
         Self::new(idx)
     }
     #[inline]
-    pub fn file(&self) -> File {
-        File::new::<u8>(<Self as Into<u8>>::into(*self) % 8)
+    pub fn file(self) -> File {
+        File::new::<u8>(u8::from(self) % 8)
     }
     #[inline]
-    pub fn rank(&self) -> Rank {
-        Rank::new::<u8>(<Self as Into<u8>>::into(*self) / 8)
+    pub fn rank(self) -> Rank {
+        Rank::new::<u8>(u8::from(self) / 8)
     }
     #[inline]
-    pub fn flipped(&self) -> Self {
-        (u8::from(*self) ^ 56).into()
+    pub fn flipped(self) -> Self {
+        (u8::from(self) ^ 56).into()
     }
     #[inline]
     pub fn relative(self, c: Color) -> Self {
@@ -267,15 +267,15 @@ impl Square {
         }
     }
     #[inline]
-    pub fn shifted_by(&self, shift: i8) -> Self {
+    pub fn shifted_by(self, shift: i8) -> Self {
         if shift >= 0 {
-            Self::new(*self as u8 + shift as u8)
+            Self::new(self as u8 + shift as u8)
         } else {
-            Self::new(*self as u8 - shift.unsigned_abs())
+            Self::new(self as u8 - shift.unsigned_abs())
         }
     }
     #[inline]
-    pub fn advance(&self, c: Color) -> Self {
+    pub fn advance(self, c: Color) -> Self {
         match c {
             Color::White => self.shifted_by(8),
             Color::Black => self.shifted_by(-8),
@@ -370,10 +370,10 @@ impl Rank {
         assert!(r < 8);
         unsafe { std::mem::transmute(r) }
     }
-    pub fn relative(&self, c: Color) -> Rank {
+    pub fn relative(self, c: Color) -> Rank {
         match c {
-            Color::White => *self,
-            Color::Black => Self::new(7 - *self as u8),
+            Color::White => self,
+            Color::Black => Self::new(7 - self as u8),
         }
     }
 }

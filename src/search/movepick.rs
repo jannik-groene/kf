@@ -89,7 +89,7 @@ impl<'a> MovePicker<'a> {
                         .continuation
                         .get_score(pos.color(), p, last_move, piece, *m);
                 }
-                if pos.gives_check(m) {
+                if pos.gives_check(*m) {
                     *s += 20_000;
                 }
             }
@@ -97,7 +97,7 @@ impl<'a> MovePicker<'a> {
     }
 }
 
-impl<'a> Iterator for MovePicker<'a> {
+impl Iterator for MovePicker<'_> {
     type Item = Move;
 
     fn next(&mut self) -> Option<Self::Item> {

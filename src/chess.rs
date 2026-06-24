@@ -920,7 +920,7 @@ impl Position {
 
     #[inline]
     #[allow(dead_code)]
-    pub fn gives_check(&self, m: &Move) -> bool {
+    pub fn gives_check(&self, m: Move) -> bool {
         let kpos = self
             .board
             .get_bb(self.color().other(), Piece::King)

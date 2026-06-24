@@ -35,7 +35,7 @@ impl ThreadPool {
                 shared.clone(),
                 TimeManager::new(std::time::Instant::now(), None),
             );
-            worker_handles.push(spawn(move || idle_loop(i, &mut search_head, rx)));
+            worker_handles.push(spawn(move || idle_loop(i, &mut search_head, &rx)));
         }
         Self {
             worker_handles,
@@ -91,7 +91,7 @@ impl ThreadPool {
                 TimeManager::new(std::time::Instant::now(), None),
             );
             self.worker_handles
-                .push(spawn(move || idle_loop(i, &mut search_head, rx)));
+                .push(spawn(move || idle_loop(i, &mut search_head, &rx)));
         }
     }
 
@@ -117,12 +117,12 @@ impl ThreadPool {
                 TimeManager::new(std::time::Instant::now(), None),
             );
             self.worker_handles
-                .push(spawn(move || idle_loop(i, &mut search_head, rx)));
+                .push(spawn(move || idle_loop(i, &mut search_head, &rx)));
         }
     }
 }
 
-fn idle_loop(id: usize, search_head: &mut SearchHead, rx: Receiver<ThreadSignal>) {
+fn idle_loop(id: usize, search_head: &mut SearchHead, rx: &Receiver<ThreadSignal>) {
     while let Ok(msg) = rx.recv() {
         match msg {
             ThreadSignal::StartSearch(d) => {
