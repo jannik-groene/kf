@@ -319,10 +319,12 @@ fn search_step<const IS_PV_NODE: bool>(
     for (i, m) in move_picker.enumerate() {
         //LMP
         if i > 3 + (depth * depth) as usize
+            && ply > 0
             && !m.is_capture()
             && !sh.pos.in_check()
             && !sh.pos.gives_check(&m)
             && !matches!(beta.value(), Value::Mate(_))
+            && !matches!(score.value(), Value::Mate(_))
         {
             continue;
         }
