@@ -332,7 +332,7 @@ fn search_step<const IS_PV_NODE: bool>(
             }
 
             //Futility Pruning
-            if eval + 70 * depth <= alpha && depth < 7 && bestmove.is_some() && !IS_PV_NODE {
+            if eval + 70 * depth <= alpha && depth < 7 && bestmove.is_some() {
                 if score < eval + 70 * depth && !matches!(score.value(), Value::Mate(_)) {
                     score = eval + 70 * depth
                 }
