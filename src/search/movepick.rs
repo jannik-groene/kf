@@ -7,8 +7,10 @@ use super::history::History;
 
 enum MovePickingStage {
     TtMove,
+    ScoreCaptures,
     WinningCaptures,
     Killers,
+    ScoreQuiets,
     Quiets,
     LosingCaptures,
     Finished,
@@ -32,14 +34,12 @@ pub struct MovePicker<'a> {
 impl<'a> MovePicker<'a> {
     pub fn from_move_list(
         moves: &'a mut MoveList,
-        pos: &Position,
+        _pos: &Position,
         d: i32,
         history: &History,
         ttmove: Option<Move>,
         cutoff: Option<i32>,
     ) -> Self {
-        let mut scores = Self::score_captures(moves, pos, history);
-        Self::score_quiets(pos, &mut scores, moves, history);
         let killer = if (0..=255).contains(&d) {
             history.killer.get(d as usize)
         } else {
@@ -48,7 +48,7 @@ impl<'a> MovePicker<'a> {
 
         MovePicker {
             moves,
-            scores,
+            scores: Vec::new(),
             ttmove,
             killer,
             stage: MovePickingStage::TtMove,
@@ -95,32 +95,34 @@ impl<'a> MovePicker<'a> {
             }
         }
     }
-}
 
-impl Iterator for MovePicker<'_> {
-    type Item = Move;
-
-    fn next(&mut self) -> Option<Self::Item> {
+    pub fn next(&mut self, pos: &Position, history: &History) -> Option<Move> {
         match self.stage {
             MovePickingStage::TtMove => {
-                self.stage = MovePickingStage::WinningCaptures;
+                self.stage = MovePickingStage::ScoreCaptures;
                 if let Some(idx) = self.moves.iter().position(|m| Some(*m) == self.ttmove) {
                     self.moves.swap(0, idx);
-                    self.scores.swap(0, idx);
                     self.idx += 1;
                     self.ttmove
                 } else {
-                    self.next()
+                    self.next(pos, history)
                 }
             }
+            MovePickingStage::ScoreCaptures => {
+                self.scores = Self::score_captures(self.moves, pos, history);
+                self.stage = MovePickingStage::WinningCaptures;
+                self.next(pos, history)
+            }
             MovePickingStage::WinningCaptures => {
-                let threshold = self.cutoff.unwrap_or(EVEN_THRESHOLD);
                 if let Some((i, _)) = self
                     .moves
                     .iter()
                     .enumerate()
                     .skip(self.idx)
-                    .filter(|(i, m)| m.is_capture() && self.scores[*i] >= threshold)
+                    .filter(|&(i, m)| {
+                        m.is_capture()
+                            && self.scores[i] >= EVEN_THRESHOLD + self.cutoff.unwrap_or(0)
+                    })
                     .max_by_key(|(i, _)| self.scores[*i])
                 {
                     self.moves.swap(self.idx, i);
@@ -132,11 +134,11 @@ impl Iterator for MovePicker<'_> {
                         return None;
                     }
                     self.stage = MovePickingStage::Killers;
-                    self.next()
+                    self.next(pos, history)
                 }
             }
             MovePickingStage::Killers => {
-                self.stage = MovePickingStage::Quiets;
+                self.stage = MovePickingStage::ScoreQuiets;
                 if let Some(idx) = self
                     .moves
                     .iter()
@@ -148,8 +150,13 @@ impl Iterator for MovePicker<'_> {
                     self.idx += 1;
                     Some(self.killer)
                 } else {
-                    self.next()
+                    self.next(pos, history)
                 }
+            }
+            MovePickingStage::ScoreQuiets => {
+                Self::score_quiets(pos, &mut self.scores, self.moves, history);
+                self.stage = MovePickingStage::Quiets;
+                self.next(pos, history)
             }
             MovePickingStage::Quiets => {
                 if let Some((idx, _)) = self
@@ -166,7 +173,7 @@ impl Iterator for MovePicker<'_> {
                     Some(self.moves[self.idx - 1])
                 } else {
                     self.stage = MovePickingStage::LosingCaptures;
-                    self.next()
+                    self.next(pos, history)
                 }
             }
             MovePickingStage::LosingCaptures => {
@@ -189,6 +196,10 @@ impl Iterator for MovePicker<'_> {
             MovePickingStage::Finished => None,
         }
     }
+
+    pub fn searched_moves(&self) -> &[Move] {
+        &self.moves[..self.idx]
+    }
 }
 
 #[cfg(test)]
@@ -202,9 +213,10 @@ mod tests {
         }
         let mut count = 0;
         let mut moves = pos.get_moves::<true>();
-        let picker =
+        let mut picker =
             super::MovePicker::from_move_list(&mut moves, pos, 0, &History::new(), None, None);
-        for m in picker {
+        let hist = History::new();
+        while let Some(m) = picker.next(pos, &hist) {
             pos.do_move(m);
             count += perft_step(pos, depth - 1);
             pos.undo_move();

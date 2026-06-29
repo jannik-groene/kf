@@ -300,6 +300,7 @@ fn search_step<const IS_PV_NODE: bool>(
     //Set up paramaters
     let mut score = Eval::MIN;
     let mut fail_low = true;
+    let mut fail_high = false;
     let mut bestmove = None;
 
     let mut extension = 0;
@@ -308,7 +309,7 @@ fn search_step<const IS_PV_NODE: bool>(
         extension += 1;
     }
 
-    let move_picker = movepick::MovePicker::from_move_list(
+    let mut move_picker = movepick::MovePicker::from_move_list(
         &mut moves,
         sh.pos(),
         depth,
@@ -317,7 +318,11 @@ fn search_step<const IS_PV_NODE: bool>(
         None,
     );
 
-    for (i, m) in move_picker.enumerate() {
+    let mut move_idx = 0;
+
+    while let Some(m) = move_picker.next(&sh.pos, &sh.history) {
+        move_idx += 1;
+        let i = move_idx - 1;
         //Quiet Pruning
         if ply > 0
             && !m.is_capture()
@@ -425,25 +430,14 @@ fn search_step<const IS_PV_NODE: bool>(
 
         //Adjust results
         if movescore >= beta {
-            let zh = sh.pos().zobrist_hash();
-
-            sh.shared.tt.set(
-                zh,
-                TTEntry::new(movescore.to_lowerbound(), depth.clamp(0, 255) as u8, zh, m),
-            );
-
-            if m.is_capture() {
-                let cap_bonus = (140 * depth - 105).min(1120);
-                sh.update_capture_history(m, cap_bonus);
-            } else {
-                let quiet_bonus = (100 * depth - 75).min(800);
-                let cont_bonus = (60 * depth - 45).min(480);
-                sh.update_quiet_history(m, quiet_bonus);
-                sh.update_continuation_history(m, cont_bonus);
+            bestmove = Some(m);
+            score = movescore;
+            fail_high = true;
+            fail_low = false;
+            if !m.is_capture() {
                 sh.history.killer.register(m, ply);
             }
-            sh.history.killer.invalidate(ply);
-            return movescore.to_lowerbound();
+            break;
         }
 
         if movescore > score {
@@ -463,7 +457,7 @@ fn search_step<const IS_PV_NODE: bool>(
     assert!(bestmove.is_some());
     assert!(Eval::MIN < score && score < Eval::MAX);
 
-    if IS_PV_NODE && ply <= 255 {
+    if IS_PV_NODE && ply <= 255 && !fail_high {
         sh.pv[ply] = bestmove.unwrap();
     }
 
@@ -479,7 +473,6 @@ fn search_step<const IS_PV_NODE: bool>(
     let cap_bonus = (140 * depth - 105).min(1120);
     let cap_malus = cap_bonus / 4;
 
-    //Quiet Histories
     if let Some(m) = bestmove
         && !m.is_capture()
     {
@@ -490,46 +483,36 @@ fn search_step<const IS_PV_NODE: bool>(
         sh.update_capture_history(m, cap_bonus);
     }
 
-    let zh = sh.pos().zobrist_hash();
-
-    for m in moves {
-        if Some(m) == bestmove {
+    for m in move_picker.searched_moves() {
+        if Some(*m) == bestmove {
             continue;
         }
         if !m.is_capture() && bestmove.is_some_and(|bm| !bm.is_capture()) {
             // Only update quiet history if the best move is quiet
-            sh.update_quiet_history(m, -quiet_malus);
-            sh.update_continuation_history(m, -cont_malus);
+            sh.update_quiet_history(*m, -quiet_malus);
+            sh.update_continuation_history(*m, -cont_malus);
         } else if m.is_capture() {
-            sh.update_capture_history(m, -cap_malus);
+            sh.update_capture_history(*m, -cap_malus);
         }
     }
 
-    if fail_low {
-        sh.shared.tt.set(
-            zh,
-            TTEntry::new(
-                score.to_upperbound(),
-                depth.clamp(0, 255) as u8,
-                zh,
-                bestmove.unwrap(),
-            ),
-        );
+    score = if fail_low {
         score.to_upperbound()
+    } else if fail_high {
+        score.to_lowerbound()
     } else {
-        //Write to TT
-        sh.shared.tt.set(
-            zh,
-            TTEntry::new(
-                score.to_exact(),
-                depth.clamp(0, 255) as u8,
-                zh,
-                bestmove.unwrap(),
-            ),
-        );
-
         score.to_exact()
-    }
+    };
+
+    let zh = sh.pos().zobrist_hash();
+
+    //Write to TT
+    sh.shared.tt.set(
+        zh,
+        TTEntry::new(score, depth.clamp(0, 255) as u8, zh, bestmove.unwrap()),
+    );
+
+    score
 }
 
 fn quiesce(sh: &mut SearchHead, mut alpha: Eval, beta: Eval, delta: i32) -> Eval {
@@ -608,7 +591,7 @@ fn quiesce(sh: &mut SearchHead, mut alpha: Eval, beta: Eval, delta: i32) -> Eval
 
     let cutoff = if sh.pos.in_check() { None } else { Some(val) };
 
-    let move_picker =
+    let mut move_picker =
         MovePicker::from_move_list(&mut cand_moves, &sh.pos, 255, &sh.history, ttmove, cutoff);
 
     let mut best_score = if sh.pos.in_check() {
@@ -619,7 +602,11 @@ fn quiesce(sh: &mut SearchHead, mut alpha: Eval, beta: Eval, delta: i32) -> Eval
 
     alpha = alpha.max(best_score);
 
-    for (i, m) in move_picker.enumerate() {
+    let mut move_idx = 0;
+
+    while let Some(m) = move_picker.next(&sh.pos, &sh.history) {
+        move_idx += 1;
+        let i = move_idx - 1;
         //stop if we receive the flag is set;
         if sh
             .shared_data()
