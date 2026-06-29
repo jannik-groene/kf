@@ -311,16 +311,15 @@ fn search_step<const IS_PV_NODE: bool>(
 
     let mut move_picker = movepick::MovePicker::from_move_list(
         &mut moves,
-        sh.pos(),
+        sh,
         depth,
-        &sh.history,
         ttmove,
         None,
     );
 
     let mut move_idx = 0;
 
-    while let Some(m) = move_picker.next(&sh.pos, &sh.history) {
+    while let Some(m) = move_picker.next(sh) {
         move_idx += 1;
         let i = move_idx - 1;
         //Quiet Pruning
@@ -592,7 +591,7 @@ fn quiesce(sh: &mut SearchHead, mut alpha: Eval, beta: Eval, delta: i32) -> Eval
     let cutoff = if sh.pos.in_check() { None } else { Some(val) };
 
     let mut move_picker =
-        MovePicker::from_move_list(&mut cand_moves, &sh.pos, 255, &sh.history, ttmove, cutoff);
+        MovePicker::from_move_list(&mut cand_moves, sh, 255, ttmove, cutoff);
 
     let mut best_score = if sh.pos.in_check() {
         Eval::MIN
@@ -604,7 +603,9 @@ fn quiesce(sh: &mut SearchHead, mut alpha: Eval, beta: Eval, delta: i32) -> Eval
 
     let mut move_idx = 0;
 
-    while let Some(m) = move_picker.next(&sh.pos, &sh.history) {
+    let in_check = sh.pos_mut().in_check();
+
+    while let Some(m) = move_picker.next(sh) {
         move_idx += 1;
         let i = move_idx - 1;
         //stop if we receive the flag is set;
@@ -617,7 +618,7 @@ fn quiesce(sh: &mut SearchHead, mut alpha: Eval, beta: Eval, delta: i32) -> Eval
             return Eval::DRAW;
         }
 
-        if i >= 3 && !matches!(beta.value(), Value::Mate(_)) && !sh.pos.gives_check(m) {
+        if i >= 3 && !in_check && !matches!(beta.value(), Value::Mate(_)) && !sh.pos.gives_check(m) {
             continue;
         }
 

@@ -4,6 +4,7 @@ use crate::constants::piece_value;
 use std::iter::Iterator;
 
 use super::history::History;
+use super::thread::SearchHead;
 
 enum MovePickingStage {
     TtMove,
@@ -34,14 +35,13 @@ pub struct MovePicker<'a> {
 impl<'a> MovePicker<'a> {
     pub fn from_move_list(
         moves: &'a mut MoveList,
-        _pos: &Position,
+        sh: &SearchHead,
         d: i32,
-        history: &History,
         ttmove: Option<Move>,
         cutoff: Option<i32>,
     ) -> Self {
         let killer = if (0..=255).contains(&d) {
-            history.killer.get(d as usize)
+            sh.history.killer.get(d as usize)
         } else {
             Move::ZERO
         };
@@ -96,7 +96,7 @@ impl<'a> MovePicker<'a> {
         }
     }
 
-    pub fn next(&mut self, pos: &Position, history: &History) -> Option<Move> {
+    pub fn next(&mut self, sh: &SearchHead) -> Option<Move> {
         match self.stage {
             MovePickingStage::TtMove => {
                 self.stage = MovePickingStage::ScoreCaptures;
@@ -105,13 +105,13 @@ impl<'a> MovePicker<'a> {
                     self.idx += 1;
                     self.ttmove
                 } else {
-                    self.next(pos, history)
+                    self.next(sh)
                 }
             }
             MovePickingStage::ScoreCaptures => {
-                self.scores = Self::score_captures(self.moves, pos, history);
+                self.scores = Self::score_captures(self.moves, &sh.pos, &sh.history);
                 self.stage = MovePickingStage::WinningCaptures;
-                self.next(pos, history)
+                self.next(sh)
             }
             MovePickingStage::WinningCaptures => {
                 if let Some((i, _)) = self
@@ -134,7 +134,7 @@ impl<'a> MovePicker<'a> {
                         return None;
                     }
                     self.stage = MovePickingStage::Killers;
-                    self.next(pos, history)
+                    self.next(sh)
                 }
             }
             MovePickingStage::Killers => {
@@ -150,13 +150,13 @@ impl<'a> MovePicker<'a> {
                     self.idx += 1;
                     Some(self.killer)
                 } else {
-                    self.next(pos, history)
+                    self.next(sh)
                 }
             }
             MovePickingStage::ScoreQuiets => {
-                Self::score_quiets(pos, &mut self.scores, self.moves, history);
+                Self::score_quiets(&sh.pos, &mut self.scores, self.moves, &sh.history);
                 self.stage = MovePickingStage::Quiets;
-                self.next(pos, history)
+                self.next(sh)
             }
             MovePickingStage::Quiets => {
                 if let Some((idx, _)) = self
@@ -173,7 +173,7 @@ impl<'a> MovePicker<'a> {
                     Some(self.moves[self.idx - 1])
                 } else {
                     self.stage = MovePickingStage::LosingCaptures;
-                    self.next(pos, history)
+                    self.next(sh)
                 }
             }
             MovePickingStage::LosingCaptures => {
@@ -204,8 +204,11 @@ impl<'a> MovePicker<'a> {
 
 #[cfg(test)]
 mod tests {
+    use super::super::thread::SearchHead;
     use crate::chess::Position;
-    use crate::search::history::History;
+    use crate::search::thread::SharedData;
+    use std::sync::Arc;
+    use std::time::Instant;
 
     fn perft_step(pos: &mut Position, depth: usize) -> u64 {
         if depth == 0 {
@@ -213,10 +216,16 @@ mod tests {
         }
         let mut count = 0;
         let mut moves = pos.get_moves::<true>();
-        let mut picker =
-            super::MovePicker::from_move_list(&mut moves, pos, 0, &History::new(), None, None);
-        let hist = History::new();
-        while let Some(m) = picker.next(pos, &hist) {
+        let sh = SearchHead::new(
+            pos.clone(),
+            Arc::new(SharedData::new()),
+            crate::search::thread::TimeManager {
+                start_time: Instant::now(),
+                limit: None,
+            },
+        );
+        let mut picker = super::MovePicker::from_move_list(&mut moves, &sh, 0, None, None);
+        while let Some(m) = picker.next(&sh) {
             pos.do_move(m);
             count += perft_step(pos, depth - 1);
             pos.undo_move();
