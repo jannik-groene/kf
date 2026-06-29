@@ -145,8 +145,8 @@ impl<'a> MovePicker<'a> {
                     .skip(self.idx)
                     .position(|&m| m == self.killer)
                 {
-                    self.moves.swap(0, idx);
-                    self.scores.swap(0, idx);
+                    self.moves.swap(self.idx, idx);
+                    self.scores.swap(self.idx, idx);
                     self.idx += 1;
                     Some(self.killer)
                 } else {
