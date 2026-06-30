@@ -156,6 +156,11 @@ fn search_step<const IS_PV_NODE: bool>(
         return Eval::DRAW;
     }
 
+    //50 move rule
+    if sh.pos.rule_50_count() >= 100 {
+        return Eval::DRAW;
+    }
+
     //If we cannot beat the score, just return immediately
     if alpha.value() == Value::Mate(1) {
         return Eval::mate_in(1).to_upperbound();
@@ -211,15 +216,6 @@ fn search_step<const IS_PV_NODE: bool>(
         }
     }
 
-    //Check if this is a terminal position
-    let mut moves = sh.pos_mut().get_moves::<true>();
-
-    if moves.is_empty() && sh.pos_mut().in_check() {
-        return Eval::MATE_NOW;
-    } else if moves.is_empty() {
-        return Eval::STALEMATE;
-    }
-
     //We extend the normal search if we are  in check, else go into quiescence
     if depth <= 0 {
         return quiesce(sh, alpha, beta, 0);
@@ -259,7 +255,6 @@ fn search_step<const IS_PV_NODE: bool>(
         && sh.next_null <= ply as i32
         && (has_minor_pieces(sh.pos()) || has_major_pieces(sh.pos()))
         && !sh.pos_mut().in_check()
-        && moves.len() > 2
         && !matches!(alpha.value(), Value::Mate(_))
         && !matches!(beta.value(), Value::Mate(_))
         && (!ttmove.is_some_and(|m| m.is_capture())
@@ -303,21 +298,20 @@ fn search_step<const IS_PV_NODE: bool>(
     let mut fail_high = false;
     let mut bestmove = None;
 
-    let mut extension = 0;
-
-    if moves.len() == 1 {
-        extension += 1;
-    }
-
-    let mut move_picker = movepick::MovePicker::from_move_list(
-        &mut moves,
+    let mut move_picker = movepick::MovePicker::new(
         sh,
-        depth,
+        ply as i32,
         ttmove,
         None,
     );
 
     let mut move_idx = 0;
+
+    let mut extension = 0;
+
+    if sh.pos.in_check() {
+        extension += 1;
+    }
 
     while let Some(m) = move_picker.next(sh) {
         move_idx += 1;
@@ -453,6 +447,14 @@ fn search_step<const IS_PV_NODE: bool>(
         }
     }
 
+    if move_idx == 0 {
+        if sh.pos.in_check() {
+            return Eval::MATE_NOW;
+        } else {
+            return Eval::STALEMATE;
+        }
+    }
+
     assert!(bestmove.is_some());
     assert!(Eval::MIN < score && score < Eval::MAX);
 
@@ -531,7 +533,7 @@ fn quiesce(sh: &mut SearchHead, mut alpha: Eval, beta: Eval, delta: i32) -> Eval
     //Check if the move is already hashed
     let hash_entry = sh.shared_data().tt.get(sh.pos().zobrist_hash());
 
-    let ttmove = hash_entry.map(|e| e.mov());
+    let ttmove = hash_entry.map(|e| e.mov()).take_if(|m| m.is_capture());
     let tteval = hash_entry.map(|e| e.eval());
 
     if let Some(eval) = tteval
@@ -543,18 +545,6 @@ fn quiesce(sh: &mut SearchHead, mut alpha: Eval, beta: Eval, delta: i32) -> Eval
         return eval;
     }
 
-    //Search all evasions, else only captures.
-    let mut cand_moves = if sh.pos_mut().in_check() {
-        sh.pos_mut().get_moves::<true>()
-    } else {
-        sh.pos_mut().get_moves::<false>()
-    };
-
-    //check for terminal position
-    if cand_moves.is_empty() && sh.pos_mut().in_check() {
-        return Eval::MATE_NOW;
-    }
-
     let static_eval = sh.evaluate();
 
     //If we are not in check we filter for tactical moves.
@@ -564,10 +554,6 @@ fn quiesce(sh: &mut SearchHead, mut alpha: Eval, beta: Eval, delta: i32) -> Eval
             return static_eval.to_lowerbound();
         } else if alpha < static_eval {
             alpha = static_eval;
-        }
-
-        if cand_moves.is_empty() {
-            return static_eval;
         }
     }
 
@@ -591,7 +577,7 @@ fn quiesce(sh: &mut SearchHead, mut alpha: Eval, beta: Eval, delta: i32) -> Eval
     let cutoff = if sh.pos.in_check() { None } else { Some(val) };
 
     let mut move_picker =
-        MovePicker::from_move_list(&mut cand_moves, sh, 255, ttmove, cutoff);
+        MovePicker::new(sh, 255, ttmove, cutoff);
 
     let mut best_score = if sh.pos.in_check() {
         Eval::MIN
@@ -636,5 +622,10 @@ fn quiesce(sh: &mut SearchHead, mut alpha: Eval, beta: Eval, delta: i32) -> Eval
             }
         }
     }
+
+    if in_check && move_idx == 0 {
+        return Eval::MATE_NOW;
+    }
+
     best_score
 }

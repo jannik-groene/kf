@@ -72,6 +72,9 @@ impl KillerHistory {
     }
 
     pub fn get(&self, d: usize) -> Move {
+        if d > 255 {
+            return Move::ZERO;
+        }
         if self.moves[d].scores[0] >= self.moves[d].scores[1] {
             self.moves[d].moves[0]
         } else {
