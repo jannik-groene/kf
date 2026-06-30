@@ -35,6 +35,32 @@ impl Color {
     }
 }
 
+pub trait GenType {
+    const QUIETS: bool;
+    const CAPTS: bool;
+}
+
+pub struct All {}
+
+impl GenType for All {
+    const QUIETS: bool = true;
+    const CAPTS: bool = true;
+}
+
+pub struct Quiets {}
+
+impl GenType for Quiets {
+    const QUIETS: bool = true;
+    const CAPTS: bool = false;
+}
+
+pub struct Captures {}
+
+impl GenType for Captures {
+    const QUIETS: bool = false;
+    const CAPTS: bool = true;
+}
+
 #[derive(Copy, Clone)]
 struct PlyInfo {
     zobrist: u64,
@@ -328,7 +354,7 @@ impl Position {
 
     //Calculate possible moves of a piece on a given square, using the provide move gen closure
     #[inline]
-    fn get_piece_moves<const GEN_QUIETS: bool>(
+    fn get_piece_moves<Gen: GenType>(
         &self,
         move_getter: impl Fn(Square) -> BitBoard,
         moves: &mut MoveList,
@@ -342,13 +368,15 @@ impl Position {
                 pmoves &= constants::ray(pos, self.board.king_square(self.to_move));
             }
 
-            for m in pmoves & self.board.get_color_bb(self.to_move.other()) {
-                //SAFETY: The ArrayVec capacity exceeds the maximal move number of 218
-                unsafe {
-                    moves.push_unchecked(Move::new(pos, m, MoveType::Capture));
+            if Gen::CAPTS {
+                for m in pmoves & self.board.get_color_bb(self.to_move.other()) {
+                    //SAFETY: The ArrayVec capacity exceeds the maximal move number of 218
+                    unsafe {
+                        moves.push_unchecked(Move::new(pos, m, MoveType::Capture));
+                    }
                 }
             }
-            if GEN_QUIETS {
+            if Gen::QUIETS {
                 for m in pmoves & !self.board.get_color_bb(self.to_move.other()) {
                     //SAFETY: The ArrayVec capacity exceeds the maximal move number of 218
                     unsafe {
@@ -357,6 +385,37 @@ impl Position {
                 }
             }
         }
+    }
+
+    #[inline]
+    fn is_legal_enpassant(&self, cand: Square, cap_sq: Square, esq: Square) -> bool {
+        let ksq = self.board.king_square(self.to_move);
+
+        let pin_ray = constants::ray(cand, ksq);
+
+        //Check if we expose the king by taking en passant
+        //See if our pawn is pinned
+        if (self.ply_info.pinned_pieces.is_set(cand) && !pin_ray.is_set(esq))
+            || (self.ply_info.pinned_pieces.is_set(cap_sq)
+                && !constants::ray(cap_sq, ksq).is_set(esq))
+        {
+            return false;
+        //Check for a double pin by a rook or queen.
+        } else if pin_ray.is_set(cap_sq) {
+            let mut occupation = self.board.occupation();
+
+            occupation.unset(cap_sq);
+            occupation.unset(cand);
+
+            let k_ray = pin_ray & constants::rook_moves(ksq, occupation);
+
+            if !(k_ray & self.board.get_bb(self.to_move.other(), Piece::Rook)).is_empty()
+                || !(k_ray & self.board.get_bb(self.to_move.other(), Piece::Queen)).is_empty()
+            {
+                return false;
+            }
+        }
+        true
     }
 
     #[inline]
@@ -369,37 +428,10 @@ impl Position {
                     & self.board.get_bb(self.to_move, Piece::Pawn);
 
                 for cand in cands {
-                    let ksq = self.board.king_square(self.to_move);
-
-                    let pin_ray = constants::ray(cand, ksq);
-
-                    //Check if we expose the king by taking en passant
-                    //See if our pawn is pinned
-                    if (self.ply_info.pinned_pieces.is_set(cand) && !pin_ray.is_set(esq))
-                        || (self.ply_info.pinned_pieces.is_set(cap_sq)
-                            && !constants::ray(cap_sq, ksq).is_set(esq))
-                    {
-                        continue;
-                    //Check for a double pin by a rook or queen.
-                    } else if pin_ray.is_set(cap_sq) {
-                        let mut occupation = self.board.occupation();
-
-                        occupation.unset(cap_sq);
-                        occupation.unset(cand);
-
-                        let k_ray = pin_ray & constants::rook_moves(ksq, occupation);
-
-                        if !(k_ray & self.board.get_bb(self.to_move.other(), Piece::Rook))
-                            .is_empty()
-                            || !(k_ray & self.board.get_bb(self.to_move.other(), Piece::Queen))
-                                .is_empty()
-                        {
-                            continue;
+                    if self.is_legal_enpassant(cand, cap_sq, esq) {
+                        unsafe {
+                            moves.push_unchecked(Move::new(cand, esq, MoveType::Enpassant));
                         }
-                    }
-
-                    unsafe {
-                        moves.push_unchecked(Move::new(cand, esq, MoveType::Enpassant));
                     }
                 }
             }
@@ -450,10 +482,41 @@ impl Position {
     }
 
     #[inline]
-    fn get_pawn_moves<const GEN_QUIETS: bool>(&self, moves: &mut MoveList, check_mask: BitBoard) {
+    fn get_pawn_moves<Gen: GenType>(&self, moves: &mut MoveList, check_mask: BitBoard) {
         let pawns = self.board.get_bb(self.to_move, Piece::Pawn);
 
         let ksq = self.board.get_bb(self.to_move, Piece::King).least_square();
+
+        if Gen::CAPTS {
+            //Push pawn captures
+            for pawn in pawns {
+                let mut attacks = (constants::pawn_attacks(pawn, self.to_move)
+                    & self.board.get_color_bb(self.to_move.other()))
+                    & check_mask;
+
+                if self.ply_info.pinned_pieces.is_set(pawn) {
+                    attacks &= constants::ray(ksq, pawn);
+                }
+
+                for m in attacks & BitBoard::from_rank(Rank::Eighth.relative(self.to_move)) {
+                    unsafe {
+                        moves.push_unchecked(Move::new(pawn, m, MoveType::PromotionCaptureN));
+                        moves.push_unchecked(Move::new(pawn, m, MoveType::PromotionCaptureB));
+                        moves.push_unchecked(Move::new(pawn, m, MoveType::PromotionCaptureR));
+                        moves.push_unchecked(Move::new(pawn, m, MoveType::PromotionCaptureQ));
+                    }
+                }
+                for m in attacks & !BitBoard::from_rank(Rank::Eighth.relative(self.to_move)) {
+                    unsafe {
+                        moves.push_unchecked(Move::new(pawn, m, MoveType::Capture));
+                    }
+                }
+            }
+        }
+
+        if !Gen::QUIETS {
+            return;
+        }
 
         let (advances, double_advances) = self.pawn_moves(self.to_move);
 
@@ -461,35 +524,6 @@ impl Position {
             Color::White => 1,
             Color::Black => -1,
         };
-
-        //Push pawn captures
-        for pawn in pawns {
-            let mut attacks = (constants::pawn_attacks(pawn, self.to_move)
-                & self.board.get_color_bb(self.to_move.other()))
-                & check_mask;
-
-            if self.ply_info.pinned_pieces.is_set(pawn) {
-                attacks &= constants::ray(ksq, pawn);
-            }
-
-            for m in attacks & BitBoard::from_rank(Rank::Eighth.relative(self.to_move)) {
-                unsafe {
-                    moves.push_unchecked(Move::new(pawn, m, MoveType::PromotionCaptureN));
-                    moves.push_unchecked(Move::new(pawn, m, MoveType::PromotionCaptureB));
-                    moves.push_unchecked(Move::new(pawn, m, MoveType::PromotionCaptureR));
-                    moves.push_unchecked(Move::new(pawn, m, MoveType::PromotionCaptureQ));
-                }
-            }
-            for m in attacks & !BitBoard::from_rank(Rank::Eighth.relative(self.to_move)) {
-                unsafe {
-                    moves.push_unchecked(Move::new(pawn, m, MoveType::Capture));
-                }
-            }
-        }
-
-        if !GEN_QUIETS {
-            return;
-        }
 
         //Push single pawn advances
         for to in advances & check_mask {
@@ -534,11 +568,28 @@ impl Position {
         }
     }
 
-    pub fn get_moves<const GEN_QUIETS: bool>(&mut self) -> MoveList {
-        let mut moves = MoveList::new();
+    #[inline]
+    fn check_mask(&self) -> BitBoard {
+        //If we are in check, we may only take the checker, or block it
+        //If the checking piece is a knight, we can only take (or move the king)
+        if !(self.board.get_bb(self.to_move.other(), Piece::Knight) & self.ply_info.king_attackers)
+            .is_empty()
+        {
+            self.ply_info.king_attackers
+        //For any other piece we may also try to block
+        } else if !self.ply_info.king_attackers.is_empty() {
+            constants::ray_between(
+                self.ply_info.king_attackers.least_square(),
+                self.board.king_square(self.to_move),
+            ) | self.ply_info.king_attackers
+        } else {
+            BitBoard::FULL
+        }
+    }
 
+    pub fn get_moves<Gen: GenType>(&mut self, moves: &mut MoveList) {
         if self.ply_info.rule_50_count == 100 || self.board.occupation().count() == 2 {
-            return moves;
+            return;
         }
 
         if self.ply_info.attacked_squares.is_empty() {
@@ -551,10 +602,12 @@ impl Position {
         king_moves &= !self.board.get_color_bb(self.to_move);
         king_moves &= !self.ply_info.attacked_squares;
 
-        for km in king_moves & self.board.get_color_bb(self.to_move.other()) {
-            moves.push(Move::new(ksq, km, MoveType::Capture));
+        if Gen::CAPTS {
+            for km in king_moves & self.board.get_color_bb(self.to_move.other()) {
+                moves.push(Move::new(ksq, km, MoveType::Capture));
+            }
         }
-        if GEN_QUIETS {
+        if Gen::QUIETS {
             for km in king_moves & !self.board.get_color_bb(self.to_move.other()) {
                 moves.push(Move::new(ksq, km, MoveType::Normal));
             }
@@ -562,64 +615,185 @@ impl Position {
 
         //optimize double or better check
         if self.ply_info.king_attackers.count() > 1 {
-            return moves;
+            return;
         }
 
-        //If we are in check, we may only take the checker, or block it
-        //If the checking piece is a knight, we can only take (or move the king)
-        let check_mask = if !(self.board.get_bb(self.to_move.other(), Piece::Knight)
-            & self.ply_info.king_attackers)
-            .is_empty()
-        {
-            self.ply_info.king_attackers
-        //For any other piece we may also try to block
-        } else if !self.ply_info.king_attackers.is_empty() {
-            constants::ray_between(
-                self.ply_info.king_attackers.least_square(),
-                self.board.king_square(self.to_move),
-            ) | self.ply_info.king_attackers
-        } else {
-            BitBoard::FULL
-        };
+        let check_mask = self.check_mask();
 
         //generate queen moves
-        self.get_piece_moves::<GEN_QUIETS>(
+        self.get_piece_moves::<Gen>(
             |sq: Square| -> BitBoard { (self.rook_moves(sq) | self.bishop_moves(sq)) & check_mask },
-            &mut moves,
+            moves,
             Piece::Queen,
         );
 
         //generate rook moves
-        self.get_piece_moves::<GEN_QUIETS>(
+        self.get_piece_moves::<Gen>(
             |sq: Square| -> BitBoard { self.rook_moves(sq) & check_mask },
-            &mut moves,
+            moves,
             Piece::Rook,
         );
 
         //generate bishop moves
-        self.get_piece_moves::<GEN_QUIETS>(
+        self.get_piece_moves::<Gen>(
             |sq: Square| -> BitBoard { self.bishop_moves(sq) & check_mask },
-            &mut moves,
+            moves,
             Piece::Bishop,
         );
 
         //generate knight moves
-        self.get_piece_moves::<GEN_QUIETS>(
+        self.get_piece_moves::<Gen>(
             |sq: Square| -> BitBoard { constants::knight_moves(sq) & check_mask },
-            &mut moves,
+            moves,
             Piece::Knight,
         );
 
         //generate pawn moves without en passant
-        self.get_pawn_moves::<GEN_QUIETS>(&mut moves, check_mask);
+        self.get_pawn_moves::<Gen>(moves, check_mask);
 
         //Handle castling and en passant.
-        if GEN_QUIETS {
-            self.handle_castling(&mut moves);
+        if Gen::QUIETS {
+            self.handle_castling(moves);
         }
-        self.handle_en_passant(&mut moves, check_mask);
 
-        moves
+        if Gen::CAPTS {
+            self.handle_en_passant(moves, check_mask);
+        }
+    }
+
+    // We assume the move is well-formed in principle, but not compatible with the current board
+    // state. This will not check that e.g. a promotion is a move from seventh to eighth rank.
+    pub fn is_legal(&mut self, m: Move) -> bool {
+        if self.ply_info.attacked_squares.is_empty() {
+            self.generate_attack_table();
+        }
+        if !self.board.get_color_bb(self.to_move).is_set(m.from()) {
+            return false;
+        };
+        let mover = if let Some(p) = self.board.piece_at(m.from()) {
+            p
+        } else {
+            return false;
+        };
+        if self.ply_info.king_attackers.count() > 1 && mover != Piece::King {
+            return false;
+        }
+        let ksq = self.board.get_bb(self.to_move, Piece::King).least_square();
+        let check_mask = self.check_mask();
+        if mover != Piece::King {
+            if !check_mask.is_set(m.to()) && m.typ() != MoveType::Enpassant {
+                return false;
+            }
+            if self.ply_info.pinned_pieces.is_set(m.from())
+                && !constants::ray(m.from(), ksq).is_set(m.to())
+            {
+                return false;
+            }
+        }
+        match m.typ() {
+            MoveType::Enpassant => {
+                let esq = if let Some(sq) = self.ply_info.ep_square
+                    && m.to() == sq
+                {
+                    sq
+                } else {
+                    return false;
+                };
+                let cap_sq = esq.advance(self.to_move.other());
+                mover == Piece::Pawn
+                    && (check_mask.is_set(esq) || check_mask.is_set(cap_sq))
+                    && self.is_legal_enpassant(m.from(), cap_sq, esq)
+            }
+            MoveType::PromotionN
+            | MoveType::PromotionB
+            | MoveType::PromotionR
+            | MoveType::PromotionQ => {
+                mover == Piece::Pawn
+                    && self.board.piece_at(m.to()).is_none()
+                    && m.from().advance(self.to_move) == m.to()
+            }
+            MoveType::PromotionCaptureN
+            | MoveType::PromotionCaptureB
+            | MoveType::PromotionCaptureR
+            | MoveType::PromotionCaptureQ => {
+                mover == Piece::Pawn
+                    && (constants::pawn_attacks(m.from(), self.to_move)
+                        & self.board.get_color_bb(self.to_move.other()))
+                    .is_set(m.to())
+            }
+            MoveType::Castle => {
+                let piece_ray = if m.to().file() == File::C {
+                    constants::ray_between(
+                        Square::E1.relative(self.to_move),
+                        Square::A1.relative(self.to_move),
+                    )
+                } else {
+                    constants::ray_between(
+                        Square::E1.relative(self.to_move),
+                        Square::H1.relative(self.to_move),
+                    )
+                };
+                let check_ray = if m.to().file() == File::C {
+                    constants::ray_between(
+                        Square::E1.relative(self.to_move),
+                        Square::B1.relative(self.to_move),
+                    )
+                } else {
+                    constants::ray_between(
+                        Square::E1.relative(self.to_move),
+                        Square::H1.relative(self.to_move),
+                    )
+                };
+                if m.to().rank().relative(self.to_move) == Rank::Eighth {
+                    return false;
+                }
+                //Having the correct pieces on each square is guaranteed by castling rights
+                self.ply_info.king_attackers.is_empty()
+                    && ((m.to().file() == File::G
+                        && self.ply_info.castling_rights[self.to_move as usize][0])
+                        || (m.to().file() == File::C
+                            && self.ply_info.castling_rights[self.to_move as usize][1]))
+                    && (piece_ray & self.board.occupation()).is_empty()
+                    && (check_ray & self.ply_info.attacked_squares).is_empty()
+            }
+            MoveType::Normal | MoveType::Capture => {
+                if (m.is_capture() && !self.board.get_color_bb(self.to_move.other()).is_set(m.to()))
+                    || (!m.is_capture() && self.board.occupation().is_set(m.to()))
+                {
+                    return false;
+                }
+                match mover {
+                    Piece::Pawn => {
+                        !matches!(m.to().rank(), Rank::Eighth | Rank::First)
+                            && ((constants::pawn_attacks(m.from(), self.to_move)
+                                & self.board.get_color_bb(self.to_move.other()))
+                            .is_set(m.to())
+                                || m.to() == m.from().advance(self.to_move)
+                                || (m.from().rank().relative(self.to_move) == Rank::Second
+                                    && !self
+                                        .board
+                                        .occupation()
+                                        .is_set(m.from().advance(self.to_move))
+                                    && m.to()
+                                        == m.from().advance(self.to_move).advance(self.to_move)))
+                    }
+                    Piece::King => {
+                        constants::king_moves(m.from()).is_set(m.to())
+                            && !self.ply_info.attacked_squares.is_set(m.to())
+                    }
+                    Piece::Knight => constants::knight_moves(m.from()).is_set(m.to()),
+                    Piece::Rook => {
+                        constants::rook_moves(m.from(), self.board.occupation()).is_set(m.to())
+                    }
+                    Piece::Bishop => {
+                        constants::bishop_moves(m.from(), self.board.occupation()).is_set(m.to())
+                    }
+                    Piece::Queen => (constants::rook_moves(m.from(), self.board.occupation())
+                        | constants::bishop_moves(m.from(), self.board.occupation()))
+                    .is_set(m.to()),
+                }
+            }
+        }
     }
 
     #[inline]

@@ -1,9 +1,8 @@
-use crate::chess::{Move, MoveList, Piece, Position};
+use crate::chess::{Captures, Move, MoveList, Piece, Quiets};
 use crate::constants::piece_value;
 
 use std::iter::Iterator;
 
-use super::history::History;
 use super::thread::SearchHead;
 
 enum MovePickingStage {
@@ -22,94 +21,138 @@ enum MovePickingStage {
 //Threshold after which a trade is considered even in SEE
 const EVEN_THRESHOLD: i32 = piece_value(Piece::Knight) - piece_value(Piece::Bishop);
 
-pub struct MovePicker<'a> {
-    moves: &'a mut MoveList,
+pub struct MovePicker {
+    moves: MoveList,
+    searched: MoveList,
     scores: Vec<i32>,
     ttmove: Option<Move>,
     killer: Move,
     stage: MovePickingStage,
     idx: usize,
+    q_idx: usize,
+    bc_idx: usize,
     cutoff: Option<i32>,
 }
 
-impl<'a> MovePicker<'a> {
-    pub fn from_move_list(
-        moves: &'a mut MoveList,
-        sh: &SearchHead,
-        d: i32,
-        ttmove: Option<Move>,
-        cutoff: Option<i32>,
-    ) -> Self {
-        let killer = if (0..=255).contains(&d) {
-            sh.history.killer.get(d as usize)
+impl MovePicker {
+    pub fn new(sh: &mut SearchHead, ply: i32, ttmove: Option<Move>, cutoff: Option<i32>) -> Self {
+        let killer = if (0..255).contains(&ply) {
+            sh.history.killer.get(ply as usize)
         } else {
             Move::ZERO
         };
 
         MovePicker {
-            moves,
+            moves: MoveList::new(),
+            searched: MoveList::new(),
             scores: Vec::new(),
             ttmove,
             killer,
             stage: MovePickingStage::TtMove,
             idx: 0,
+            q_idx: 0,
+            bc_idx: 0,
             cutoff,
         }
     }
 
     #[inline]
-    fn score_captures(movelist: &MoveList, pos: &Position, history: &History) -> Vec<i32> {
-        let mut scores = vec![0; movelist.len()];
+    fn score_captures(&mut self, sh: &mut SearchHead) {
+        sh.pos.get_moves::<Captures>(&mut self.moves);
 
-        for (i, m) in movelist.iter().enumerate() {
+        // Set index at which quiets will be inserted
+        self.q_idx = self.moves.len();
+
+        if let Some(idx) = self.moves.iter().position(|m| Some(*m) == self.ttmove) {
+            self.moves.swap(0, idx);
+            self.idx += 1;
+        }
+
+        let mut scores = vec![0; self.moves.len()];
+
+        for (i, m) in self.moves.iter().enumerate() {
             if m.is_capture() {
-                let cap = pos.get_board().piece_at(m.to()).unwrap_or(Piece::Pawn);
-                let p = pos.get_board().piece_at(m.from()).unwrap();
-                scores[i] = pos.see(*m) + history.capture.get(p, *m, cap) / 8;
+                let cap = sh.pos.get_board().piece_at(m.to()).unwrap_or(Piece::Pawn);
+                let p = sh.pos.get_board().piece_at(m.from()).unwrap();
+                scores[i] = sh.pos.see(*m) + sh.history.capture.get(p, *m, cap) / 8;
             }
         }
 
-        scores
+        self.scores = scores;
     }
 
     #[inline]
-    fn score_quiets(pos: &Position, scores: &mut [i32], movelist: &MoveList, history: &History) {
-        let last_move = pos.last_move();
+    fn score_quiets(&mut self, sh: &mut SearchHead) {
+        sh.pos.get_moves::<Quiets>(&mut self.moves);
+
+        // Swap ahead both TT and Killer
+        assert_eq!(
+            self.killer != Move::ZERO && sh.pos.is_legal(self.killer),
+            self.moves[self.q_idx..].contains(&self.killer),
+            "\n{}\n{}\t{:?}\t{:?}",
+            sh.pos.board,
+            self.killer,
+            self.killer.typ(),
+            sh.pos.color()
+        );
+        if let Some(idx) = self
+            .moves
+            .iter()
+            .skip(self.idx)
+            .position(|m| Some(*m) == self.ttmove)
+        {
+            self.moves.swap(self.idx, idx);
+            self.idx += 1;
+        }
+        if let Some(idx) = self
+            .moves
+            .iter()
+            .skip(self.idx)
+            .position(|m| *m == self.killer)
+        {
+            self.moves.swap(self.idx, idx);
+            self.idx += 1;
+        }
+
+        self.scores.resize(self.moves.len(), 0);
+
+        let last_move = sh.pos.last_move();
+
         let last_piece = if last_move.typ().is_promotion() {
             Some(Piece::Pawn)
         } else {
-            pos.get_board().piece_at(last_move.to())
+            sh.pos.get_board().piece_at(last_move.to())
         };
-        for (m, s) in movelist.iter().zip(scores.iter_mut()) {
+        for (m, s) in self.moves.iter().zip(self.scores.iter_mut()) {
             if !m.is_capture() {
-                *s += history.quiet.get_score(pos.color(), *m);
+                *s += sh.history.quiet.get_score(sh.pos.color(), *m);
                 if let Some(p) = last_piece {
-                    let piece = pos.get_board().piece_at(m.from()).unwrap();
-                    *s += history
-                        .continuation
-                        .get_score(pos.color(), p, last_move, piece, *m);
+                    let piece = sh.pos.get_board().piece_at(m.from()).unwrap();
+                    *s +=
+                        sh.history
+                            .continuation
+                            .get_score(sh.pos.color(), p, last_move, piece, *m);
                 }
-                if pos.gives_check(*m) {
+                if sh.pos.gives_check(*m) {
                     *s += 20_000;
                 }
             }
         }
     }
 
-    pub fn next(&mut self, sh: &SearchHead) -> Option<Move> {
+    pub fn next(&mut self, sh: &mut SearchHead) -> Option<Move> {
         match self.stage {
             MovePickingStage::TtMove => {
                 self.stage = MovePickingStage::ScoreCaptures;
-                if let Some(idx) = self.moves.iter().position(|m| Some(*m) == self.ttmove) {
-                    self.moves.swap(0, idx);
-                    self.idx += 1;
+                if self.ttmove.is_some_and(|m| sh.pos.is_legal(m)) {
+                    unsafe { self.searched.push_unchecked(self.ttmove.unwrap()); }
                     self.ttmove
                 } else {
                     self.next(sh)
                 }
             }
             MovePickingStage::ScoreCaptures => {
-                self.scores = Self::score_captures(self.moves, &sh.pos, &sh.history);
+                self.score_captures(sh);
                 self.stage = MovePickingStage::WinningCaptures;
                 self.next(sh)
             }
@@ -119,42 +162,41 @@ impl<'a> MovePicker<'a> {
                     .iter()
                     .enumerate()
                     .skip(self.idx)
-                    .filter(|&(i, m)| {
-                        m.is_capture()
-                            && self.scores[i] >= EVEN_THRESHOLD + self.cutoff.unwrap_or(0)
+                    .filter(|&(i, _)| {
+                        //    m.is_capture()
+                        self.scores[i] >= EVEN_THRESHOLD + self.cutoff.unwrap_or(0)
                     })
                     .max_by_key(|(i, _)| self.scores[*i])
                 {
                     self.moves.swap(self.idx, i);
                     self.scores.swap(self.idx, i);
                     self.idx += 1;
+                    unsafe { self.searched.push_unchecked(self.moves[self.idx-1]); }
                     Some(self.moves[self.idx - 1])
                 } else {
                     if self.cutoff.is_some() {
                         return None;
                     }
+                    self.bc_idx = self.idx;
+                    self.idx = self.q_idx;
                     self.stage = MovePickingStage::Killers;
                     self.next(sh)
                 }
             }
             MovePickingStage::Killers => {
                 self.stage = MovePickingStage::ScoreQuiets;
-                if let Some(idx) = self
-                    .moves
-                    .iter()
-                    .skip(self.idx)
-                    .position(|&m| m == self.killer)
+                if self.killer != Move::ZERO
+                    && sh.pos.is_legal(self.killer)
+                    && Some(self.killer) != self.ttmove
                 {
-                    self.moves.swap(self.idx, idx);
-                    self.scores.swap(self.idx, idx);
-                    self.idx += 1;
+                    unsafe { self.searched.push_unchecked(self.killer); }
                     Some(self.killer)
                 } else {
                     self.next(sh)
                 }
             }
             MovePickingStage::ScoreQuiets => {
-                Self::score_quiets(&sh.pos, &mut self.scores, self.moves, &sh.history);
+                self.score_quiets(sh);
                 self.stage = MovePickingStage::Quiets;
                 self.next(sh)
             }
@@ -164,21 +206,22 @@ impl<'a> MovePicker<'a> {
                     .iter()
                     .enumerate()
                     .skip(self.idx)
-                    .filter(|(_, m)| !m.is_capture())
+                    //.filter(|(_, m)| !m.is_capture())
                     .max_by_key(|(i, _)| self.scores[*i])
                 {
                     self.moves.swap(idx, self.idx);
                     self.scores.swap(idx, self.idx);
                     self.idx += 1;
+                    unsafe { self.searched.push_unchecked(self.moves[self.idx-1]); }
                     Some(self.moves[self.idx - 1])
                 } else {
+                    self.idx = self.bc_idx;
                     self.stage = MovePickingStage::LosingCaptures;
                     self.next(sh)
                 }
             }
             MovePickingStage::LosingCaptures => {
-                if let Some((i, _)) = self
-                    .moves
+                if let Some((i, _)) = self.moves[..self.q_idx]
                     .iter()
                     .enumerate()
                     .skip(self.idx)
@@ -187,6 +230,7 @@ impl<'a> MovePicker<'a> {
                     self.moves.swap(self.idx, i);
                     self.scores.swap(self.idx, i);
                     self.idx += 1;
+                    unsafe { self.searched.push_unchecked(self.moves[self.idx-1]); }
                     Some(self.moves[self.idx - 1])
                 } else {
                     self.stage = MovePickingStage::Finished;
@@ -198,7 +242,7 @@ impl<'a> MovePicker<'a> {
     }
 
     pub fn searched_moves(&self) -> &[Move] {
-        &self.moves[..self.idx]
+        &self.searched
     }
 }
 
@@ -215,8 +259,7 @@ mod tests {
             return 1;
         }
         let mut count = 0;
-        let mut moves = pos.get_moves::<true>();
-        let sh = SearchHead::new(
+        let mut sh = SearchHead::new(
             pos.clone(),
             Arc::new(SharedData::new()),
             crate::search::thread::TimeManager {
@@ -224,8 +267,8 @@ mod tests {
                 limit: None,
             },
         );
-        let mut picker = super::MovePicker::from_move_list(&mut moves, &sh, 0, None, None);
-        while let Some(m) = picker.next(&sh) {
+        let mut picker = super::MovePicker::new(&mut sh, 0, None, None);
+        while let Some(m) = picker.next(&mut sh) {
             pos.do_move(m);
             count += perft_step(pos, depth - 1);
             pos.undo_move();

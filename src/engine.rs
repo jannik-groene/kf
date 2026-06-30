@@ -2,6 +2,7 @@ use std::fmt::Display;
 use std::io::{Write, stdout};
 use std::sync::mpsc::{Receiver, Sender};
 
+use crate::chess::{All, MoveList};
 use crate::{
     chess::{Color, Move, Position},
     search::SearchManager,
@@ -167,13 +168,15 @@ impl Engine {
         self.search.reset_thread_data();
     }
     fn perft_step(pos: &mut Position, d: u8) -> usize {
+        let mut moves = MoveList::new();
+        pos.get_moves::<All>(&mut moves);
         if d == 0 {
             1
         } else if d == 1 {
-            pos.get_moves::<true>().len()
+            moves.len()
         } else {
             let mut total = 0;
-            for m in pos.get_moves::<true>() {
+            for m in moves {
                 pos.do_move(m);
                 total += Self::perft_step(pos, d - 1);
                 pos.undo_move();
@@ -184,7 +187,8 @@ impl Engine {
     pub fn perft(&self, d: u8) {
         let mut pos = self.search.root_position();
         let mut total = 0;
-        let moves = pos.get_moves::<true>();
+        let mut moves = MoveList::new();
+        pos.get_moves::<All>(&mut moves);
         let rootmove_len = (moves.len() as f64).log10().floor() as usize + 1;
         let mut counts = Vec::with_capacity(moves.len());
         for (i, m) in moves.iter().enumerate() {
