@@ -10,7 +10,7 @@ use std::sync::atomic::Ordering;
 use crate::search::movepick::MovePicker;
 use crate::{
     chess::{Color, Move, Piece, Position},
-    evaluate::{Bound, Eval, Value, has_major_pieces, has_minor_pieces, is_material_draw},
+    evaluate::{Bound, eval, has_major_pieces, has_minor_pieces, is_material_draw},
 };
 use thread::{SearchHead, SharedData};
 use threadpool::ThreadPool;
@@ -75,8 +75,8 @@ impl SearchManager {
 
 fn iterative_deepening(id: usize, search_head: &mut SearchHead, depth: u8) {
     let depth = if id == 0 { depth } else { u8::MAX };
-    let mut alpha = Eval::MIN;
-    let mut beta = Eval::MAX;
+    let mut alpha = -eval::INFTY;
+    let mut beta = eval::INFTY;
     'depth: for d in 1..=depth {
         let mut fail_highs = 0;
         let mut fail_lows = 0;
@@ -89,29 +89,30 @@ fn iterative_deepening(id: usize, search_head: &mut SearchHead, depth: u8) {
                 break 'depth;
             }
 
-            if id == 0 {
-                search_head.write_uci_info(eval, d);
-            }
-
-            match eval.bound() {
-                Bound::Exact => {
-                    alpha = eval.aspiration_lower(0);
-                    beta = eval.aspiration_higher(0);
-                    break;
+            if eval <= alpha {
+                fail_lows += 1;
+                alpha = eval::aspiration_lower(eval, fail_lows);
+                if id == 0 {
+                    search_head.write_uci_info(eval, Bound::Upper, d);
                 }
-                Bound::Lower => {
-                    fail_highs += 1;
-                    beta = eval.aspiration_higher(fail_highs);
+            } else if eval >= beta {
+                fail_highs += 1;
+                beta = eval::aspiration_higher(eval, fail_highs);
+                if id == 0 {
+                    search_head.write_uci_info(eval, Bound::Lower, d);
                 }
-                Bound::Upper => {
-                    fail_lows += 1;
-                    alpha = eval.aspiration_lower(fail_lows);
+            } else {
+                alpha = eval::aspiration_lower(eval, 0);
+                beta = eval::aspiration_higher(eval, 0);
+                if id == 0 {
+                    search_head.write_uci_info(eval, Bound::Exact, d);
                 }
+                break;
             }
         }
 
         // register our newest vote for the best move
-        let res = (eval.pack_for_tt() << 24)
+        let res = (eval::pack_for_tt(eval, 0) << 24)
             ^ (u64::from(search_head.pv[0].compress()) << 8)
             ^ u64::from(d);
 
@@ -134,36 +135,36 @@ fn search_step<const IS_PV_NODE: bool>(
     sh: &mut SearchHead,
     depth: i32,
     ply: usize,
-    mut alpha: Eval,
-    beta: Eval,
+    mut alpha: i32,
+    beta: i32,
     cut_node: bool,
-) -> Eval {
+) -> i32 {
     if sh.shared.nodes.load(Ordering::Relaxed) & 0xff == 0
         && let Some(limit) = sh.time_manager.limit
         && sh.time_manager.start_time.elapsed() > limit
     {
         sh.shared.stop_flag.store(true, Ordering::Release);
-        return Eval::DRAW;
+        return eval::DRAW;
     }
 
     //check for obviously drawn positions
     if is_material_draw(sh.pos()) {
-        return Eval::DRAW;
+        return eval::DRAW;
     }
 
     //Repeated positions are draws
     if sh.pos.is_threefold() {
-        return Eval::DRAW;
+        return eval::DRAW;
     }
 
     //50 move rule
     if sh.pos.rule_50_count() >= 100 {
-        return Eval::DRAW;
+        return eval::DRAW;
     }
 
     //If we cannot beat the score, just return immediately
-    if alpha.value() == Value::Mate(1) {
-        return Eval::mate_in(1).to_upperbound();
+    if alpha == eval::mate_in(ply + 1) {
+        return alpha;
     }
 
     if IS_PV_NODE && ply <= 255 {
@@ -175,25 +176,29 @@ fn search_step<const IS_PV_NODE: bool>(
 
     let mut ttmove = None;
     let mut tteval = None;
+    let mut ttbound = None;
 
     if let Some(entry) = hash_entry {
+        let eval = entry.eval(ply);
+        let bound = entry.bound();
         ttmove = Some(entry.mov());
-        tteval = Some(entry.eval());
+        tteval = Some(eval);
+        ttbound = Some(bound);
 
         //make sure we do not return a repetition from tt, allowing a threefold
         let repetition = sh.pos.will_repeat(ttmove.unwrap());
 
         //see if we have a TT-hit
         if i32::from(entry.depth()) >= depth && !repetition && !IS_PV_NODE {
-            match entry.eval().bound() {
+            match bound {
                 Bound::Exact => {
                     if ply > 0 {
-                        return entry.eval();
+                        return eval;
                     }
                 }
                 Bound::Lower => {
                     if let Some(m) = ttmove
-                        && entry.eval() >= beta
+                        && eval >= beta
                     {
                         if m.is_capture() {
                             let cap_bonus = (140 * depth - 105).min(1120);
@@ -204,12 +209,12 @@ fn search_step<const IS_PV_NODE: bool>(
                             sh.update_quiet_history(m, quiet_bonus);
                             sh.update_continuation_history(m, cont_bonus);
                         }
-                        return entry.eval();
+                        return eval;
                     }
                 }
                 Bound::Upper => {
-                    if entry.eval() < alpha {
-                        return entry.eval();
+                    if eval < alpha {
+                        return eval;
                     }
                 }
             }
@@ -218,35 +223,33 @@ fn search_step<const IS_PV_NODE: bool>(
 
     //We extend the normal search if we are  in check, else go into quiescence
     if depth <= 0 {
-        return quiesce(sh, alpha, beta, 0);
+        return quiesce(sh, alpha, beta, 0, ply);
     }
 
     let static_eval = sh.evaluate();
     // If we have a tt entry use its eval, else do static eval
     let eval = if let Some(v) = tteval
-        && (v.bound() == Bound::Exact
-            || v.bound() == Bound::Upper && v < static_eval
-            || v.bound() == Bound::Lower && v > static_eval)
+        && (ttbound == Some(Bound::Exact)
+            || ttbound == Some(Bound::Upper) && v < static_eval
+            || ttbound == Some(Bound::Lower) && v > static_eval)
     {
         v
     } else {
         static_eval
-    }
-    .to_exact();
+    };
 
     //Razoring
-    if !IS_PV_NODE && eval + 300 + 200 * (depth * depth) < alpha {
-        return quiesce(sh, alpha, beta, 100);
+    if !IS_PV_NODE && !eval::is_win(alpha) && eval + 300 + 200 * (depth * depth) < alpha {
+        return quiesce(sh, alpha, beta, 100, ply);
     }
 
     //Reverse futility pruning
     if !IS_PV_NODE
         && !sh.pos_mut().in_check()
         && eval >= beta + 200 * depth
-        && !matches!(eval.value(), Value::Mate(_))
-        && !matches!(beta.value(), Value::Mate(_))
+        && !eval::is_decisive(beta)
     {
-        return eval.to_lowerbound();
+        return eval;
     }
 
     //Try a null move to find a beta cutoff; verify by re-searching
@@ -255,10 +258,10 @@ fn search_step<const IS_PV_NODE: bool>(
         && sh.next_null <= ply as i32
         && (has_minor_pieces(sh.pos()) || has_major_pieces(sh.pos()))
         && !sh.pos_mut().in_check()
-        && !matches!(alpha.value(), Value::Mate(_))
-        && !matches!(beta.value(), Value::Mate(_))
+        && !eval::is_mate(alpha)
+        && !eval::is_mate(beta)
         && (!ttmove.is_some_and(|m| m.is_capture())
-            || !tteval.is_some_and(|e| e.bound() == Bound::Lower)
+            || ttbound != Some(Bound::Lower)
             || sh
                 .pos
                 .board
@@ -268,18 +271,12 @@ fn search_step<const IS_PV_NODE: bool>(
     {
         let reduction = 5 + (depth + i32::from(cut_node)) / 4;
         sh.do_null_move();
-        let null_score = -search_step::<false>(
-            sh,
-            depth - reduction,
-            ply + 1,
-            beta.neg_down(),
-            alpha.neg_down(),
-            false,
-        );
+        let null_score =
+            -search_step::<false>(sh, depth - reduction, ply + 1, -beta, -alpha, false);
         sh.undo_null_move();
-        if null_score >= beta && !matches!(null_score.value(), Value::Mate(_)) {
+        if null_score >= beta && !eval::is_decisive(null_score) {
             if sh.next_null != 0 || depth < 8 {
-                return null_score.to_lowerbound();
+                return null_score;
             }
 
             sh.next_null = ply as i32 + ((depth - reduction) * 3 / 4);
@@ -287,24 +284,17 @@ fn search_step<const IS_PV_NODE: bool>(
             sh.next_null = 0;
 
             if veri_score >= beta {
-                return null_score.to_lowerbound();
+                return null_score;
             }
         }
     }
 
     //Set up paramaters
-    let mut score = Eval::MIN;
-    let mut fail_low = true;
-    let mut fail_high = false;
+    let mut score = -eval::INFTY;
+    let mut bound = Bound::Upper;
     let mut bestmove = None;
 
-    let mut move_picker = movepick::MovePicker::new(
-        sh,
-        ply as i32,
-        ttmove,
-        None,
-    );
-
+    let mut move_picker = movepick::MovePicker::new(sh, ply as i32, ttmove, None);
     let mut move_idx = 0;
 
     let mut extension = 0;
@@ -321,8 +311,8 @@ fn search_step<const IS_PV_NODE: bool>(
             && !m.is_capture()
             && !sh.pos.in_check()
             && !sh.pos.gives_check(m)
-            && !matches!(beta.value(), Value::Mate(_))
-            && !matches!(score.value(), Value::Mate(_))
+            && !eval::is_mate(beta)
+            && !eval::is_mate(score)
         {
             //LMP
             if i > 3 + (depth * depth) as usize {
@@ -331,7 +321,7 @@ fn search_step<const IS_PV_NODE: bool>(
 
             //Futility Pruning
             if eval + 70 * depth <= alpha && depth < 7 && bestmove.is_some() {
-                if score < eval + 70 * depth && !matches!(score.value(), Value::Mate(_)) {
+                if score < eval + 70 * depth && !eval::is_decisive(score) {
                     score = eval + 70 * depth
                 }
                 continue;
@@ -341,14 +331,7 @@ fn search_step<const IS_PV_NODE: bool>(
         sh.do_move(m);
 
         let mut movescore = if i == 0 && IS_PV_NODE {
-            -search_step::<true>(
-                sh,
-                depth + extension - 1,
-                ply + 1,
-                beta.neg_down(),
-                alpha.neg_down(),
-                false,
-            )
+            -search_step::<true>(sh, depth + extension - 1, ply + 1, -beta, -alpha, false)
         //Apply lmr at sufficiently high depths
         } else if depth >= 2 && i > 0 {
             //lmr reduction depth
@@ -364,20 +347,13 @@ fn search_step<const IS_PV_NODE: bool>(
                 sh,
                 (depth - reduction / 1024 - 1).max(1),
                 ply + 1,
-                alpha.zero_window().neg_down(),
-                alpha.neg_down(),
+                -alpha - 1,
+                -alpha,
                 !cut_node,
             );
             // Verify on fail high
             if val > alpha {
-                val = -search_step::<false>(
-                    sh,
-                    depth - 1,
-                    ply + 1,
-                    alpha.zero_window().neg_down(),
-                    alpha.neg_down(),
-                    !cut_node,
-                );
+                val = -search_step::<false>(sh, depth - 1, ply + 1, -alpha - 1, -alpha, !cut_node);
             }
             val
         // Reduce less otherwise
@@ -396,37 +372,30 @@ fn search_step<const IS_PV_NODE: bool>(
                 sh,
                 depth - (reduction / 2048).clamp(0, 2) - 1,
                 ply + 1,
-                alpha.zero_window().neg_down(),
-                alpha.neg_down(),
+                -alpha - 1,
+                -alpha,
                 !cut_node,
             )
         };
 
         //Research if we failed high in a PV node
         if IS_PV_NODE && i != 0 && movescore > alpha {
-            movescore = -search_step::<true>(
-                sh,
-                depth + extension - 1,
-                ply + 1,
-                beta.neg_down(),
-                alpha.neg_down(),
-                false,
-            );
+            movescore =
+                -search_step::<true>(sh, depth + extension - 1, ply + 1, -beta, -alpha, false);
         }
 
         sh.undo_move();
 
         //Abort search if the helper gets a stop signal
         if sh.shared_data().stop_flag.load(Ordering::Relaxed).eq(&true) {
-            return Eval::MIN;
+            return eval::DRAW;
         }
 
         //Adjust results
         if movescore >= beta {
             bestmove = Some(m);
             score = movescore;
-            fail_high = true;
-            fail_low = false;
+            bound = Bound::Lower;
             if !m.is_capture() {
                 sh.history.killer.register(m, ply);
             }
@@ -437,10 +406,10 @@ fn search_step<const IS_PV_NODE: bool>(
             bestmove = Some(m);
             score = movescore;
             if score > alpha {
-                fail_low = false;
+                bound = Bound::Exact;
                 alpha = score;
                 //break search if result is already optimal
-                if alpha == Eval::mate_in(1) {
+                if alpha == eval::mate_in(ply + 1) {
                     break;
                 }
             }
@@ -449,16 +418,16 @@ fn search_step<const IS_PV_NODE: bool>(
 
     if move_idx == 0 {
         if sh.pos.in_check() {
-            return Eval::MATE_NOW;
+            return -eval::mate_in(ply);
         } else {
-            return Eval::STALEMATE;
+            return eval::DRAW;
         }
     }
 
     assert!(bestmove.is_some());
-    assert!(Eval::MIN < score && score < Eval::MAX);
+    assert!(-eval::INFTY < score && score < eval::INFTY);
 
-    if IS_PV_NODE && ply <= 255 && !fail_high {
+    if IS_PV_NODE && ply <= 255 && bound == Bound::Exact {
         sh.pv[ply] = bestmove.unwrap();
     }
 
@@ -497,50 +466,47 @@ fn search_step<const IS_PV_NODE: bool>(
         }
     }
 
-    score = if fail_low {
-        score.to_upperbound()
-    } else if fail_high {
-        score.to_lowerbound()
-    } else {
-        score.to_exact()
-    };
-
     let zh = sh.pos().zobrist_hash();
 
     //Write to TT
     sh.shared.tt.set(
         zh,
-        TTEntry::new(score, depth.clamp(0, 255) as u8, zh, bestmove.unwrap()),
+        score,
+        bound,
+        bestmove.unwrap(),
+        depth.clamp(0, 255) as u8,
+        ply,
     );
 
     score
 }
 
-fn quiesce(sh: &mut SearchHead, mut alpha: Eval, beta: Eval, delta: i32) -> Eval {
+fn quiesce(sh: &mut SearchHead, mut alpha: i32, beta: i32, delta: i32, ply: usize) -> i32 {
     if sh.shared.nodes.load(Ordering::Relaxed) & 0xff == 0
         && let Some(limit) = sh.time_manager.limit
         && sh.time_manager.start_time.elapsed() > limit
     {
         sh.shared.stop_flag.store(true, Ordering::Release);
-        return Eval::DRAW;
+        return eval::DRAW;
     }
 
     //check for obviously drawn positions
     if is_material_draw(sh.pos()) {
-        return Eval::DRAW;
+        return eval::DRAW;
     }
 
     //Check if the move is already hashed
     let hash_entry = sh.shared_data().tt.get(sh.pos().zobrist_hash());
 
     let ttmove = hash_entry.map(|e| e.mov()).take_if(|m| m.is_capture());
-    let tteval = hash_entry.map(|e| e.eval());
+    let tteval = hash_entry.map(|e| e.eval(ply));
+    let ttbound = hash_entry.map(|e| e.bound());
 
     if let Some(eval) = tteval
-        && !matches!(eval.value(), Value::Mate(_))
-        && ((eval.bound() == Bound::Upper && eval < alpha)
-            || (eval.bound() == Bound::Lower && eval >= beta)
-            || eval.bound() == Bound::Exact)
+        && !eval::is_decisive(eval)
+        && ((ttbound == Some(Bound::Upper) && eval < alpha)
+            || (ttbound == Some(Bound::Lower) && eval >= beta)
+            || ttbound == Some(Bound::Exact))
     {
         return eval;
     }
@@ -551,36 +517,20 @@ fn quiesce(sh: &mut SearchHead, mut alpha: Eval, beta: Eval, delta: i32) -> Eval
     if !sh.pos_mut().in_check() {
         //Adjust based on null-move hypothesis
         if static_eval >= beta {
-            return static_eval.to_lowerbound();
+            return static_eval;
         } else if alpha < static_eval {
             alpha = static_eval;
         }
     }
 
-    let val = match alpha.value() {
-        Value::Centis(n) => n,
-        Value::Mate(n) => {
-            if n % 2 == 0 {
-                i32::MIN
-            } else {
-                i32::MAX
-            }
-        }
-        Value::Infty => i32::MAX,
-        Value::NegInfty => i32::MIN,
-    } - if let Value::Centis(c) = static_eval.value() {
-        c
-    } else {
-        0
-    } - delta;
+    let val = alpha - static_eval - delta;
 
     let cutoff = if sh.pos.in_check() { None } else { Some(val) };
 
-    let mut move_picker =
-        MovePicker::new(sh, 255, ttmove, cutoff);
+    let mut move_picker = MovePicker::new(sh, 255, ttmove, cutoff);
 
     let mut best_score = if sh.pos.in_check() {
-        Eval::MIN
+        -eval::INFTY
     } else {
         static_eval
     };
@@ -601,20 +551,20 @@ fn quiesce(sh: &mut SearchHead, mut alpha: Eval, beta: Eval, delta: i32) -> Eval
             .load(std::sync::atomic::Ordering::Relaxed)
             .eq(&true)
         {
-            return Eval::DRAW;
+            return eval::DRAW;
         }
 
-        if i >= 3 && !in_check && !matches!(beta.value(), Value::Mate(_)) && !sh.pos.gives_check(m) {
+        if i >= 3 && !in_check && !eval::is_mate(beta) && !sh.pos.gives_check(m) {
             continue;
         }
 
         sh.do_move(m);
         //The deeper we are the more valuable captures need to be
-        let score = -quiesce(sh, beta.neg_down(), alpha.neg_down(), delta - 50);
+        let score = -quiesce(sh, -beta, -alpha, delta - 50, ply + 1);
         sh.undo_move();
 
         if score >= beta {
-            return score.to_lowerbound();
+            return score;
         } else if best_score < score {
             best_score = score;
             if best_score > alpha {
@@ -624,7 +574,7 @@ fn quiesce(sh: &mut SearchHead, mut alpha: Eval, beta: Eval, delta: i32) -> Eval
     }
 
     if in_check && move_idx == 0 {
-        return Eval::MATE_NOW;
+        return -eval::mate_in(ply);
     }
 
     best_score

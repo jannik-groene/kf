@@ -1,6 +1,6 @@
 use crate::{
     chess::Move,
-    evaluate::{Bound, Eval, Value},
+    evaluate::{Bound, eval},
 };
 use std::cell::UnsafeCell;
 
@@ -35,7 +35,7 @@ impl TranspositionTable {
     }
     #[inline]
     pub fn get(&self, zobrist_key: u64) -> Option<TTEntry> {
-        let size = unsafe{ (*self.hash.get()).len() };
+        let size = unsafe { (*self.hash.get()).len() };
         if size == 0 {
             return None;
         }
@@ -49,20 +49,21 @@ impl TranspositionTable {
         }
     }
     #[inline]
-    pub fn set(&self, zobrist_key: u64, entry: TTEntry) {
-        let size = unsafe{ (*self.hash.get()).len() };
+    pub fn set(&self, zobrist_key: u64, eval: i32, bound: Bound, mv: Move, depth: u8, ply: usize) {
+        let size = unsafe { (*self.hash.get()).len() };
         //do not commit invalid scores or low depths to the hashtable
-        if size == 0 || matches!(entry.eval().value(), Value::Infty | Value::NegInfty) {
+        if size == 0 || eval.abs() >= eval::INFTY {
             return;
         }
         let hash_entry = unsafe { (&*self.hash.get())[zobrist_key as usize % size] };
+        let entry = TTEntry::new(eval, bound, depth, zobrist_key, mv, ply);
         //Mate scores may be seen as having infinite depth
-        if (hash_entry.0.depth() < entry.depth()
-            || (matches!(entry.eval().value(), Value::Mate(_))
-                && entry.eval() > hash_entry.0.eval()))
-            && (hash_entry.0.depth() + 2 < entry.depth()
-                || entry.eval().bound() == Bound::Exact
-                || hash_entry.0.eval().bound() != Bound::Exact)
+        if hash_entry.0 == TTEntry::UNCHECKED
+            || ((hash_entry.0.depth() < depth
+                || (eval::is_decisive(eval) && eval > hash_entry.0.eval(ply)))
+                && (hash_entry.0.depth() + 2 < depth
+                    || bound == Bound::Exact
+                    || hash_entry.0.bound() != Bound::Exact))
         {
             unsafe {
                 (&mut *self.hash.get())[zobrist_key as usize % size].0 = entry;
@@ -90,18 +91,36 @@ impl TTEntry {
     pub fn mov(&self) -> Move {
         Move::decompress(((self.data >> 8) & 0xffff) as u16)
     }
-    pub fn new(eval: Eval, depth: u8, zobrist_hash: u64, mov: Move) -> TTEntry {
-        let dam = (u32::from(mov.compress()) << 8) ^ u32::from(depth);
-        let ev = eval.pack_for_tt();
-        let data = (ev << 24) ^ u64::from(dam);
+    pub fn new(
+        eval: i32,
+        bound: Bound,
+        depth: u8,
+        zobrist_hash: u64,
+        mov: Move,
+        ply: usize,
+    ) -> TTEntry {
+        let dam = (u64::from(mov.compress()) << 8) ^ u64::from(depth);
+        let ev = eval::pack_for_tt(eval, ply);
+        let bd = bound as u64;
+        let data = (bd << 40) ^ (ev << 24) ^ dam;
         TTEntry {
             zobrist_hash: zobrist_hash ^ data,
             data,
         }
     }
     #[inline]
-    pub fn eval(&self) -> Eval {
-        Eval::from_packed(self.data >> 24)
+    pub fn eval(&self, ply: usize) -> i32 {
+        eval::unpack_tt((self.data >> 24) & 0xffff, ply)
+    }
+    pub fn bound(&self) -> Bound {
+        let bd = (self.data >> 40) & 0b11;
+        if bd == 0 {
+            Bound::Exact
+        } else if bd == 1 {
+            Bound::Upper
+        } else {
+            Bound::Lower
+        }
     }
     #[inline]
     pub fn depth(&self) -> u8 {
@@ -115,27 +134,31 @@ fn write_and_read_tt() {
     use std::sync::Arc;
     let hash = Arc::new(TranspositionTable::new(10000));
     let mv = Move::new(Square::B1, Square::C1, crate::chess::MoveType::Normal);
-    let entry = TTEntry::new(-Eval::MATE_NOW, 3, 1234628935786765, mv);
-    hash.set(1234628935786765, entry);
+    let entry = TTEntry::new(-eval::MATE_NOW, Bound::Exact, 3, 1234628935786765, mv, 5);
+    hash.set(1234628935786765, -eval::MATE_NOW, Bound::Exact, mv, 3, 5);
     let ret = hash.get(1234628935786765).unwrap();
     assert!(hash.get(1234628935786765).unwrap() == entry);
-    assert!(ret.eval() == -Eval::MATE_NOW);
+    assert!(ret.eval(5) == -eval::MATE_NOW);
+    assert!(ret.bound() == Bound::Exact);
     assert!(ret.depth() == 3);
     assert!(ret.mov() == mv);
 
-    let entry2 = TTEntry::new(-Eval::MATE_NOW, 3, 1234628935786798, mv);
-    let entry4 = TTEntry::new(
-        Eval::DRAW,
-        2,
+    let entry2 = TTEntry::new(-eval::MATE_NOW, Bound::Upper, 3, 1234628935786798, mv, 3);
+    hash.set(1234628935786798, -eval::MATE_NOW, Bound::Upper, mv, 3, 3);
+    hash.set(
         1234628935786798,
+        eval::DRAW,
+        Bound::Exact,
         Move::new(Square::E1, Square::A2, crate::chess::MoveType::Normal),
+        2,
+        0,
     );
-    hash.set(1234628935786798, entry2);
-    hash.set(1234628935786798, entry4);
     assert!(hash.get(1234628935786798).unwrap() == entry2);
-    let entry3 = TTEntry::new(-Eval::MATE_NOW, 3, 1234628935786700, mv);
+    let entry3 = TTEntry::new(-eval::MATE_NOW, Bound::Lower, 3, 1234628935786700, mv, 8);
     let hash_clone = hash.clone();
-    std::thread::spawn(move || hash_clone.set(1234628935786700, entry3));
+    std::thread::spawn(move || {
+        hash_clone.set(1234628935786700, -eval::MATE_NOW, Bound::Lower, mv, 3, 8)
+    });
     std::thread::sleep(std::time::Duration::from_millis(100));
     assert!(hash.get(1234628935786700).unwrap() == entry3);
 }

@@ -3,9 +3,11 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
+use crate::evaluate::Bound;
+use crate::evaluate::eval::print_eval;
 use crate::{
     chess::{Move, Piece, Position},
-    evaluate::{Eval, Value, evaluate},
+    evaluate::evaluate,
 };
 
 use super::history::History;
@@ -102,7 +104,7 @@ impl SearchHead {
         self.pos.undo_null_move();
     }
     #[inline]
-    pub fn evaluate(&mut self) -> Eval {
+    pub fn evaluate(&mut self) -> i32 {
         evaluate(self.pos_mut())
     }
     #[inline]
@@ -136,10 +138,10 @@ impl SearchHead {
         self.history.capture.register(p, m, cap, bonus);
     }
 
-    pub fn write_uci_info(&self, eval: Eval, depth: u8) {
+    pub fn write_uci_info(&self, eval: i32, bound: Bound, depth: u8) {
         let nodes = self.shared.nodes.load(Ordering::Relaxed);
         print!(
-            "info nodes {} nps {}",
+            "info nodes {} nps {} ",
             nodes,
             1000 * u128::from(nodes)
                 / self
@@ -149,9 +151,9 @@ impl SearchHead {
                     .as_millis()
                     .clamp(1, u128::MAX)
         );
+        print_eval(eval, bound);
         print!(
-            " {} depth {} time {}",
-            eval,
+            "depth {} time {}",
             depth,
             self.time_manager.start_time.elapsed().as_millis()
         );
@@ -175,13 +177,8 @@ impl SearchHead {
         }) {
             let mv = ((vote >> 8) & 0xffff) as u16;
             let depth = vote & 0xff;
-            let eval = Eval::from_packed(vote >> 24);
-            let weight = match eval.value() {
-                Value::Centis(n) => n,
-                Value::Mate(n) => 10_000 - n,
-                _ => 0,
-            };
-            *vote_map.entry(mv).or_insert(0) += depth as i32 * weight;
+            let eval = ((vote >> 24) as i16) as i32;
+            *vote_map.entry(mv).or_insert(0) += depth as i32 * eval;
         }
 
         if let Some((m, _)) = vote_map.iter().max_by(|(_, v), (_, v2)| v.cmp(v2))
@@ -189,7 +186,7 @@ impl SearchHead {
         {
             println!("bestmove {}", Move::decompress(*m));
         } else {
-            println!("bestmove (null)");
+            println!("bestmove 0000");
         }
         // Clear out results before next search
         for res in &self.shared.results {

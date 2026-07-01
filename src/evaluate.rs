@@ -1,5 +1,5 @@
 mod endgames;
-mod eval;
+pub mod eval;
 mod piecetables;
 
 use crate::{
@@ -7,7 +7,7 @@ use crate::{
     constants,
 };
 use endgames::State;
-pub use eval::{Bound, Eval, Value};
+pub use eval::Bound;
 
 #[allow(dead_code)]
 pub fn has_pawns(pos: &Position) -> bool {
@@ -460,13 +460,13 @@ fn king_centrality(pos: &Position, color: Color) -> i32 {
     14 - (7 - 2 * rank).abs() + (7 - 2 * file).abs()
 }
 
-pub fn evaluate(pos: &Position) -> Eval {
+pub fn evaluate(pos: &Position) -> i32 {
     const WINNING_THRESHOLD: i32 = 10_000;
     if pos.get_board().occupation().count() <= 3 {
         match endgames::kkx(pos) {
-            State::Won(n) => return Eval::exact_from_cents(n + WINNING_THRESHOLD),
-            State::Lost(n) => return Eval::exact_from_cents(-n - WINNING_THRESHOLD),
-            State::Drawn => return Eval::DRAW,
+            State::Won(n) => return n + WINNING_THRESHOLD,
+            State::Lost(n) => return -n - WINNING_THRESHOLD,
+            State::Drawn => return 0,
             _ => {}
         }
     }
@@ -474,7 +474,7 @@ pub fn evaluate(pos: &Position) -> Eval {
     let mut res = pos.material_balance() + 20;
     res += evaluate_mobility(pos, phase);
     if res.abs() > 900 {
-        return Eval::new(Bound::Exact, Value::Centis(res));
+        return res;
     }
 
     res += evaluate_pawns(pos, phase, pos.color());
@@ -520,7 +520,7 @@ pub fn evaluate(pos: &Position) -> Eval {
     if pos.rule_50_count() > 80 {
         res /= (pos.rule_50_count() - 80) as i32;
     }
-    Eval::new(Bound::Exact, Value::Centis(res))
+    res
 }
 
 #[test]
@@ -529,5 +529,5 @@ fn evaluate_start_pos() {
     let eval = evaluate(&pos);
     println!("Eval {}", eval);
     //everything should be equal up to the tempo
-    assert_eq!(eval.value(), Value::Centis(20));
+    assert_eq!(eval, 20);
 }

@@ -214,7 +214,7 @@ impl Engine {
         println!("{:->1$}", "", numlen + 7);
         println!("Total  {}", total);
     }
-    pub fn eval(&self) -> crate::evaluate::Eval {
+    pub fn eval(&self) -> i32 {
         crate::evaluate::evaluate(&self.search.root_position())
     }
     pub fn position(&self) -> crate::chess::Position {
