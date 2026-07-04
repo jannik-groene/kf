@@ -38,18 +38,9 @@ impl SharedData {
     pub fn new() -> Self {
         SharedData {
             nodes: AtomicU64::new(0),
-            tt: TranspositionTable::new(2),
+            tt: TranspositionTable::new(16),
             stop_flag: AtomicBool::new(true),
-            results: [
-                AtomicU64::new(0),
-                AtomicU64::new(0),
-                AtomicU64::new(0),
-                AtomicU64::new(0),
-                AtomicU64::new(0),
-                AtomicU64::new(0),
-                AtomicU64::new(0),
-                AtomicU64::new(0),
-            ],
+            results: [const { AtomicU64::new(0) }; 8],
         }
     }
 }
@@ -153,9 +144,10 @@ impl SearchHead {
         );
         print_eval(eval, bound);
         print!(
-            "depth {} time {}",
+            "depth {} time {} hashfull {}",
             depth,
-            self.time_manager.start_time.elapsed().as_millis()
+            self.time_manager.start_time.elapsed().as_millis(),
+            self.shared.tt.hash_full()
         );
         if self.pv[0].compress() != 0 {
             print!(" pv");

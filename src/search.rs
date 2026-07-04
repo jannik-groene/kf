@@ -14,7 +14,6 @@ use crate::{
 };
 use thread::{SearchHead, SharedData};
 use threadpool::ThreadPool;
-use tt::TTEntry;
 
 use thread::TimeManager;
 
@@ -38,7 +37,7 @@ impl SearchManager {
             unsafe {
                 self.shared
                     .tt
-                    .resize(size * 1_000_000 / std::mem::size_of::<(TTEntry, TTEntry)>());
+                    .resize(size);
             }
         }
     }
@@ -178,12 +177,13 @@ fn search_step<const IS_PV_NODE: bool>(
     let mut tteval = None;
     let mut ttbound = None;
 
-    if let Some(entry) = hash_entry {
+    if let Some(entry) = hash_entry && sh.pos.is_legal(entry.mov()) {
         let eval = entry.eval(ply);
         let bound = entry.bound();
         ttmove = Some(entry.mov());
         tteval = Some(eval);
         ttbound = Some(bound);
+        assert!(entry.mov() != Move::ZERO);
 
         //make sure we do not return a repetition from tt, allowing a threefold
         let repetition = sh.pos.will_repeat(ttmove.unwrap());

@@ -55,6 +55,7 @@ impl ThreadPool {
 
         self.shared.stop_flag.store(false, Ordering::Release);
         self.shared.nodes.store(0, Ordering::Release);
+        self.shared.tt.increment_age();
 
         let _ = self.worker_tx[0].send(ThreadSignal::SetPosition(pos.clone()));
         let _ = self.worker_tx[0].send(ThreadSignal::SetLimit(time_manager));
