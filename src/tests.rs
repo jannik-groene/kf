@@ -48,7 +48,7 @@ fn simple_en_passant() {
     let mut moves = MoveList::new();
     pos.get_moves::<All>(&mut moves);
     assert!(moves.contains(&m));
-    let npos1 = chess::Position::from_move(pos, m);
+    let npos1 = chess::Position::from_move(&pos, m);
     println!("{}", npos1.board);
     let npos2 = chess::Position::from_fen(String::from(
         "rnbqkbnr/pp3ppp/2P5/4p3/5P2/8/PPPP2PP/RNBQKBNR b KQkq - 0 4",
@@ -67,7 +67,7 @@ fn simple_castle() {
     let mut moves = MoveList::new();
     pos.get_moves::<All>(&mut moves);
     assert!(moves.contains(&m));
-    let npos1 = chess::Position::from_move(pos, m);
+    let npos1 = chess::Position::from_move(&pos, m);
     let npos2 = chess::Position::from_fen(String::from(
         "rn1q1rk1/1p2bppp/p2pbn2/4p3/4P3/1NN1BP2/PPPQ2PP/R3KB1R w KQ - 3 10",
     ))

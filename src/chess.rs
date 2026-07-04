@@ -202,8 +202,8 @@ impl Position {
     }
 
     //Create a new position in whch the move was applied
-    #[cfg(test)]
-    pub fn from_move(pos: Self, m: Move) -> Self {
+    #[allow(dead_code)]
+    pub fn from_move(pos: &Self, m: Move) -> Self {
         let mut pos = pos.clone();
         pos.do_move(m);
         pos

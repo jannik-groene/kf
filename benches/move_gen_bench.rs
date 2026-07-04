@@ -1,6 +1,6 @@
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use criterion_cycles_per_byte::CyclesPerByte;
-use kf_internals::chess;
+use kf_internals::chess::{self, All, MoveList, Position};
 
 fn move_gen_in_opening(c: &mut Criterion<CyclesPerByte>) {
     let mut pos = chess::Position::from_fen(String::from(
@@ -8,7 +8,11 @@ fn move_gen_in_opening(c: &mut Criterion<CyclesPerByte>) {
     ))
     .unwrap();
     c.bench_function("move_gen_in_opening", |b| {
-        b.iter(|| pos.get_moves::<true>())
+        b.iter(|| {
+            let mut moves = MoveList::new();
+            pos.get_moves::<All>(&mut moves);
+            moves
+        })
     });
 }
 
@@ -30,19 +34,21 @@ fn do_move_en_passant(c: &mut Criterion<CyclesPerByte>) {
     let m = chess::Move::new(35u8.into(), 42u8.into(), chess::MoveType::Enpassant);
     c.bench_function("do_move_en_passant", |b| {
         b.iter(|| {
-            pos.from_move(m);
+            Position::from_move(&pos, m);
         })
     });
 }
 
 fn perft_step(pos: &mut chess::Position, d: u8) -> usize {
+    let mut moves = MoveList::new();
+    pos.get_moves::<All>(&mut moves);
     if d == 0 {
         1
     } else if d == 1 {
-        pos.get_moves::<true>().len()
+        moves.len()
     } else {
         let mut total = 0;
-        for m in pos.get_moves::<true>() {
+        for m in moves {
             pos.do_move(m);
             total += perft_step(pos, d - 1);
             pos.undo_move();
