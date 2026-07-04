@@ -73,7 +73,7 @@ impl Board {
         zobrist
     }
 
-    pub fn empty() -> Board {
+    pub const fn empty() -> Board {
         Board {
             piece_boards: [BitBoard::EMPTY; 6],
             color_boards: [BitBoard::EMPTY; 2],
@@ -101,11 +101,11 @@ impl Board {
         self.piece_table[sq as usize] = None;
     }
     #[inline]
-    pub fn get_color_bb(&self, c: Color) -> BitBoard {
+    pub const fn get_color_bb(&self, c: Color) -> BitBoard {
         self.color_boards[c as usize]
     }
     #[inline]
-    pub fn get_piece_bb(&self, p: Piece) -> BitBoard {
+    pub const fn get_piece_bb(&self, p: Piece) -> BitBoard {
         self.piece_boards[p as usize]
     }
     #[inline]
@@ -117,7 +117,7 @@ impl Board {
         self.color_boards[0] | self.color_boards[1]
     }
     #[inline]
-    pub fn piece_at(&self, sq: Square) -> Option<Piece> {
+    pub const fn piece_at(&self, sq: Square) -> Option<Piece> {
         self.piece_table[sq as usize]
     }
     #[inline]
@@ -223,7 +223,7 @@ impl Board {
 }
 
 //translate a fen symbol (kqbnrpKQBNRP) into a (Color, Piece) pair
-fn fen_to_type(c: char) -> Option<(Color, Piece)> {
+const fn fen_to_type(c: char) -> Option<(Color, Piece)> {
     match c {
         'k' => Some((Color::Black, Piece::King)),
         'q' => Some((Color::Black, Piece::Queen)),

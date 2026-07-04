@@ -210,17 +210,17 @@ impl Position {
     }
 
     #[inline]
-    pub fn get_board(&self) -> &Board {
+    pub const fn get_board(&self) -> &Board {
         &self.board
     }
 
     #[inline]
-    pub fn rule_50_count(&self) -> u8 {
+    pub const fn rule_50_count(&self) -> u8 {
         self.ply_info.rule_50_count
     }
 
     #[inline]
-    pub fn color(&self) -> Color {
+    pub const fn color(&self) -> Color {
         self.to_move
     }
 

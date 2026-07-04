@@ -91,7 +91,7 @@ impl BitBoard {
         BitBoard { bits }
     }
     #[inline]
-    pub fn is_empty(self) -> bool {
+    pub const fn is_empty(self) -> bool {
         self.bits == 0
     }
     #[inline]
@@ -99,7 +99,7 @@ impl BitBoard {
         self.bits.trailing_zeros().into()
     }
     #[inline]
-    pub fn count(self) -> u32 {
+    pub const fn count(self) -> u32 {
         self.bits.count_ones()
     }
     #[inline]
@@ -115,15 +115,15 @@ impl BitBoard {
         self & sq.into() != Self::EMPTY
     }
     #[inline]
-    pub fn from_file(file: File) -> Self {
+    pub const fn from_file(file: File) -> Self {
         Self::new(0b100000001000000010000000100000001000000010000000100000001 << file as u8)
     }
     #[inline]
-    pub fn from_rank(rank: Rank) -> Self {
+    pub const fn from_rank(rank: Rank) -> Self {
         Self::new(0b11111111 << (8 * rank as u8))
     }
     #[inline]
-    pub fn shifted_forward(self, c: Color) -> Self {
+    pub const fn shifted_forward(self, c: Color) -> Self {
         BitBoard {
             bits: match c {
                 Color::White => self.bits << 8,
@@ -132,7 +132,7 @@ impl BitBoard {
         }
     }
     #[inline]
-    pub fn shifted_by(self, i: i32) -> Self {
+    pub const fn shifted_by(self, i: i32) -> Self {
         if i >= 0 {
             BitBoard {
                 bits: self.bits << i,
@@ -324,7 +324,7 @@ impl File {
     }
 
     #[inline]
-    pub fn ep_cap_square(self) -> Square {
+    pub const fn ep_cap_square(self) -> Square {
         match self {
             File::A => Square::A4,
             File::B => Square::B4,
@@ -338,7 +338,7 @@ impl File {
     }
 
     #[inline]
-    pub fn ep_square(self) -> Square {
+    pub const fn ep_square(self) -> Square {
         match self {
             File::A => Square::A3,
             File::B => Square::B3,
