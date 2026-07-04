@@ -764,18 +764,21 @@ impl Position {
                 }
                 match mover {
                     Piece::Pawn => {
-                        !matches!(m.to().rank(), Rank::Eighth | Rank::First)
-                            && ((constants::pawn_attacks(m.from(), self.to_move)
+                        if matches!(m.to().rank(), Rank::Eighth | Rank::First) {
+                            return false;
+                        }
+                        if m.is_capture() {
+                            return (constants::pawn_attacks(m.from(), self.to_move)
                                 & self.board.get_color_bb(self.to_move.other()))
-                            .is_set(m.to())
-                                || m.to() == m.from().advance(self.to_move)
-                                || (m.from().rank().relative(self.to_move) == Rank::Second
-                                    && !self
-                                        .board
-                                        .occupation()
-                                        .is_set(m.from().advance(self.to_move))
-                                    && m.to()
-                                        == m.from().advance(self.to_move).advance(self.to_move)))
+                            .is_set(m.to());
+                        }
+                        m.to() == m.from().advance(self.to_move)
+                            || (m.from().rank().relative(self.to_move) == Rank::Second
+                                && !self
+                                    .board
+                                    .occupation()
+                                    .is_set(m.from().advance(self.to_move))
+                                && m.to() == m.from().advance(self.to_move).advance(self.to_move))
                     }
                     Piece::King => {
                         constants::king_moves(m.from()).is_set(m.to())
