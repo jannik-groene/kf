@@ -3,6 +3,11 @@ pub const MATE_NOW: i32 = 32000;
 pub const MATE_IN_MAX: i32 = 32000 - 255;
 pub const DRAW: i32 = 0;
 
+#[allow(dead_code)]
+pub const fn draw(seed: u64) -> i32 {
+    (seed % 5) as i32 - 2
+}
+
 pub const fn mate_in(ply: usize) -> i32 {
     MATE_NOW - ply as i32
 }

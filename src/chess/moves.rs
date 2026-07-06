@@ -24,7 +24,7 @@ pub enum MoveType {
 }
 
 impl MoveType {
-    pub fn is_promotion(self) -> bool {
+    pub const fn is_promotion(self) -> bool {
         matches!(
             self,
             Self::PromotionN
@@ -37,7 +37,7 @@ impl MoveType {
                 | Self::PromotionCaptureQ
         )
     }
-    pub fn promotion_piece(self) -> Option<Piece> {
+    pub const fn promotion_piece(self) -> Option<Piece> {
         match self {
             Self::PromotionN | Self::PromotionCaptureN => Some(Piece::Knight),
             Self::PromotionB | Self::PromotionCaptureB => Some(Piece::Bishop),
@@ -103,11 +103,11 @@ impl Move {
         unsafe { std::mem::transmute((self.data >> 12) as u8) }
     }
 
-    pub fn decompress(m: u16) -> Move {
+    pub const fn decompress(m: u16) -> Move {
         Move { data: m }
     }
 
-    pub fn compress(self) -> u16 {
+    pub const fn compress(self) -> u16 {
         self.data
     }
 

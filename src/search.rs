@@ -126,10 +126,11 @@ fn iterative_deepening(id: usize, search_head: &mut SearchHead, depth: u8) {
 
 //Parameters:
 // sh: The search thread head.
-// depth: the depth information consisting of target depth and reductions/extension
-// null_moves: how many null moves have been performed in the current search
+// depth: the remaining depth
+// ply: the current search ply
 // alpha: the alpha value of the current ab search
 // beta: the beta of the current ab search
+// cut_node: whether we expect to see a beta cutoff
 fn search_step<const IS_PV_NODE: bool>(
     sh: &mut SearchHead,
     depth: i32,
@@ -151,8 +152,9 @@ fn search_step<const IS_PV_NODE: bool>(
         return eval::DRAW;
     }
 
-    //Repeated positions are draws
-    if sh.pos.is_threefold() {
+    //Repeated positions are draws; Stop searching if we see a position again within our search or a
+    //third time over the whole game
+    if ply > 0 && (sh.pos.is_repetition_in_plys(ply) || sh.pos.is_threefold()) {
         return eval::DRAW;
     }
 
@@ -221,7 +223,7 @@ fn search_step<const IS_PV_NODE: bool>(
         }
     }
 
-    //We extend the normal search if we are  in check, else go into quiescence
+    //Go into quiescence search when target depth has been reached
     if depth <= 0 {
         return quiesce(sh, alpha, beta, 0, ply);
     }
@@ -259,21 +261,24 @@ fn search_step<const IS_PV_NODE: bool>(
         && (has_minor_pieces(sh.pos()) || has_major_pieces(sh.pos()))
         && !sh.pos_mut().in_check()
         && !eval::is_mate(alpha)
-        && !eval::is_mate(beta)
+        && !eval::is_mate(beta) // This check seems redundant, since we must be in zw-search here
+                                // anyway?
         && (!ttmove.is_some_and(|m| m.is_capture())
             || ttbound != Some(Bound::Lower)
             || sh
                 .pos
                 .board
                 .piece_at(ttmove.unwrap().to())
-                .is_some_and(|p| p != Piece::Pawn))
+                .is_some_and(|p| p == Piece::Pawn))
         && eval >= beta + 50 - 20 * depth - 50 * i32::from(cut_node)
     {
         let reduction = 5 + (depth + i32::from(cut_node)) / 4;
+
         sh.do_null_move();
         let null_score =
             -search_step::<false>(sh, depth - reduction, ply + 1, -beta, -alpha, false);
         sh.undo_null_move();
+
         if null_score >= beta && !eval::is_decisive(null_score) {
             if sh.next_null != 0 || depth < 8 {
                 return null_score;
@@ -492,6 +497,11 @@ fn quiesce(sh: &mut SearchHead, mut alpha: i32, beta: i32, delta: i32, ply: usiz
 
     //check for obviously drawn positions
     if is_material_draw(sh.pos()) {
+        return eval::DRAW;
+    }
+
+    //50 move rule
+    if sh.pos.rule_50_count() >= 100 {
         return eval::DRAW;
     }
 

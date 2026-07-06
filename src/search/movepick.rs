@@ -84,6 +84,19 @@ impl MovePicker {
     #[inline]
     fn score_quiets(&mut self, sh: &mut SearchHead) {
         sh.pos.get_moves::<Quiets>(&mut self.moves);
+        if let Some(tm) = self.ttmove && sh.pos.rule_50_count() < 100 {
+            assert_eq!(
+                sh.pos.is_legal(tm),
+                self.moves.contains(&tm),
+                "\n{}\n{} {:?} {:?} {:?}\n{:?}",
+                sh.pos.board,
+                tm,
+                tm.typ(),
+                sh.pos.color(),
+                tm,
+                self.moves,
+            );
+        }
 
         // Swap ahead both TT and Killer
         if let Some(idx) = self
@@ -136,7 +149,9 @@ impl MovePicker {
             MovePickingStage::TtMove => {
                 self.stage = MovePickingStage::ScoreCaptures;
                 if self.ttmove.is_some_and(|m| sh.pos.is_legal(m)) {
-                    unsafe { self.searched.push_unchecked(self.ttmove.unwrap()); }
+                    unsafe {
+                        self.searched.push_unchecked(self.ttmove.unwrap());
+                    }
                     self.ttmove
                 } else {
                     self.next(sh)
@@ -162,7 +177,9 @@ impl MovePicker {
                     self.moves.swap(self.idx, i);
                     self.scores.swap(self.idx, i);
                     self.idx += 1;
-                    unsafe { self.searched.push_unchecked(self.moves[self.idx-1]); }
+                    unsafe {
+                        self.searched.push_unchecked(self.moves[self.idx - 1]);
+                    }
                     Some(self.moves[self.idx - 1])
                 } else {
                     if self.cutoff.is_some() {
@@ -180,7 +197,9 @@ impl MovePicker {
                     && sh.pos.is_legal(self.killer)
                     && Some(self.killer) != self.ttmove
                 {
-                    unsafe { self.searched.push_unchecked(self.killer); }
+                    unsafe {
+                        self.searched.push_unchecked(self.killer);
+                    }
                     Some(self.killer)
                 } else {
                     self.next(sh)
@@ -203,7 +222,9 @@ impl MovePicker {
                     self.moves.swap(idx, self.idx);
                     self.scores.swap(idx, self.idx);
                     self.idx += 1;
-                    unsafe { self.searched.push_unchecked(self.moves[self.idx-1]); }
+                    unsafe {
+                        self.searched.push_unchecked(self.moves[self.idx - 1]);
+                    }
                     Some(self.moves[self.idx - 1])
                 } else {
                     self.idx = self.bc_idx;
@@ -221,7 +242,9 @@ impl MovePicker {
                     self.moves.swap(self.idx, i);
                     self.scores.swap(self.idx, i);
                     self.idx += 1;
-                    unsafe { self.searched.push_unchecked(self.moves[self.idx-1]); }
+                    unsafe {
+                        self.searched.push_unchecked(self.moves[self.idx - 1]);
+                    }
                     Some(self.moves[self.idx - 1])
                 } else {
                     self.stage = MovePickingStage::Finished;

@@ -131,8 +131,10 @@ impl SearchHead {
 
     pub fn write_uci_info(&self, eval: i32, bound: Bound, depth: u8) {
         let nodes = self.shared.nodes.load(Ordering::Relaxed);
+        print!("info depth {} ", depth);
+        print_eval(eval, bound);
         print!(
-            "info nodes {} nps {} ",
+            "nodes {} nps {} ",
             nodes,
             1000 * u128::from(nodes)
                 / self
@@ -142,10 +144,8 @@ impl SearchHead {
                     .as_millis()
                     .clamp(1, u128::MAX)
         );
-        print_eval(eval, bound);
         print!(
-            "depth {} time {} hashfull {}",
-            depth,
+            "time {} hashfull {}",
             self.time_manager.start_time.elapsed().as_millis(),
             self.shared.tt.hash_full()
         );

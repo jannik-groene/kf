@@ -956,6 +956,16 @@ impl Position {
             .any(|info| info.zobrist == self.ply_info.zobrist)
     }
 
+    // Check if we have a repetition in the last plys
+    pub fn is_repetition_in_plys(&self, plys: usize) -> bool {
+        self.history
+            .iter()
+            .rev()
+            .take(plys)
+            .any(|info| info.zobrist == self.ply_info.zobrist)
+    }
+
+    #[allow(dead_code)]
     pub fn is_threefold(&self) -> bool {
         self.history
             .iter()
