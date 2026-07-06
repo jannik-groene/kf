@@ -588,10 +588,6 @@ impl Position {
     }
 
     pub fn get_moves<Gen: GenType>(&mut self, moves: &mut MoveList) {
-        if self.ply_info.rule_50_count == 100 || self.board.occupation().count() == 2 {
-            return;
-        }
-
         if self.ply_info.attacked_squares.is_empty() {
             self.generate_attack_table();
         }
