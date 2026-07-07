@@ -248,7 +248,7 @@ fn search_step<const IS_PV_NODE: bool>(
     //Reverse futility pruning
     if !IS_PV_NODE
         && !sh.pos_mut().in_check()
-        && eval >= beta + 200 * depth
+        && eval >= beta + 150 * depth - 50 * i32::from(cut_node)
         && !eval::is_decisive(beta)
     {
         return eval;
