@@ -344,8 +344,8 @@ fn search_step<const IS_PV_NODE: bool>(
             reduction += 900 * i32::from(cut_node);
             reduction += 1500 * i32::from(!m.is_capture());
             reduction -= 1500 * i32::from(IS_PV_NODE);
-            if cut_node && ttmove.is_none() {
-                reduction += 500;
+            if ttmove.is_none() {
+                reduction += 1000;
             }
 
             let mut val = -search_step::<false>(
