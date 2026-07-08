@@ -52,6 +52,7 @@ pub struct SearchHead {
     pub time_manager: TimeManager,
     pub shared: Arc<SharedData>,
     pub next_null: i32,
+    pub sel_depth: usize,
 }
 
 impl SearchHead {
@@ -63,6 +64,7 @@ impl SearchHead {
             time_manager,
             shared,
             next_null: 0,
+            sel_depth: 0,
         }
     }
     #[inline]
@@ -131,7 +133,7 @@ impl SearchHead {
 
     pub fn write_uci_info(&self, eval: i32, bound: Bound, depth: u8) {
         let nodes = self.shared.nodes.load(Ordering::Relaxed);
-        print!("info depth {} ", depth);
+        print!("info depth {} seldepth {} ", depth, self.sel_depth);
         print_eval(eval, bound);
         print!(
             "nodes {} nps {} ",

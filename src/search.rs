@@ -81,6 +81,7 @@ fn iterative_deepening(id: usize, search_head: &mut SearchHead, depth: u8) {
         let mut fail_lows = 0;
         let mut eval;
         loop {
+            search_head.sel_depth = 0;
             eval = search_step::<true>(search_head, i32::from(d), 0, alpha, beta, false);
 
             // Make sure we only ever update with values that are from a complete search
@@ -499,6 +500,8 @@ fn quiesce(sh: &mut SearchHead, mut alpha: i32, beta: i32, delta: i32, ply: usiz
         sh.shared.stop_flag.store(true, Ordering::Release);
         return eval::DRAW;
     }
+
+    sh.sel_depth = sh.sel_depth.max(ply);
 
     //check for obviously drawn positions
     if is_material_draw(sh.pos()) {
