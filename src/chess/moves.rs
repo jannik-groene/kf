@@ -198,8 +198,8 @@ impl Move {
 
             MoveType::PromotionCaptureQ => {
                 let q = board.piece_at(self.to()).unwrap();
-                constants::piece_zobrist(Piece::Queen, c, self.from())
-                    ^ constants::piece_zobrist(Piece::Bishop, c, self.to())
+                constants::piece_zobrist(Piece::Pawn, c, self.from())
+                    ^ constants::piece_zobrist(Piece::Queen, c, self.to())
                     ^ constants::piece_zobrist(q, c.other(), self.to())
             }
 
