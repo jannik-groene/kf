@@ -31,6 +31,10 @@ pub fn is_material_draw(pos: &Position) -> bool {
         || (pos.board.occupation().count() == 3 && has_minor_pieces(pos))
 }
 
+const fn interp_phase(early: i32, late: i32, phase: i32) -> i32 {
+    (early * phase + late * (OPENING_PHASE - phase)) / OPENING_PHASE
+}
+
 #[inline]
 fn piece_table_value(p: Piece, c: Color, s: Square, phase: i32) -> i32 {
     let index: usize = match c {
@@ -43,11 +47,11 @@ fn piece_table_value(p: Piece, c: Color, s: Square, phase: i32) -> i32 {
         Piece::Bishop => piecetables::BISHOP_VALUES[index],
         Piece::Rook => piecetables::ROOK_VALUES[index],
         Piece::Queen => piecetables::QUEEN_VALUES[index],
-        Piece::King => {
-            (piecetables::KING_EARLY_VALUES[index] * phase
-                + piecetables::KING_LATE_VALUES[index] * (OPENING_PHASE - phase))
-                / OPENING_PHASE
-        }
+        Piece::King => interp_phase(
+            piecetables::KING_EARLY_VALUES[index],
+            piecetables::KING_LATE_VALUES[index],
+            phase,
+        ),
     }
 }
 
@@ -152,7 +156,7 @@ fn evaluate_pawns(pos: &Position, phase: i32, color: Color) -> i32 {
         //TODO: hidden passers?
     }
 
-    res_late * (OPENING_PHASE - phase) / OPENING_PHASE + res_early * phase / OPENING_PHASE + res
+    interp_phase(res_early, res_late, phase) + res
 }
 
 #[inline]
@@ -180,15 +184,15 @@ fn evaluate_rooks(pos: &Position, phase: i32, color: Color) -> i32 {
         let file = BitBoard::from_file(rook.file());
         //Rooks are good on semi-open and open files
         if (file & pos.board.get_bb(color, Piece::Pawn)).is_empty() {
-            res += 10;
+            res += 30;
             if (file & pos.board.get_bb(color.other(), Piece::Pawn)).is_empty() {
-                res += 30;
+                res += 20;
             }
         }
         //Doubled Rooks may be good
         //We give half the bonus and double count
         if (file & pos.board.get_bb(color, Piece::Rook)).count() > 1 {
-            res += 5;
+            res += 15;
         }
     }
     res
@@ -203,18 +207,6 @@ fn evaluate_bishops(pos: &Position, phase: i32, color: Color) -> i32 {
 
     for bishop in bishops {
         res += piece_table_value(Piece::Bishop, color, bishop, phase);
-
-        //reduce the value of the bishop, if it is blocked in by pawns
-        let mut blocked_score = if Board::WHITE_SQUARES.is_set(bishop) {
-            (pawns_us & Board::WHITE_SQUARES).count().saturating_sub(3) * 10
-        } else {
-            (pawns_us & Board::BLACK_SQUARES).count().saturating_sub(3) * 10
-        } as i32;
-        //if the bishop is in front of the pawns, the penalty is smaller
-        if (BitBoard::forward_of(bishop, color) & pawns_us).count() < 2 {
-            blocked_score /= 2;
-        }
-        res -= blocked_score;
     }
 
     //check for color weaknesses
@@ -377,7 +369,8 @@ fn evaluate_mobility(pos: &Position, phase: i32) -> i32 {
     } else {
         0
     } + res_late;
-    (total_early * phase + total_late * (OPENING_PHASE - phase)) / OPENING_PHASE
+
+    interp_phase(total_early, total_late, phase)
 }
 
 //use piece values as first approximation to phase
@@ -408,7 +401,8 @@ fn phase_factor(pos: &Position) -> i32 {
 const fn attacker_weight(p: Piece) -> i32 {
     match p {
         Piece::Pawn => 1,
-        Piece::Bishop | Piece::Knight => 2,
+        Piece::Knight => 1,
+        Piece::Bishop => 2,
         Piece::Rook => 3,
         Piece::Queen => 5,
         _ => 0,
@@ -457,7 +451,7 @@ fn king_centrality(pos: &Position, color: Color) -> i32 {
     let king_square = pos.get_board().king_square(color);
     let rank = king_square.rank() as i32;
     let file = king_square.file() as i32;
-    14 - (7 - 2 * rank).abs() + (7 - 2 * file).abs()
+    14 - (7 - 2 * rank).abs() - (7 - 2 * file).abs()
 }
 
 pub fn evaluate(pos: &Position) -> i32 {
@@ -471,7 +465,7 @@ pub fn evaluate(pos: &Position) -> i32 {
         }
     }
     let phase = phase_factor(pos);
-    let mut res = pos.material_balance() + 20;
+    let mut res = pos.material_balance() + interp_phase(20,0,phase);
     res += evaluate_mobility(pos, phase);
     if res.abs() > 900 {
         return res;
