@@ -245,9 +245,11 @@ fn search_step<const IS_PV_NODE: bool>(
         return quiesce(sh, alpha, beta, 100, ply);
     }
 
+    let in_check = sh.pos.in_check();
+
     //Reverse futility pruning
     if !IS_PV_NODE
-        && !sh.pos_mut().in_check()
+        && !in_check
         && eval >= beta + 150 * depth - 50 * i32::from(cut_node)
         && !eval::is_decisive(beta)
     {
@@ -259,7 +261,7 @@ fn search_step<const IS_PV_NODE: bool>(
                    // cutoff estimate instead for now.
         && sh.next_null <= ply as i32
         && (has_minor_pieces(sh.pos()) || has_major_pieces(sh.pos()))
-        && !sh.pos_mut().in_check()
+        && !in_check
         && !eval::is_mate(alpha)
         && !eval::is_mate(beta) // This check seems redundant, since we must be in zw-search here
                                 // anyway?
@@ -304,17 +306,20 @@ fn search_step<const IS_PV_NODE: bool>(
 
     let mut extension = 0;
 
-    if sh.pos.in_check() {
+    if in_check {
         extension += 1;
     }
 
     while let Some(m) = move_picker.next(sh) {
         move_idx += 1;
         let i = move_idx - 1;
+
+        let is_capture = m.is_capture();
+
         //Quiet Pruning
         if ply > 0
-            && !m.is_capture()
-            && !sh.pos.in_check()
+            && !is_capture
+            && !in_check
             && !sh.pos.gives_check(m)
             && !eval::is_mate(beta)
             && !eval::is_mate(score)
@@ -342,7 +347,7 @@ fn search_step<const IS_PV_NODE: bool>(
             //lmr reduction depth
             let mut reduction = 200 * (depth.ilog2() * (i + 1).ilog2()) as i32;
             reduction += 900 * i32::from(cut_node);
-            reduction += 1500 * i32::from(!m.is_capture());
+            reduction += 1500 * i32::from(!is_capture);
             reduction -= 1500 * i32::from(IS_PV_NODE);
             if ttmove.is_none() {
                 reduction += 1000;
@@ -365,7 +370,7 @@ fn search_step<const IS_PV_NODE: bool>(
         } else {
             let mut reduction = 100 * (depth.ilog2() * (i + 1).ilog2()) as i32;
             reduction += 200 * i32::from(cut_node);
-            reduction += 1000 * i32::from(!m.is_capture());
+            reduction += 1000 * i32::from(!is_capture);
             reduction -= 1000 * i32::from(IS_PV_NODE);
             if Some(m) == ttmove {
                 reduction -= 1000;
@@ -401,7 +406,7 @@ fn search_step<const IS_PV_NODE: bool>(
             bestmove = Some(m);
             score = movescore;
             bound = Bound::Lower;
-            if !m.is_capture() {
+            if !is_capture {
                 sh.history.killer.register(m, ply);
             }
             break;
@@ -422,7 +427,7 @@ fn search_step<const IS_PV_NODE: bool>(
     }
 
     if move_idx == 0 {
-        if sh.pos.in_check() {
+        if in_check {
             return -eval::mate_in(ply);
         } else {
             return eval::DRAW;
@@ -522,9 +527,10 @@ fn quiesce(sh: &mut SearchHead, mut alpha: i32, beta: i32, delta: i32, ply: usiz
     }
 
     let static_eval = sh.evaluate();
+    let in_check = sh.pos_mut().in_check();
 
     //If we are not in check we filter for tactical moves.
-    if !sh.pos_mut().in_check() {
+    if !in_check {
         //Adjust based on null-move hypothesis
         if static_eval >= beta {
             return static_eval;
@@ -535,11 +541,11 @@ fn quiesce(sh: &mut SearchHead, mut alpha: i32, beta: i32, delta: i32, ply: usiz
 
     let val = alpha - static_eval - delta;
 
-    let cutoff = if sh.pos.in_check() { None } else { Some(val) };
+    let cutoff = if in_check { None } else { Some(val) };
 
     let mut move_picker = MovePicker::new(sh, 255, ttmove, cutoff);
 
-    let mut best_score = if sh.pos.in_check() {
+    let mut best_score = if in_check {
         -eval::INFTY
     } else {
         static_eval
@@ -548,8 +554,6 @@ fn quiesce(sh: &mut SearchHead, mut alpha: i32, beta: i32, delta: i32, ply: usiz
     alpha = alpha.max(best_score);
 
     let mut move_idx = 0;
-
-    let in_check = sh.pos_mut().in_check();
 
     while let Some(m) = move_picker.next(sh) {
         move_idx += 1;
