@@ -173,7 +173,7 @@ impl Position {
             }
             if p.contains('q') {
                 castling_legal[1][1] = true;
-                pos.ply_info.zobrist ^= constants::castle_zobrist(Square::G8);
+                pos.ply_info.zobrist ^= constants::castle_zobrist(Square::C8);
             }
         }
 
@@ -871,13 +871,12 @@ impl Position {
             None
         };
 
-        //Update the zobrist numbers (except castling numbers)
+        //Update the zobrist numbers and castling rights
         self.update_zobrist(m, piece);
+        self.update_castling_rights(m, piece);
 
         //Actually do the move on the board
         self.board.do_move(m);
-
-        self.update_castling_rights(m, piece);
 
         //Adjust other state information
         self.ply_info.attacked_squares = BitBoard::EMPTY;
@@ -951,24 +950,41 @@ impl Position {
 
     #[allow(dead_code)]
     pub fn is_repetition(&self) -> bool {
+        if self.rule_50_count() < 3 {
+            return false;
+        }
         self.history
             .iter()
+            .rev()
+            .skip(1)
+            .step_by(2)
             .any(|info| info.zobrist == self.ply_info.zobrist)
     }
 
     // Check if we have a repetition in the last plys
     pub fn is_repetition_in_plys(&self, plys: usize) -> bool {
+        if self.rule_50_count() < 3 {
+            return false;
+        }
         self.history
             .iter()
             .rev()
             .take(plys)
+            .skip(1)
+            .step_by(2)
             .any(|info| info.zobrist == self.ply_info.zobrist)
     }
 
     #[allow(dead_code)]
     pub fn is_threefold(&self) -> bool {
+        if self.rule_50_count() < 5 {
+            return false;
+        }
         self.history
             .iter()
+            .rev()
+            .skip(1)
+            .step_by(2)
             .filter(|info| info.zobrist == self.ply_info.zobrist)
             .count()
             > 1
