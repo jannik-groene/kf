@@ -148,6 +148,10 @@ fn search_step<const IS_PV_NODE: bool>(
         return eval::DRAW;
     }
 
+    if IS_PV_NODE && ply <= 255 {
+        sh.pv[ply] = Move::ZERO;
+    }
+
     //check for obviously drawn positions
     if is_material_draw(sh.pos()) {
         return eval::DRAW;
@@ -167,10 +171,6 @@ fn search_step<const IS_PV_NODE: bool>(
     //If we cannot beat the score, just return immediately
     if alpha == eval::mate_in(ply + 1) {
         return alpha;
-    }
-
-    if IS_PV_NODE && ply <= 255 {
-        sh.pv[ply] = Move::ZERO;
     }
 
     //Check if the move is already hashed
