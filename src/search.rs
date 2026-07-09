@@ -317,6 +317,14 @@ fn search_step<const IS_PV_NODE: bool>(
 
         let is_capture = m.is_capture();
 
+        let history = if m.is_capture() {
+            let p = sh.pos.board.piece_at(m.from()).unwrap();
+            let c = sh.pos.board.piece_at(m.to()).unwrap_or(Piece::Pawn);
+            sh.history.capture.get(p, m, c)
+        } else {
+            sh.history.quiet.get_score(sh.pos.color(), m)
+        };
+
         //Quiet Pruning
         if ply > 0
             && !is_capture
@@ -346,13 +354,12 @@ fn search_step<const IS_PV_NODE: bool>(
         //Apply lmr at sufficiently high depths
         } else if depth >= 2 && i > 0 {
             //lmr reduction depth
-            let mut reduction = 200 * (depth.ilog2() * (i + 1).ilog2()) as i32;
+            let mut reduction = 200 * (depth.ilog2() * move_idx.ilog2()) as i32;
             reduction += 900 * i32::from(cut_node);
             reduction += 1500 * i32::from(!is_capture);
             reduction -= 1500 * i32::from(IS_PV_NODE);
-            if ttmove.is_none() {
-                reduction += 1000;
-            }
+            reduction += 1000 * i32::from(ttmove.is_none());
+            reduction -= history / 32;
 
             let mut val = -search_step::<false>(
                 sh,
