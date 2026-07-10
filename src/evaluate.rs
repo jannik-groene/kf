@@ -122,8 +122,8 @@ fn evaluate_pawns(pos: &Position, phase: i32, color: Color) -> i32 {
 
         //4. Check if we have a passer
         if (in_front & (pawns_them | guarded_them | pawns_us)).is_empty() {
-            res_early += 50 / (7 - pawn.relative(color).rank() as i32);
-            res_late += 150 / (7 - pawn.relative(color).rank() as i32);
+            res_early += 100 / (7 - pawn.relative(color).rank() as i32);
+            res_late += 300 / (7 - pawn.relative(color).rank() as i32);
         }
 
         //5. Check for candidate passers
@@ -149,8 +149,8 @@ fn evaluate_pawns(pos: &Position, phase: i32, color: Color) -> i32 {
 
         if (in_front & (pawns_them | pawns_us)).is_empty() && supporters.count() > sentries.count()
         {
-            res_early += 15;
-            res_late += 25;
+            res_early += 25;
+            res_late += 50;
         }
 
         //TODO: hidden passers?
