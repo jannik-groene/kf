@@ -5,6 +5,7 @@ mod engine;
 mod evaluate;
 mod search;
 mod uci;
+mod report;
 
 use crate::{engine::Engine, uci::UCIHandler};
 
@@ -12,6 +13,6 @@ use crate::{engine::Engine, uci::UCIHandler};
 mod tests;
 
 fn main() {
-    let mut engine = Engine::new();
+    let mut engine = Engine::default();
     engine.uci_loop();
 }

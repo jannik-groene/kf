@@ -1,6 +1,7 @@
 use crate::{
     chess::{Color, Move, Position},
     engine::{Engine, EngineIO},
+    report::Reporter,
 };
 use std::sync::mpsc::Sender;
 
@@ -74,7 +75,7 @@ pub trait UCIHandler {
     fn handle_eval(&self);
 }
 
-impl UCIHandler for Engine {
+impl<T: Reporter> UCIHandler for Engine<T> {
     fn uci_loop(&mut self) {
         let tx = self.get_sender();
         std::thread::spawn(move || read_input(&tx));

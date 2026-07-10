@@ -65,21 +65,6 @@ pub fn unpack_tt(val: u64, ply: usize) -> i32 {
     eval
 }
 
-pub fn print_eval(val: i32, bound: Bound) {
-    let (type_str, val) = if val.abs() >= INFTY || val.abs() < MATE_IN_MAX {
-        ("score cp", val)
-    } else {
-        let m = val.signum() * MATE_NOW - val;
-        ("score mate", (m / 2) + (m % 2))
-    };
-    let bound_str = match bound {
-        Bound::Upper => "upperbound ",
-        Bound::Lower => "lowerbound ",
-        Bound::Exact => "",
-    };
-    print!("{} {} {}", type_str, val, bound_str);
-}
-
 #[derive(Clone, PartialEq, Copy, Eq)]
 pub enum Bound {
     Exact,

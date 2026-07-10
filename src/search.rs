@@ -11,24 +11,25 @@ use crate::search::movepick::MovePicker;
 use crate::{
     chess::{Color, Move, Piece, Position},
     evaluate::{Bound, eval, has_major_pieces, has_minor_pieces, is_material_draw},
+    report::Reporter,
 };
 use thread::{SearchHead, SharedData};
 use threadpool::ThreadPool;
 
 use thread::TimeManager;
 
-pub struct SearchManager {
+pub struct SearchManager<T: Reporter> {
     pos: Position,
-    threadpool: ThreadPool,
+    threadpool: ThreadPool<T>,
     shared: Arc<SharedData>,
 }
 
-impl SearchManager {
-    pub fn new() -> SearchManager {
+impl<T: Reporter> SearchManager<T> {
+    pub fn new(reporter: T) -> SearchManager<T> {
         let shared = Arc::new(SharedData::new());
-        SearchManager {
+        SearchManager::<T> {
             pos: Position::new(),
-            threadpool: ThreadPool::new(shared.clone(), 1),
+            threadpool: ThreadPool::new(shared.clone(), 1, reporter),
             shared,
         }
     }
@@ -72,7 +73,7 @@ impl SearchManager {
     }
 }
 
-fn iterative_deepening(id: usize, search_head: &mut SearchHead, depth: u8) {
+fn iterative_deepening<T: Reporter>(id: usize, search_head: &mut SearchHead, depth: u8, reporter: &T) {
     let depth = if id == 0 { depth } else { u8::MAX };
     let mut alpha = -eval::INFTY;
     let mut beta = eval::INFTY;
@@ -93,19 +94,19 @@ fn iterative_deepening(id: usize, search_head: &mut SearchHead, depth: u8) {
                 fail_lows += 1;
                 alpha = eval::aspiration_lower(eval, fail_lows);
                 if id == 0 {
-                    search_head.write_uci_info(eval, Bound::Upper, d);
+                    search_head.report_update(eval, Bound::Upper, d, reporter);
                 }
             } else if eval >= beta {
                 fail_highs += 1;
                 beta = eval::aspiration_higher(eval, fail_highs);
                 if id == 0 {
-                    search_head.write_uci_info(eval, Bound::Lower, d);
+                    search_head.report_update(eval, Bound::Lower, d, reporter);
                 }
             } else {
                 alpha = eval::aspiration_lower(eval, 0);
                 beta = eval::aspiration_higher(eval, 0);
                 if id == 0 {
-                    search_head.write_uci_info(eval, Bound::Exact, d);
+                    search_head.report_update(eval, Bound::Exact, d, reporter);
                 }
                 break;
             }
@@ -118,9 +119,9 @@ fn iterative_deepening(id: usize, search_head: &mut SearchHead, depth: u8) {
 
         search_head.shared.results[id].store(res, Ordering::Release);
     }
-    if id == 0 {
+    if T::REPORT {
         search_head.shared.stop_flag.store(true, Ordering::Release);
-        search_head.write_best_move();
+        search_head.report_best_move(reporter);
     }
     search_head.pv.fill(Move::ZERO);
 }

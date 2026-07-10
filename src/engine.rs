@@ -3,6 +3,7 @@ use std::io::{Write, stdout};
 use std::sync::mpsc::{Receiver, Sender};
 
 use crate::chess::{All, MoveList};
+use crate::report::{Reporter, StdOutUCIResult};
 use crate::{
     chess::{Color, Move, Position},
     search::SearchManager,
@@ -111,8 +112,8 @@ impl EngineConfig {
     }
 }
 
-pub struct Engine {
-    search: SearchManager,
+pub struct Engine<T: Reporter> {
+    search: SearchManager<T>,
     pub config: EngineConfig,
     channel: (Sender<EngineIO>, Receiver<EngineIO>),
 }
@@ -122,15 +123,15 @@ pub enum EngineIO {
     UciInput(String),
 }
 
-impl Engine {
-    pub fn new() -> Engine {
+impl<T: Reporter> Engine<T> {
+    pub fn new(reporter: T) -> Self {
         let config = EngineConfig::new();
-        let mut search = SearchManager::new();
+        let mut search = SearchManager::new(reporter);
         let OptionValue::Spin(threads) = config.get_option("Threads").unwrap();
         let OptionValue::Spin(hash_size) = config.get_option("Hash").unwrap();
         search.set_threads(threads as usize);
         search.set_hash_size(hash_size as usize);
-        Engine {
+        Self {
             search,
             config,
             channel: std::sync::mpsc::channel(),
@@ -225,15 +226,15 @@ impl Engine {
     }
 }
 
-impl Default for Engine {
+impl Default for Engine<StdOutUCIResult> {
     fn default() -> Self {
-        Self::new()
+        Self::new(StdOutUCIResult::default())
     }
 }
 
 #[test]
 fn get_and_set_options() {
-    let mut e = Engine::new();
+    let mut e = Engine::new(StdOutUCIResult::default());
     e.print_config();
     e.config.set_option("Threads", "8");
     assert!(e.config.get_option("Threads").unwrap() == OptionValue::Spin(8));

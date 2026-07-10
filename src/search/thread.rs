@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use crate::evaluate::Bound;
-use crate::evaluate::eval::print_eval;
+use crate::report::Reporter;
 use crate::{
     chess::{Move, Piece, Position},
     evaluate::evaluate,
@@ -56,8 +56,12 @@ pub struct SearchHead {
 }
 
 impl SearchHead {
-    pub fn new(pos: Position, shared: Arc<SharedData>, time_manager: TimeManager) -> SearchHead {
-        SearchHead {
+    pub fn new(
+        pos: Position,
+        shared: Arc<SharedData>,
+        time_manager: TimeManager,
+    ) -> Self {
+        Self {
             pos,
             history: History::new(),
             pv: [Move::ZERO; 256],
@@ -130,40 +134,26 @@ impl SearchHead {
         let p = self.pos().get_board().piece_at(m.from()).unwrap();
         self.history.capture.register(p, m, cap, bonus);
     }
+}
 
-    pub fn write_uci_info(&self, eval: i32, bound: Bound, depth: u8) {
+impl SearchHead {
+    pub fn report_update<T: Reporter>(&self, eval: i32, bound: Bound, depth: u8, reporter: &T) {
         let nodes = self.shared.nodes.load(Ordering::Relaxed);
-        print!("info depth {} seldepth {} ", depth, self.sel_depth);
-        print_eval(eval, bound);
-        print!(
-            "nodes {} nps {} ",
+        let time = self.time_manager.start_time.elapsed().as_millis() as u64;
+        let hashfull = self.shared.tt.hash_full();
+        reporter.report_update(
+            eval,
+            bound,
+            depth as usize,
+            self.sel_depth,
             nodes,
-            1000 * u128::from(nodes)
-                / self
-                    .time_manager
-                    .start_time
-                    .elapsed()
-                    .as_millis()
-                    .clamp(1, u128::MAX)
+            time,
+            hashfull,
+            self.pv,
         );
-        print!(
-            "time {} hashfull {}",
-            self.time_manager.start_time.elapsed().as_millis(),
-            self.shared.tt.hash_full()
-        );
-        if self.pv[0].compress() != 0 {
-            print!(" pv");
-            for m in &self.pv {
-                if m.compress() == 0 {
-                    break;
-                }
-                print!(" {m}");
-            }
-        }
-        println!();
     }
 
-    pub fn write_best_move(&self) {
+    pub fn report_best_move<T: Reporter>(&self, reporter: &T) {
         let mut vote_map = HashMap::new();
         for vote in self.shared.results.iter().filter_map(|x| {
             let res = x.load(Ordering::Acquire);
@@ -175,13 +165,13 @@ impl SearchHead {
             *vote_map.entry(mv).or_insert(0) += depth as i32 * eval;
         }
 
-        if let Some((m, _)) = vote_map.iter().max_by(|(_, v), (_, v2)| v.cmp(v2))
-            && *m != 0
-        {
-            println!("bestmove {}", Move::decompress(*m));
-        } else {
-            println!("bestmove 0000");
-        }
+        let mv = vote_map
+            .iter()
+            .max_by(|(_, v), (_, v2)| v.cmp(v2))
+            .map_or(Move::ZERO, |(m, _)| Move::decompress(*m));
+        
+        reporter.report_result(0, mv);
+
         // Clear out results before next search
         for res in &self.shared.results {
             res.store(0, Ordering::Release);

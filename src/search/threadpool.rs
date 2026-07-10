@@ -8,6 +8,7 @@ use super::TimeManager;
 use super::iterative_deepening;
 use super::thread::{SearchHead, SharedData};
 use crate::chess::Position;
+use crate::report::{NullReport, Reporter};
 
 enum ThreadSignal {
     StartSearch(u8),
@@ -16,18 +17,30 @@ enum ThreadSignal {
     EndThread,
 }
 
-pub struct ThreadPool {
+pub struct ThreadPool<T: Reporter> {
     worker_handles: Vec<JoinHandle<()>>,
     worker_tx: Vec<Sender<ThreadSignal>>,
     shared: Arc<SharedData>,
+    reporter: T,
 }
 
-impl ThreadPool {
-    pub fn new(shared: Arc<SharedData>, threads: usize) -> Self {
-        assert!(threads != 0);
+impl<T: Reporter> ThreadPool<T> {
+    pub fn new(shared: Arc<SharedData>, threads: usize, reporter: T) -> Self {
+        assert!(threads > 0);
         let mut worker_handles = Vec::new();
         let mut worker_tx = Vec::new();
-        for i in 0..threads {
+
+        let (tx, rx) = channel();
+        worker_tx.push(tx);
+        let mut search_head = SearchHead::new(
+            Position::new(),
+            shared.clone(),
+            TimeManager::new(std::time::Instant::now(), None),
+        );
+        let thread_reporter = reporter.clone();
+        worker_handles.push(spawn(move || idle_loop(0, &mut search_head, &rx, thread_reporter)));
+
+        for i in 1..threads {
             let (tx, rx) = channel();
             worker_tx.push(tx);
             let mut search_head = SearchHead::new(
@@ -35,12 +48,13 @@ impl ThreadPool {
                 shared.clone(),
                 TimeManager::new(std::time::Instant::now(), None),
             );
-            worker_handles.push(spawn(move || idle_loop(i, &mut search_head, &rx)));
+            worker_handles.push(spawn(move || idle_loop(i, &mut search_head, &rx, NullReport::default())));
         }
         Self {
             worker_handles,
             worker_tx,
             shared,
+            reporter,
         }
     }
 
@@ -92,7 +106,7 @@ impl ThreadPool {
                 TimeManager::new(std::time::Instant::now(), None),
             );
             self.worker_handles
-                .push(spawn(move || idle_loop(i, &mut search_head, &rx)));
+                .push(spawn(move || idle_loop(i, &mut search_head, &rx, NullReport::default())));
         }
     }
 
@@ -109,7 +123,18 @@ impl ThreadPool {
             }
         }
         // Launch the new threads
-        for i in 0..threads {
+        let (tx, rx) = channel();
+        self.worker_tx.push(tx);
+        let mut search_head = SearchHead::new(
+            Position::new(),
+            self.shared.clone(),
+            TimeManager::new(std::time::Instant::now(), None),
+        );
+        let reporter = self.reporter.clone();
+        self.worker_handles
+            .push(spawn(move || idle_loop(0, &mut search_head, &rx, reporter)));
+
+        for i in 1..threads {
             let (tx, rx) = channel();
             self.worker_tx.push(tx);
             let mut search_head = SearchHead::new(
@@ -118,16 +143,16 @@ impl ThreadPool {
                 TimeManager::new(std::time::Instant::now(), None),
             );
             self.worker_handles
-                .push(spawn(move || idle_loop(i, &mut search_head, &rx)));
+                .push(spawn(move || idle_loop(i, &mut search_head, &rx, NullReport::default())));
         }
     }
 }
 
-fn idle_loop(id: usize, search_head: &mut SearchHead, rx: &Receiver<ThreadSignal>) {
+fn idle_loop<T: Reporter>(id: usize, search_head: &mut SearchHead, rx: &Receiver<ThreadSignal>, reporter: T) {
     while let Ok(msg) = rx.recv() {
         match msg {
             ThreadSignal::StartSearch(d) => {
-                iterative_deepening(id, search_head, d);
+                iterative_deepening(id, search_head, d, &reporter);
             }
             ThreadSignal::SetLimit(tm) => search_head.time_manager = tm,
             ThreadSignal::SetPosition(pos) => search_head.pos = pos,
