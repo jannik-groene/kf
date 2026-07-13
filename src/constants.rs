@@ -85,11 +85,13 @@ pub fn ray_between(from: Square, to: Square) -> BitBoard {
 }
 
 #[inline]
+#[allow(dead_code)]
 pub const fn neighbours(sq: Square) -> BitBoard {
     BitBoard::new(NEIGHBOURS[sq as usize])
 }
 
 #[inline]
+#[allow(dead_code)]
 pub const fn next_neighbours(sq: Square) -> BitBoard {
     BitBoard::new(NEXT_NEIGHBOURS[sq as usize])
 }

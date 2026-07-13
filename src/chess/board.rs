@@ -17,8 +17,10 @@ impl Default for Board {
 }
 
 impl Board {
+    #[allow(dead_code)]
     pub const BLACK_SQUARES: BitBoard =
         BitBoard::new(0b1010101001010101101010100101010110101010010101011010101001010101);
+    #[allow(dead_code)]
     pub const WHITE_SQUARES: BitBoard =
         BitBoard::new(0b0101010110101010010101011010101001010101101010100101010110101010);
 

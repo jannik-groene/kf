@@ -216,7 +216,7 @@ impl<T: Reporter> Engine<T> {
         println!("Total  {}", total);
     }
     pub fn eval(&self) -> i32 {
-        crate::evaluate::evaluate(&self.search.root_position())
+        crate::evaluate::nnue::evaluate_position(&self.search.root_position())
     }
     pub fn position(&self) -> crate::chess::Position {
         self.search.root_position()

@@ -11,12 +11,12 @@ pub use moves::{Move, MoveList, MoveType};
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub enum Piece {
-    King,
-    Queen,
-    Bishop,
-    Knight,
-    Rook,
     Pawn,
+    Knight,
+    Bishop,
+    Rook,
+    Queen,
+    King,
 }
 
 #[derive(PartialEq, Clone, Copy, Debug)]
@@ -1001,11 +1001,13 @@ impl Position {
     }
 
     #[inline]
+    #[allow(dead_code)]
     pub fn piece_count(&self, c: Color, p: Piece) -> i32 {
         self.board.get_bb(c, p).count() as i32
     }
 
     #[inline]
+    #[allow(dead_code)]
     fn material_count(&self, c: Color) -> i32 {
         constants::piece_value(Piece::Pawn) * self.piece_count(c, Piece::Pawn)
             + constants::piece_value(Piece::Bishop) * self.piece_count(c, Piece::Bishop)
@@ -1015,6 +1017,7 @@ impl Position {
     }
 
     #[inline]
+    #[allow(dead_code)]
     pub fn material_balance(&self) -> i32 {
         self.material_count(self.to_move) - self.material_count(self.to_move.other())
     }

@@ -155,7 +155,7 @@ fn idle_loop<T: Reporter>(id: usize, search_head: &mut SearchHead, rx: &Receiver
                 iterative_deepening(id, search_head, d, &reporter);
             }
             ThreadSignal::SetLimit(tm) => search_head.time_manager = tm,
-            ThreadSignal::SetPosition(pos) => search_head.pos = pos,
+            ThreadSignal::SetPosition(pos) => search_head.set_pos(pos),
             ThreadSignal::EndThread => break,
         }
     }

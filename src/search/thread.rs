@@ -3,12 +3,11 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
+use crate::chess::Color;
+use crate::chess::{Move, Piece, Position};
+use crate::evaluate::nnue::{Accumulator, NNUE};
 use crate::evaluate::{Bound, eval};
 use crate::report::Reporter;
-use crate::{
-    chess::{Move, Piece, Position},
-    evaluate::evaluate,
-};
 
 use super::history::History;
 use super::tt::TranspositionTable;
@@ -53,14 +52,15 @@ pub struct SearchHead {
     pub shared: Arc<SharedData>,
     pub next_null: i32,
     pub sel_depth: usize,
+    accumulators: [Accumulator; 2],
 }
 
 impl SearchHead {
-    pub fn new(
-        pos: Position,
-        shared: Arc<SharedData>,
-        time_manager: TimeManager,
-    ) -> Self {
+    pub fn new(pos: Position, shared: Arc<SharedData>, time_manager: TimeManager) -> Self {
+        let accumulators = [
+            Accumulator::from_pos(&pos, &NNUE, Color::White),
+            Accumulator::from_pos(&pos, &NNUE, Color::Black),
+        ];
         Self {
             pos,
             history: History::new(),
@@ -69,6 +69,7 @@ impl SearchHead {
             shared,
             next_null: 0,
             sel_depth: 0,
+            accumulators,
         }
     }
     #[inline]
@@ -79,17 +80,29 @@ impl SearchHead {
     pub fn pos(&self) -> &Position {
         &self.pos
     }
+    pub fn set_pos(&mut self, pos: Position) {
+        self.pos = pos;
+        self.accumulators = [
+            Accumulator::from_pos(&self.pos, &NNUE, Color::White),
+            Accumulator::from_pos(&self.pos, &NNUE, Color::Black),
+        ];
+    }
     pub fn shared_data(&self) -> &SharedData {
         &self.shared
     }
     #[inline]
     pub fn do_move(&mut self, m: Move) {
+        self.accumulators[0].do_move(m, &self.pos, Color::White, &NNUE);
+        self.accumulators[1].do_move(m, &self.pos, Color::Black, &NNUE);
         self.pos.do_move(m);
         self.shared.nodes.fetch_add(1, Ordering::Relaxed);
     }
     #[inline]
     pub fn undo_move(&mut self) {
+        let m = self.pos.last_move();
         self.pos.undo_move();
+        self.accumulators[0].undo_move(m, &self.pos, Color::White, &NNUE);
+        self.accumulators[1].undo_move(m, &self.pos, Color::Black, &NNUE);
     }
     #[inline]
     pub fn do_null_move(&mut self) {
@@ -102,7 +115,10 @@ impl SearchHead {
     }
     #[inline]
     pub fn evaluate(&mut self) -> i32 {
-        evaluate(self.pos_mut())
+        NNUE.evaluate(
+            &self.accumulators[self.pos.color() as usize],
+            &self.accumulators[self.pos.color().other() as usize],
+        )
     }
     #[inline]
     pub fn update_quiet_history(&mut self, m: Move, bonus: i32) {
@@ -173,7 +189,7 @@ impl SearchHead {
             .iter()
             .max_by(|(_, v), (_, v2)| v.cmp(v2))
             .map_or(Move::ZERO, |(m, _)| Move::decompress(*m));
-        
+
         reporter.report_result(best_score, mv);
 
         // Clear out results before next search
