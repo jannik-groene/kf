@@ -224,6 +224,16 @@ impl Position {
         self.to_move
     }
 
+    #[allow(dead_code)]
+    pub const fn castling_rights(&self) -> [[bool; 2]; 2] {
+        self.ply_info.castling_rights
+    }
+
+    #[allow(dead_code)]
+    pub const fn ep_square(&self) -> Option<Square> {
+        self.ply_info.ep_square
+    }
+
     #[inline]
     fn rook_moves(&self, sq: Square) -> BitBoard {
         constants::rook_moves(sq, self.board.occupation())

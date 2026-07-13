@@ -83,6 +83,12 @@ impl From<u64> for BitBoard {
     }
 }
 
+impl From<BitBoard> for u64 {
+    fn from(value: BitBoard) -> Self {
+        value.bits
+    }
+}
+
 impl BitBoard {
     pub const EMPTY: Self = Self { bits: 0 };
     pub const FULL: Self = Self { bits: u64::MAX };

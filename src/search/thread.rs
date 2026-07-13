@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
-use crate::evaluate::Bound;
+use crate::evaluate::{Bound, eval};
 use crate::report::Reporter;
 use crate::{
     chess::{Move, Piece, Position},
@@ -155,6 +155,7 @@ impl SearchHead {
 
     pub fn report_best_move<T: Reporter>(&self, reporter: &T) {
         let mut vote_map = HashMap::new();
+        let mut best_score = -eval::INFTY;
         for vote in self.shared.results.iter().filter_map(|x| {
             let res = x.load(Ordering::Acquire);
             if res == 0 { None } else { Some(res) }
@@ -162,6 +163,9 @@ impl SearchHead {
             let mv = ((vote >> 8) & 0xffff) as u16;
             let depth = vote & 0xff;
             let eval = ((vote >> 24) as i16) as i32;
+            if eval > best_score {
+                best_score = eval;
+            }
             *vote_map.entry(mv).or_insert(0) += depth as i32 * eval;
         }
 
@@ -170,7 +174,7 @@ impl SearchHead {
             .max_by(|(_, v), (_, v2)| v.cmp(v2))
             .map_or(Move::ZERO, |(m, _)| Move::decompress(*m));
         
-        reporter.report_result(0, mv);
+        reporter.report_result(best_score, mv);
 
         // Clear out results before next search
         for res in &self.shared.results {

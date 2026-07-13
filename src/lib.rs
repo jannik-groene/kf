@@ -3,5 +3,5 @@ pub mod chess;
 mod constants;
 pub mod engine;
 pub mod report;
-mod evaluate;
+pub mod evaluate;
 mod search;
