@@ -5,7 +5,7 @@ use crate::{
 };
 use std::sync::mpsc::Sender;
 
-const VERSION_STRING: &str = "kf-0.1.0";
+const VERSION_STRING: &str = "kf-0.1.0-8990dfc9";
 
 fn read_input(ch: &Sender<EngineIO>) {
     let sin = std::io::stdin();

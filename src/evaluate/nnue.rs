@@ -1,6 +1,6 @@
 use crate::chess::{Color, Move, MoveType, Piece, Position, Square};
 
-pub static NNUE: Network = unsafe { std::mem::transmute(*include_bytes!("../../c4d34f1e.nnue")) };
+pub static NNUE: Network = unsafe { std::mem::transmute(*include_bytes!("../../8990dfc9.nnue")) };
 
 pub fn evaluate_position(pos: &Position) -> i32 {
     let accs = [
@@ -13,7 +13,7 @@ pub fn evaluate_position(pos: &Position) -> i32 {
     )
 }
 
-const HIDDEN_SIZE: usize = 32;
+const HIDDEN_SIZE: usize = 64;
 const SCALE: i32 = 400;
 const QA: i16 = 255;
 const QB: i16 = 64;
