@@ -5,5 +5,4 @@
 **.perf
 **.nnue
 /nets
-Cargo.lock
 **/flamegraph.svg
