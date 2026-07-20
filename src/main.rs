@@ -3,9 +3,9 @@ mod chess;
 mod constants;
 mod engine;
 mod evaluate;
+mod report;
 mod search;
 mod uci;
-mod report;
 
 use crate::{engine::Engine, uci::UCIHandler};
 

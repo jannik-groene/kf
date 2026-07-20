@@ -144,7 +144,9 @@ impl TTBucket {
         self.entries
             .iter()
             .min_by_key(|e| {
-                let entry = TTEntry { data: e.load(Ordering::Relaxed) };
+                let entry = TTEntry {
+                    data: e.load(Ordering::Relaxed),
+                };
                 if entry == TTEntry::UNCHECKED {
                     i32::MIN
                 } else {
@@ -193,7 +195,8 @@ impl TTEntry {
         let dam = (u64::from(mov.compress()) << 8) ^ u64::from(depth);
         let ev = eval::pack_for_tt(eval, ply);
         let bd = bound as u64;
-        let data = (zobrist_hash & ZOBRIST_MASK) ^ (u64::from(age) << 42) ^ (bd << 40) ^ (ev << 24) ^ dam;
+        let data =
+            (zobrist_hash & ZOBRIST_MASK) ^ (u64::from(age) << 42) ^ (bd << 40) ^ (ev << 24) ^ dam;
         TTEntry { data }
     }
     pub fn age(&self) -> u8 {

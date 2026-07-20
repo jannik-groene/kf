@@ -84,7 +84,9 @@ impl MovePicker {
     #[inline]
     fn score_quiets(&mut self, sh: &mut SearchHead) {
         sh.pos.get_moves::<Quiets>(&mut self.moves);
-        if let Some(tm) = self.ttmove && sh.pos.rule_50_count() < 100 {
+        if let Some(tm) = self.ttmove
+            && sh.pos.rule_50_count() < 100
+        {
             assert_eq!(
                 sh.pos.is_legal(tm),
                 self.moves.contains(&tm),

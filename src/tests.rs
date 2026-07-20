@@ -82,10 +82,7 @@ fn simple_pin() {
         chess::Position::from_fen(String::from("4k3/4r3/8/8/4Q3/8/8/4K3 w - - 0 1")).unwrap();
     let mut moves = MoveList::new();
     pos.get_moves::<All>(&mut moves);
-    println!(
-        "Found {} moves, expected 10.",
-        moves.len()
-    );
+    println!("Found {} moves, expected 10.", moves.len());
     for m in &moves {
         println!("Move from {} to {}", m.from(), m.to());
     }
@@ -172,10 +169,7 @@ fn simple_pinned_pawn_attack() {
     ));
     let mut moves = MoveList::new();
     pos.get_moves::<All>(&mut moves);
-    println!(
-        "Found {} moves, expected 16.",
-        moves.len()
-    );
+    println!("Found {} moves, expected 16.", moves.len());
     for m in &moves {
         println!("Move from {} to {}", m.from(), m.to());
     }

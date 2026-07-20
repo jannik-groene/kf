@@ -1,9 +1,7 @@
 pub mod eval;
 pub mod nnue;
 
-use crate::{
-    chess::{Color, Piece, Position},
-};
+use crate::chess::{Color, Piece, Position};
 pub use eval::Bound;
 
 #[allow(dead_code)]
@@ -27,4 +25,3 @@ pub fn is_material_draw(pos: &Position) -> bool {
     pos.board.occupation().count() == 2
         || (pos.board.occupation().count() == 3 && has_minor_pieces(pos))
 }
-

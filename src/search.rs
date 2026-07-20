@@ -36,9 +36,7 @@ impl<T: Reporter> SearchManager<T> {
     pub fn set_hash_size(&mut self, size: usize) {
         if self.shared.stop_flag.load(Ordering::Acquire) {
             unsafe {
-                self.shared
-                    .tt
-                    .resize(size);
+                self.shared.tt.resize(size);
             }
         }
     }
@@ -181,7 +179,9 @@ fn search_step<const IS_PV_NODE: bool>(
     let mut tteval = None;
     let mut ttbound = None;
 
-    if let Some(entry) = hash_entry && sh.pos.is_legal(entry.mov()) {
+    if let Some(entry) = hash_entry
+        && sh.pos.is_legal(entry.mov())
+    {
         let eval = entry.eval(ply);
         let bound = entry.bound();
         ttmove = Some(entry.mov());
@@ -556,11 +556,7 @@ fn quiesce(sh: &mut SearchHead, mut alpha: i32, beta: i32, delta: i32, ply: usiz
 
     let mut move_picker = MovePicker::new(sh, 255, ttmove, cutoff);
 
-    let mut best_score = if in_check {
-        -eval::INFTY
-    } else {
-        static_eval
-    };
+    let mut best_score = if in_check { -eval::INFTY } else { static_eval };
 
     alpha = alpha.max(best_score);
 

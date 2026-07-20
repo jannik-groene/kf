@@ -298,7 +298,13 @@ fn determine_move_type(
 
 impl fmt::Display for Move {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}{}{}", self.from(), self.to(), display_promotion(*self))
+        write!(
+            f,
+            "{}{}{}",
+            self.from(),
+            self.to(),
+            display_promotion(*self)
+        )
     }
 }
 
