@@ -12,15 +12,38 @@ use crate::report::Reporter;
 use super::history::History;
 use super::tt::TranspositionTable;
 
-#[derive(Clone, Copy)]
-pub struct TimeManager {
-    pub start_time: Instant,
-    pub limit: Option<Duration>,
+#[derive(Copy, Clone)]
+pub enum SearchLimit {
+    Infinite,
+    Depth(u8),
+    MoveTime { movetime: Duration },
+    Time { soft: Duration, hard: Duration },
 }
 
-impl TimeManager {
-    pub fn new(start_time: Instant, limit: Option<Duration>) -> Self {
-        TimeManager { start_time, limit }
+impl SearchLimit {
+    pub fn from_soft_hard_bound(soft: Duration, hard: Duration, safety: Duration) -> Self {
+        let hard = hard.saturating_sub(safety).max(Duration::from_millis(1));
+        let soft = soft.min(hard);
+        Self::Time { soft, hard }
+    }
+    pub fn from_movetime(movetime: Duration, safety: Duration) -> Self {
+        let movetime = movetime
+            .saturating_sub(safety)
+            .max(Duration::from_millis(1));
+        Self::MoveTime { movetime }
+    }
+    pub fn should_stop(self, start_time: Instant) -> bool {
+        if let SearchLimit::MoveTime { movetime } = self
+            && start_time.elapsed() >= movetime
+        {
+            true
+        } else if let SearchLimit::Time { hard, .. } = self
+            && start_time.elapsed() >= hard
+        {
+            true
+        } else {
+            false
+        }
     }
 }
 
@@ -48,7 +71,8 @@ pub struct SearchHead {
     pub pos: Position,
     pub history: History,
     pub pv: [Move; 256],
-    pub time_manager: TimeManager,
+    pub limit: SearchLimit,
+    pub start_time: Instant,
     pub shared: Arc<SharedData>,
     pub next_null: i32,
     pub sel_depth: usize,
@@ -56,7 +80,12 @@ pub struct SearchHead {
 }
 
 impl SearchHead {
-    pub fn new(pos: Position, shared: Arc<SharedData>, time_manager: TimeManager) -> Self {
+    pub fn new(
+        pos: Position,
+        shared: Arc<SharedData>,
+        start_time: Instant,
+        limit: SearchLimit,
+    ) -> Self {
         let accumulators = [
             Accumulator::from_pos(&pos, &NNUE, Color::White),
             Accumulator::from_pos(&pos, &NNUE, Color::Black),
@@ -65,7 +94,8 @@ impl SearchHead {
             pos,
             history: History::new(),
             pv: [Move::ZERO; 256],
-            time_manager,
+            limit,
+            start_time,
             shared,
             next_null: 0,
             sel_depth: 0,
@@ -155,7 +185,7 @@ impl SearchHead {
 impl SearchHead {
     pub fn report_update<T: Reporter>(&self, eval: i32, bound: Bound, depth: u8, reporter: &T) {
         let nodes = self.shared.nodes.load(Ordering::Relaxed);
-        let time = self.time_manager.start_time.elapsed().as_millis() as u64;
+        let time = self.start_time.elapsed().as_millis() as u64;
         let hashfull = self.shared.tt.hash_full();
         reporter.report_update(
             eval,

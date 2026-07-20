@@ -4,6 +4,7 @@ use std::sync::mpsc::{Receiver, Sender};
 
 use crate::chess::{All, MoveList};
 use crate::report::{Reporter, StdOutUCIResult};
+use crate::search::SearchLimit;
 use crate::{
     chess::{Color, Move, Position},
     search::SearchManager,
@@ -149,8 +150,8 @@ impl<T: Reporter> Engine<T> {
     pub fn set_position(&mut self, pos: Position) {
         self.search.set_position(pos);
     }
-    pub fn start_search(&mut self, depth: Option<u8>, time_limit: Option<std::time::Duration>) {
-        self.search.search(depth, time_limit);
+    pub fn start_search(&mut self, limit: SearchLimit) {
+        self.search.search(limit);
     }
     pub fn stop_search(&mut self) {
         self.search.stop();

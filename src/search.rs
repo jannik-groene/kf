@@ -8,6 +8,7 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 use crate::search::movepick::MovePicker;
+pub use crate::search::thread::SearchLimit;
 use crate::{
     chess::{Color, Move, Piece, Position},
     evaluate::{Bound, eval, has_major_pieces, has_minor_pieces, is_material_draw},
@@ -15,8 +16,6 @@ use crate::{
 };
 use thread::{SearchHead, SharedData};
 use threadpool::ThreadPool;
-
-use thread::TimeManager;
 
 pub struct SearchManager<T: Reporter> {
     pos: Position,
@@ -65,14 +64,19 @@ impl<T: Reporter> SearchManager<T> {
         self.pos.clone()
     }
 
-    pub fn search(&mut self, target_depth: Option<u8>, time_limit: Option<std::time::Duration>) {
-        self.threadpool
-            .start_searching(&self.pos, target_depth, time_limit);
+    pub fn search(&mut self, limit: SearchLimit) {
+        self.threadpool.start_searching(&self.pos, limit);
     }
 }
 
-fn iterative_deepening<T: Reporter>(id: usize, search_head: &mut SearchHead, depth: u8, reporter: &T) {
-    let depth = if id == 0 { depth } else { u8::MAX };
+fn iterative_deepening<T: Reporter>(id: usize, search_head: &mut SearchHead, reporter: &T) {
+    let depth = if let SearchLimit::Depth(d) = search_head.limit
+        && id == 0
+    {
+        d
+    } else {
+        u8::MAX
+    };
     let mut alpha = -eval::INFTY;
     let mut beta = eval::INFTY;
     'depth: for d in 1..=depth {
@@ -116,6 +120,15 @@ fn iterative_deepening<T: Reporter>(id: usize, search_head: &mut SearchHead, dep
             ^ u64::from(d);
 
         search_head.shared.results[id].store(res, Ordering::Release);
+
+        // soft bound check
+        if let SearchLimit::Time { soft, .. } = search_head.limit
+            && id == 0
+            && search_head.start_time.elapsed() > soft
+        {
+            search_head.shared.stop_flag.store(true, Ordering::Release);
+            break;
+        }
     }
     if T::REPORT {
         search_head.shared.stop_flag.store(true, Ordering::Release);
@@ -139,10 +152,7 @@ fn search_step<const IS_PV_NODE: bool>(
     beta: i32,
     cut_node: bool,
 ) -> i32 {
-    if sh.shared.nodes.load(Ordering::Relaxed) & 0xff == 0
-        && let Some(limit) = sh.time_manager.limit
-        && sh.time_manager.start_time.elapsed() > limit
-    {
+    if sh.shared.nodes.load(Ordering::Relaxed) & 0xff == 0 && sh.limit.should_stop(sh.start_time) {
         sh.shared.stop_flag.store(true, Ordering::Release);
         return eval::DRAW;
     }
@@ -501,10 +511,7 @@ fn search_step<const IS_PV_NODE: bool>(
 }
 
 fn quiesce(sh: &mut SearchHead, mut alpha: i32, beta: i32, delta: i32, ply: usize) -> i32 {
-    if sh.shared.nodes.load(Ordering::Relaxed) & 0xff == 0
-        && let Some(limit) = sh.time_manager.limit
-        && sh.time_manager.start_time.elapsed() > limit
-    {
+    if sh.shared.nodes.load(Ordering::Relaxed) & 0xff == 0 && sh.limit.should_stop(sh.start_time) {
         sh.shared.stop_flag.store(true, Ordering::Release);
         return eval::DRAW;
     }

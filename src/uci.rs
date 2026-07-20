@@ -2,10 +2,11 @@ use crate::{
     chess::{Color, Move, Position},
     engine::{Engine, EngineIO},
     report::Reporter,
+    search::SearchLimit,
 };
 use std::sync::mpsc::Sender;
 
-const VERSION_STRING: &str = "kf-0.1.0-0cf4cf94";
+const VERSION_STRING: &str = "kf-0.1.1-0cf4cf94";
 
 fn read_input(ch: &Sender<EngineIO>) {
     let sin = std::io::stdin();
@@ -28,34 +29,51 @@ struct TimeSpec {
 
 //Timer for execution. To achieve high precision we first sleep the thread to within a safetymargin
 //of the target and the spin until we reach the target time.
-fn time_limit(time: &TimeSpec) -> Option<std::time::Duration> {
+fn time_limit(time: &TimeSpec) -> Option<SearchLimit> {
     const SAFETY_DELTA: std::time::Duration = std::time::Duration::from_millis(2);
     //We play with increment
-    let movetime = if let (Some(time), Some(inc)) = (time.ustime, time.usinc) {
-        //We spend about 7% of the remaining time on each move.
-        std::time::Duration::from_millis(inc)
-            + std::time::Duration::from_micros((time - inc).clamp(0, u64::MAX) * 70)
+    if let (Some(time), Some(inc)) = (time.ustime, time.usinc) {
+        let max_time = std::time::Duration::from_millis(time);
+        // The target is the hard bound; soft bound will be checked in the iid loop
+        let mut target = std::time::Duration::from_millis(inc * 4 / 5) + max_time / 4;
+        target = target.min(max_time);
+        Some(SearchLimit::from_soft_hard_bound(
+            target / 6,
+            target,
+            SAFETY_DELTA,
+        ))
     }
     //We play with time per x moves, we split evenly and spend a little more earlier
     else if let (Some(time), Some(togo)) = (time.ustime, time.movestogo) {
+        let duration = std::time::Duration::from_millis(time);
         if togo == 1 {
-            std::time::Duration::from_millis(time)
+            Some(SearchLimit::from_soft_hard_bound(
+                duration / 2,
+                duration,
+                SAFETY_DELTA,
+            ))
         } else {
-            std::time::Duration::from_micros((time * 1200) / togo)
+            Some(SearchLimit::from_soft_hard_bound(
+                duration * 2 / (3 * togo as u32),
+                duration / 2,
+                SAFETY_DELTA,
+            ))
         }
     }
     //sudden death
     else if let Some(time) = time.ustime {
         //we simply spend 4% of our time in each move
-        std::time::Duration::from_micros(time * 40)
+        Some(SearchLimit::Time {
+            soft: std::time::Duration::from_micros(time * 40),
+            hard: std::time::Duration::from_millis(time) / 3,
+        })
     }
     //We play with fixed time per move
-    else if let Some(time) = time.movetime {
-        std::time::Duration::from_millis(time)
-    } else {
-        return None;
-    };
-    Some(movetime - SAFETY_DELTA)
+    else {
+        time.movetime.map(|time| {
+            SearchLimit::from_movetime(std::time::Duration::from_millis(time), SAFETY_DELTA)
+        })
+    }
 }
 
 pub trait UCIHandler {
@@ -171,11 +189,13 @@ impl<T: Reporter> UCIHandler for Engine<T> {
             if tokens.len() < 3 {
                 return;
             }
-            self.start_search(tokens[2].parse::<u8>().ok(), None);
+            if let Ok(d) = tokens[2].parse::<u8>() {
+                self.start_search(SearchLimit::Depth(d));
+            }
             return;
         }
         if tokens[1] == "infinite" {
-            self.start_search(None, None);
+            self.start_search(SearchLimit::Infinite);
             return;
         }
         let mut wtime = None;
@@ -210,10 +230,12 @@ impl<T: Reporter> UCIHandler for Engine<T> {
             },
         };
         let limit = time_limit(&time);
-        if limit.is_none() {
-            println!("info string invalid time spec ignored")
+        if let Some(l) = limit {
+            self.start_search(l);
+        } else {
+            println!("info string invalid time spec ignored");
+            self.start_search(SearchLimit::Infinite);
         }
-        self.start_search(None, limit);
     }
     fn handle_stop(&mut self) {
         self.stop_search();
