@@ -152,13 +152,13 @@ fn search_step<const IS_PV_NODE: bool>(
     beta: i32,
     cut_node: bool,
 ) -> i32 {
+    if IS_PV_NODE && ply <= 255 {
+        sh.pv[ply] = Move::ZERO;
+    }
+
     if sh.shared.nodes.load(Ordering::Relaxed) & 0xff == 0 && sh.limit.should_stop(sh.start_time) {
         sh.shared.stop_flag.store(true, Ordering::Release);
         return eval::DRAW;
-    }
-
-    if IS_PV_NODE && ply <= 255 {
-        sh.pv[ply] = Move::ZERO;
     }
 
     //check for obviously drawn positions
@@ -363,7 +363,7 @@ fn search_step<const IS_PV_NODE: bool>(
         reduction += 1500 * i32::from(!is_capture);
         reduction -= 1500 * i32::from(IS_PV_NODE);
         reduction += 1000 * i32::from(ttmove.is_none());
-        reduction -= history / 32;
+        reduction -= history / 8;
 
         sh.do_move(m);
 
