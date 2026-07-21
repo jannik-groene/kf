@@ -26,6 +26,7 @@ pub const fn is_decisive(val: i32) -> bool {
     val.abs() >= MATE_IN_MAX
 }
 
+#[allow(dead_code)]
 pub const fn is_mate(val: i32) -> bool {
     val.abs() >= MATE_IN_MAX && val.abs() < INFTY
 }

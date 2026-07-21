@@ -274,9 +274,9 @@ fn search_step<const IS_PV_NODE: bool>(
         && sh.next_null <= ply as i32
         && (has_minor_pieces(sh.pos()) || has_major_pieces(sh.pos()))
         && !in_check
-        && !eval::is_mate(alpha)
-        && !eval::is_mate(beta) // This check seems redundant, since we must be in zw-search here
-                                // anyway?
+        && !eval::is_decisive(alpha)
+        && !eval::is_decisive(beta) // This check seems redundant, since we must be in zw-search here
+                                    // anyway?
         && (!ttmove.is_some_and(|m| m.is_capture())
             || ttbound != Some(Bound::Lower)
             || sh
@@ -341,8 +341,8 @@ fn search_step<const IS_PV_NODE: bool>(
             && !is_capture
             && !in_check
             && !sh.pos.gives_check(m)
-            && !eval::is_mate(beta)
-            && !eval::is_mate(score)
+            && !eval::is_decisive(beta)
+            && !eval::is_decisive(score)
         {
             //LMP
             if i > 3 + (depth * depth) as usize {
@@ -443,7 +443,7 @@ fn search_step<const IS_PV_NODE: bool>(
 
     if move_idx == 0 {
         if in_check {
-            return -eval::mate_in(ply);
+            return -eval::mate_in(256); // This is precisely not a mate.
         } else {
             return eval::DRAW;
         }
@@ -578,7 +578,7 @@ fn quiesce(sh: &mut SearchHead, mut alpha: i32, beta: i32, delta: i32, ply: usiz
             return eval::DRAW;
         }
 
-        if i >= 3 && !in_check && !eval::is_mate(beta) && !sh.pos.gives_check(m) {
+        if i >= 3 && !in_check && !eval::is_decisive(beta) && !sh.pos.gives_check(m) {
             continue;
         }
 
