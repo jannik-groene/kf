@@ -412,7 +412,7 @@ fn search_step<const IS_PV_NODE: bool>(
         sh.undo_move();
 
         //Abort search if the helper gets a stop signal
-        if sh.shared_data().stop_flag.load(Ordering::Relaxed).eq(&true) {
+        if sh.shared_data().stop_flag.load(Ordering::Relaxed) {
             return eval::DRAW;
         }
 
@@ -573,7 +573,6 @@ fn quiesce(sh: &mut SearchHead, mut alpha: i32, beta: i32, delta: i32, ply: usiz
             .shared_data()
             .stop_flag
             .load(std::sync::atomic::Ordering::Relaxed)
-            .eq(&true)
         {
             return eval::DRAW;
         }
