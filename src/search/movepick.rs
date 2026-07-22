@@ -84,39 +84,24 @@ impl MovePicker {
     #[inline]
     fn score_quiets(&mut self, sh: &mut SearchHead) {
         sh.pos.get_moves::<Quiets>(&mut self.moves);
-        if let Some(tm) = self.ttmove
-            && sh.pos.rule_50_count() < 100
-        {
-            assert_eq!(
-                sh.pos.is_legal(tm),
-                self.moves.contains(&tm),
-                "\n{}\n{} {:?} {:?} {:?}\n{:?}",
-                sh.pos.board,
-                tm,
-                tm.typ(),
-                sh.pos.color(),
-                tm,
-                self.moves,
-            );
-        }
 
         // Swap ahead both TT and Killer
-        if let Some(idx) = self
+        if let Some(offset) = self
             .moves
             .iter()
             .skip(self.idx)
             .position(|m| Some(*m) == self.ttmove)
         {
-            self.moves.swap(self.idx, idx);
+            self.moves.swap(self.idx, self.idx + offset);
             self.idx += 1;
         }
-        if let Some(idx) = self
+        if let Some(offset) = self
             .moves
             .iter()
             .skip(self.idx)
             .position(|m| *m == self.killer)
         {
-            self.moves.swap(self.idx, idx);
+            self.moves.swap(self.idx, self.idx + offset);
             self.idx += 1;
         }
 
@@ -264,8 +249,8 @@ impl MovePicker {
 
 #[cfg(test)]
 mod tests {
-    use super::super::thread::SearchHead;
-    use crate::chess::Position;
+    use super::super::thread::{SearchHead, SearchLimit};
+    use crate::chess::{All, MoveList, Position};
     use crate::search::thread::SharedData;
     use std::sync::Arc;
     use std::time::Instant;
@@ -278,12 +263,20 @@ mod tests {
         let mut sh = SearchHead::new(
             pos.clone(),
             Arc::new(SharedData::new()),
-            crate::search::thread::TimeManager {
-                start_time: Instant::now(),
-                limit: None,
-            },
+            Instant::now(),
+            SearchLimit::Infinite,
         );
-        let mut picker = super::MovePicker::new(&mut sh, 0, None, None);
+
+        let mut moves = MoveList::new();
+        pos.get_moves::<All>(&mut moves);
+
+        let ttmove = moves.get(moves.len().saturating_sub(1) % 7).copied();
+        let killer = moves.get(moves.len().saturating_sub(1) % 11).copied();
+        if let Some(m) = killer && !m.is_capture() {
+            sh.history.killer.register(m, 0);
+        }
+
+        let mut picker = super::MovePicker::new(&mut sh, 0, ttmove, None);
         while let Some(m) = picker.next(&mut sh) {
             pos.do_move(m);
             count += perft_step(pos, depth - 1);

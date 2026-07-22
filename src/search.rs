@@ -341,7 +341,6 @@ fn search_step<const IS_PV_NODE: bool>(
             && !is_capture
             && !in_check
             && !sh.pos.gives_check(m)
-            && !eval::is_decisive(beta)
             && !eval::is_decisive(score)
         {
             //LMP
@@ -443,7 +442,7 @@ fn search_step<const IS_PV_NODE: bool>(
 
     if move_idx == 0 {
         if in_check {
-            return -eval::mate_in(256); // This is precisely not a mate.
+            return -eval::mate_in(ply);
         } else {
             return eval::DRAW;
         }
@@ -577,7 +576,7 @@ fn quiesce(sh: &mut SearchHead, mut alpha: i32, beta: i32, delta: i32, ply: usiz
             return eval::DRAW;
         }
 
-        if i >= 3 && !in_check && !eval::is_decisive(beta) && !sh.pos.gives_check(m) {
+        if i >= 3 && !in_check && !eval::is_loss(alpha) && !sh.pos.gives_check(m) {
             continue;
         }
 
