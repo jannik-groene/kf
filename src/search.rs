@@ -316,12 +316,6 @@ fn search_step<const IS_PV_NODE: bool>(
     let mut move_picker = movepick::MovePicker::new(sh, ply as i32, ttmove, None);
     let mut move_idx = 0;
 
-    let mut extension = 0;
-
-    if in_check {
-        extension += 1;
-    }
-
     while let Some(m) = move_picker.next(sh) {
         move_idx += 1;
         let i = move_idx - 1;
@@ -367,7 +361,7 @@ fn search_step<const IS_PV_NODE: bool>(
         sh.do_move(m);
 
         let mut movescore = if i == 0 && IS_PV_NODE {
-            -search_step::<true>(sh, depth + extension - 1, ply + 1, -beta, -alpha, false)
+            -search_step::<true>(sh, depth - 1, ply + 1, -beta, -alpha, false)
         //Apply lmr at sufficiently high depths
         } else if depth >= 2 && i > 0 {
             //lmr reduction depth
@@ -394,7 +388,7 @@ fn search_step<const IS_PV_NODE: bool>(
 
             -search_step::<false>(
                 sh,
-                depth + extension - (reduction / 1024).clamp(0, 2) - 1,
+                depth - (reduction / 1024).clamp(0, 2) - 1,
                 ply + 1,
                 -alpha - 1,
                 -alpha,
@@ -405,7 +399,7 @@ fn search_step<const IS_PV_NODE: bool>(
         //Research if we failed high in a PV node
         if IS_PV_NODE && i != 0 && movescore > alpha {
             movescore =
-                -search_step::<true>(sh, depth + extension - 1, ply + 1, -beta, -alpha, false);
+                -search_step::<true>(sh, depth - 1, ply + 1, -beta, -alpha, false);
         }
 
         sh.undo_move();
