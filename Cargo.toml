@@ -1,6 +1,6 @@
 [package]
 name = "kf"
-version = "0.1.5"
+version = "0.1.6"
 authors = ["jgroene <jannik.groene@gmail.com>"]
 edition = "2024"
 build="src/build.rs"

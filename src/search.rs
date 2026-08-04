@@ -343,9 +343,14 @@ fn search_step<const IS_PV_NODE: bool>(
             }
 
             //Futility Pruning
-            if eval + 70 * depth <= alpha && depth < 7 && bestmove.is_some() {
-                if score < eval + 70 * depth && !eval::is_decisive(score) {
-                    score = eval + 70 * depth
+            if eval + 60 * depth <= alpha
+                && depth < 7
+                && bestmove.is_some()
+                && !m.is_capture()
+                && !m.typ().is_promotion()
+            {
+                if score < eval + 60 * depth && !eval::is_decisive(score) {
+                    score = eval + 60 * depth
                 }
                 continue;
             }
@@ -398,8 +403,7 @@ fn search_step<const IS_PV_NODE: bool>(
 
         //Research if we failed high in a PV node
         if IS_PV_NODE && i != 0 && movescore > alpha {
-            movescore =
-                -search_step::<true>(sh, depth - 1, ply + 1, -beta, -alpha, false);
+            movescore = -search_step::<true>(sh, depth - 1, ply + 1, -beta, -alpha, false);
         }
 
         sh.undo_move();
