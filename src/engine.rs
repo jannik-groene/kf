@@ -4,7 +4,7 @@ use std::sync::mpsc::{Receiver, Sender};
 
 use crate::chess::{All, MoveList};
 use crate::report::{Reporter, StdOutUCIResult};
-use crate::search::SearchLimit;
+pub use crate::search::SearchLimit;
 use crate::{
     chess::{Color, Move, Position},
     search::SearchManager,

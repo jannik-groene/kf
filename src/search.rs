@@ -152,8 +152,9 @@ fn search_step<const IS_PV_NODE: bool>(
     beta: i32,
     cut_node: bool,
 ) -> i32 {
-    if IS_PV_NODE && ply <= 255 {
+    if IS_PV_NODE && ply <= 254 {
         sh.pv[ply] = Move::ZERO;
+        sh.pv[ply + 1] = Move::ZERO;
     }
 
     if sh.shared.nodes.load(Ordering::Relaxed) & 0xff == 0 && sh.limit.should_stop(sh.start_time) {
@@ -334,8 +335,8 @@ fn search_step<const IS_PV_NODE: bool>(
         if ply > 0
             && !is_capture
             && !in_check
-            && !sh.pos.gives_check(m)
             && !eval::is_decisive(score)
+            && !sh.pos.gives_check(m)
         {
             //LMP
             if i > 3 + (depth * depth) as usize {
@@ -343,13 +344,8 @@ fn search_step<const IS_PV_NODE: bool>(
             }
 
             //Futility Pruning
-            if eval + 60 * depth <= alpha
-                && depth < 7
-                && bestmove.is_some()
-                && !m.is_capture()
-                && !m.typ().is_promotion()
-            {
-                if score < eval + 60 * depth && !eval::is_decisive(score) {
+            if eval + 60 * depth <= alpha && depth < 7 && !m.typ().is_promotion() {
+                if score < eval + 60 * depth {
                     score = eval + 60 * depth
                 }
                 continue;
