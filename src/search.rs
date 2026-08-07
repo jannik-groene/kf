@@ -7,6 +7,7 @@ mod tt;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
+use crate::evaluate::eval::is_decisive;
 use crate::search::movepick::MovePicker;
 pub use crate::search::thread::SearchLimit;
 use crate::{
@@ -85,7 +86,7 @@ fn iterative_deepening<T: Reporter>(id: usize, search_head: &mut SearchHead, rep
         let mut eval;
         loop {
             search_head.sel_depth = 0;
-            eval = search_step::<true>(search_head, i32::from(d), 0, alpha, beta, false);
+            eval = search_step::<true>(search_head, i32::from(d), 0, alpha, beta, None, false);
 
             // Make sure we only ever update with values that are from a complete search
             if search_head.shared_data().stop_flag.load(Ordering::Acquire) {
@@ -150,6 +151,7 @@ fn search_step<const IS_PV_NODE: bool>(
     ply: usize,
     mut alpha: i32,
     beta: i32,
+    exclude: Option<Move>,
     cut_node: bool,
 ) -> i32 {
     if IS_PV_NODE && ply <= 254 {
@@ -189,6 +191,7 @@ fn search_step<const IS_PV_NODE: bool>(
     let mut ttmove = None;
     let mut tteval = None;
     let mut ttbound = None;
+    let mut ttdepth = None;
 
     if let Some(entry) = hash_entry
         && sh.pos.is_legal(entry.mov())
@@ -198,13 +201,14 @@ fn search_step<const IS_PV_NODE: bool>(
         ttmove = Some(entry.mov());
         tteval = Some(eval);
         ttbound = Some(bound);
+        ttdepth = Some(entry.depth());
         assert!(entry.mov() != Move::ZERO);
 
         //make sure we do not return a repetition from tt, allowing a threefold
         let repetition = sh.pos.will_repeat(ttmove.unwrap());
 
         //see if we have a TT-hit
-        if i32::from(entry.depth()) >= depth && !repetition && !IS_PV_NODE {
+        if i32::from(entry.depth()) >= depth && !repetition && !IS_PV_NODE && exclude.is_none() {
             match bound {
                 Bound::Exact => {
                     if ply > 0 {
@@ -254,7 +258,11 @@ fn search_step<const IS_PV_NODE: bool>(
     };
 
     //Razoring
-    if !IS_PV_NODE && !eval::is_win(alpha) && eval + 300 + 200 * (depth * depth) < alpha {
+    if !IS_PV_NODE
+        && !eval::is_win(alpha)
+        && eval + 300 + 200 * (depth * depth) < alpha
+        && exclude.is_none()
+    {
         return quiesce(sh, alpha, beta, 100, ply);
     }
 
@@ -265,6 +273,7 @@ fn search_step<const IS_PV_NODE: bool>(
         && !in_check
         && eval >= beta + 150 * depth - 50 * i32::from(cut_node)
         && !eval::is_decisive(beta)
+        && exclude.is_none()
     {
         return eval;
     }
@@ -286,12 +295,13 @@ fn search_step<const IS_PV_NODE: bool>(
                 .piece_at(ttmove.unwrap().to())
                 .is_some_and(|p| p == Piece::Pawn))
         && eval >= beta + 50 - 20 * depth - 50 * i32::from(cut_node)
+        && exclude.is_none()
     {
         let reduction = 5 + (depth + i32::from(cut_node)) / 4;
 
         sh.do_null_move();
         let null_score =
-            -search_step::<false>(sh, depth - reduction, ply + 1, -beta, -alpha, false);
+            -search_step::<false>(sh, depth - reduction, ply + 1, -beta, -alpha, None, false);
         sh.undo_null_move();
 
         if null_score >= beta && !eval::is_decisive(null_score) {
@@ -300,7 +310,8 @@ fn search_step<const IS_PV_NODE: bool>(
             }
 
             sh.next_null = ply as i32 + ((depth - reduction) * 3 / 4);
-            let veri_score = search_step::<false>(sh, depth - reduction, ply, alpha, beta, false);
+            let veri_score =
+                search_step::<false>(sh, depth - reduction, ply, alpha, beta, None, false);
             sh.next_null = 0;
 
             if veri_score >= beta {
@@ -308,6 +319,26 @@ fn search_step<const IS_PV_NODE: bool>(
             }
         }
     }
+
+    //Singular Extensions
+    let mut singular_extension = 0;
+
+    if let (Some(_), Some(td), Some(te)) = (ttmove, ttdepth, tteval)
+        && ply > 0
+        && depth >= 7
+        && ply < 2 * depth as usize
+        && depth <= td as i32 + 3
+        && !is_decisive(te)
+        && ttbound != Some(Bound::Upper)
+        && exclude.is_none()
+    {
+        let sbeta = te - 2 * depth;
+        let sdepth = (depth - 1) / 2;
+        let sval = search_step::<false>(sh, sdepth, ply, sbeta - 1, sbeta, ttmove, cut_node);
+        if sval < sbeta {
+            singular_extension += 1;
+        }
+    };
 
     //Set up paramaters
     let mut score = -eval::INFTY;
@@ -318,6 +349,16 @@ fn search_step<const IS_PV_NODE: bool>(
     let mut move_idx = 0;
 
     while let Some(m) = move_picker.next(sh) {
+        if Some(m) == exclude {
+            continue;
+        }
+
+        let extension = if Some(m) == ttmove {
+            singular_extension
+        } else {
+            0
+        };
+
         move_idx += 1;
         let i = move_idx - 1;
 
@@ -362,7 +403,15 @@ fn search_step<const IS_PV_NODE: bool>(
         sh.do_move(m);
 
         let mut movescore = if i == 0 && IS_PV_NODE {
-            -search_step::<true>(sh, depth - 1, ply + 1, -beta, -alpha, false)
+            -search_step::<true>(
+                sh,
+                depth + extension - 1,
+                ply + 1,
+                -beta,
+                -alpha,
+                None,
+                false,
+            )
         //Apply lmr at sufficiently high depths
         } else if depth >= 2 && i > 0 {
             //lmr reduction depth
@@ -373,11 +422,20 @@ fn search_step<const IS_PV_NODE: bool>(
                 ply + 1,
                 -alpha - 1,
                 -alpha,
+                None,
                 !cut_node,
             );
             // Verify on fail high
             if val > alpha {
-                val = -search_step::<false>(sh, depth - 1, ply + 1, -alpha - 1, -alpha, !cut_node);
+                val = -search_step::<false>(
+                    sh,
+                    depth - 1,
+                    ply + 1,
+                    -alpha - 1,
+                    -alpha,
+                    None,
+                    !cut_node,
+                );
             }
             val
         // Reduce less otherwise
@@ -389,17 +447,26 @@ fn search_step<const IS_PV_NODE: bool>(
 
             -search_step::<false>(
                 sh,
-                depth - (reduction / 1024).clamp(0, 2) - 1,
+                depth + extension - (reduction / 1024).clamp(0, 2) - 1,
                 ply + 1,
                 -alpha - 1,
                 -alpha,
+                None,
                 !cut_node,
             )
         };
 
         //Research if we failed high in a PV node
         if IS_PV_NODE && i != 0 && movescore > alpha {
-            movescore = -search_step::<true>(sh, depth - 1, ply + 1, -beta, -alpha, false);
+            movescore = -search_step::<true>(
+                sh,
+                depth + extension - 1,
+                ply + 1,
+                -beta,
+                -alpha,
+                None,
+                false,
+            );
         }
 
         sh.undo_move();
@@ -435,7 +502,9 @@ fn search_step<const IS_PV_NODE: bool>(
     }
 
     if move_idx == 0 {
-        if in_check {
+        if exclude.is_some() {
+            return alpha;
+        } else if in_check {
             return -eval::mate_in(ply);
         } else {
             return eval::DRAW;
@@ -472,7 +541,7 @@ fn search_step<const IS_PV_NODE: bool>(
     }
 
     for m in move_picker.searched_moves() {
-        if Some(*m) == bestmove {
+        if Some(*m) == bestmove || Some(*m) == exclude {
             continue;
         }
         if !m.is_capture() && bestmove.is_some_and(|bm| !bm.is_capture()) {
@@ -484,25 +553,27 @@ fn search_step<const IS_PV_NODE: bool>(
         }
     }
 
-    let zh = sh.pos().zobrist_hash();
+    if exclude.is_none() {
+        let zh = sh.pos().zobrist_hash();
 
-    if !(in_check
-        || bestmove.is_some_and(|m| m.is_capture())
-        || (bound == Bound::Upper && score > static_eval)
-        || (bound == Bound::Lower && score < static_eval))
-    {
-        sh.update_correction_histories(static_eval, score, depth);
+        if !(in_check
+            || bestmove.is_some_and(|m| m.is_capture())
+            || (bound == Bound::Upper && score > static_eval)
+            || (bound == Bound::Lower && score < static_eval))
+        {
+            sh.update_correction_histories(static_eval, score, depth);
+        }
+
+        //Write to TT
+        sh.shared.tt.set(
+            zh,
+            score,
+            bound,
+            bestmove.unwrap(),
+            depth.clamp(0, 255) as u8,
+            ply,
+        );
     }
-
-    //Write to TT
-    sh.shared.tt.set(
-        zh,
-        score,
-        bound,
-        bestmove.unwrap(),
-        depth.clamp(0, 255) as u8,
-        ply,
-    );
 
     score
 }
