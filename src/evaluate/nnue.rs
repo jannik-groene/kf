@@ -1,6 +1,6 @@
 use crate::chess::{Color, Move, MoveType, Piece, Position, Square};
 
-pub static NNUE: Network = unsafe { std::mem::transmute(*include_bytes!("../../0cf4cf94.nnue")) };
+pub static NNUE: Network = unsafe { std::mem::transmute(*include_bytes!("../../f3f2fd88.nnue")) };
 
 pub fn evaluate_position(pos: &Position) -> i32 {
     let accs = [
@@ -10,9 +10,12 @@ pub fn evaluate_position(pos: &Position) -> i32 {
     NNUE.evaluate(
         &accs[pos.color() as usize],
         &accs[pos.color().other() as usize],
+        pos.get_board().occupation().count() as usize,
     )
 }
 
+const OUT_BUCKETS: usize = 4;
+const BUCKET_SIZE: usize = 32 / OUT_BUCKETS;
 const HIDDEN_SIZE: usize = 128;
 const SCALE: i32 = 400;
 const QA: i16 = 255;
@@ -40,26 +43,36 @@ pub struct Network {
     /// matrix, we use it like this to make the
     /// code nicer in `Network::evaluate`.
     /// Values have quantization of QB.
-    output_weights: [i16; 2 * HIDDEN_SIZE],
+    output_weights: [[i16; 2 * HIDDEN_SIZE]; OUT_BUCKETS],
     /// Scalar output bias.
     /// Value has quantization of QA * QB.
-    output_bias: i16,
+    output_bias: [i16; OUT_BUCKETS],
 }
 
 impl Network {
     /// Calculates the output of the network, starting from the already
     /// calculated hidden layer (done efficiently during makemoves).
-    pub fn evaluate(&self, us: &Accumulator, them: &Accumulator) -> i32 {
+    pub fn evaluate(&self, us: &Accumulator, them: &Accumulator, popcnt: usize) -> i32 {
         // Initialise output.
         let mut output = 0;
 
+        let bucket = (popcnt - 1) / BUCKET_SIZE;
+
         // Side-To-Move Accumulator -> Output.
-        for (&input, &weight) in us.vals.iter().zip(&self.output_weights[..HIDDEN_SIZE]) {
+        for (&input, &weight) in us
+            .vals
+            .iter()
+            .zip(&self.output_weights[bucket][..HIDDEN_SIZE])
+        {
             output += screlu(input) * i32::from(weight);
         }
 
         // Not-Side-To-Move Accumulator -> Output.
-        for (&input, &weight) in them.vals.iter().zip(&self.output_weights[HIDDEN_SIZE..]) {
+        for (&input, &weight) in them
+            .vals
+            .iter()
+            .zip(&self.output_weights[bucket][HIDDEN_SIZE..])
+        {
             output += screlu(input) * i32::from(weight);
         }
 
@@ -67,7 +80,7 @@ impl Network {
         output /= i32::from(QA);
 
         // Add bias.
-        output += i32::from(self.output_bias);
+        output += i32::from(self.output_bias[bucket]);
 
         // Apply eval scale.
         output *= SCALE;
@@ -378,7 +391,8 @@ fn nnue_startpos() {
         "{}",
         NNUE.evaluate(
             &accs[pos.color() as usize],
-            &accs[pos.color().other() as usize]
+            &accs[pos.color().other() as usize],
+            pos.get_board().occupation().count() as usize,
         )
     );
     assert_eq!(accs, accs_incremental);

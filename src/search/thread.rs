@@ -148,6 +148,7 @@ impl SearchHead {
         NNUE.evaluate(
             &self.accumulators[self.pos.color() as usize],
             &self.accumulators[self.pos.color().other() as usize],
+            self.pos.get_board().occupation().count() as usize,
         )
     }
     #[inline]
