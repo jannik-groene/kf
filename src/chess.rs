@@ -817,6 +817,16 @@ impl Position {
         if p == Piece::Pawn
             && m.from().relative(self.to_move).rank() == Rank::Second
             && m.to().relative(self.to_move).rank() == Rank::Fourth
+            && ((m.to().file() != File::H
+                && self
+                    .board
+                    .get_bb(self.to_move.other(), Piece::Pawn)
+                    .is_set(m.to().shifted_by(1)))
+                || (m.to().file() != File::A
+                    && self
+                        .board
+                        .get_bb(self.to_move.other(), Piece::Pawn)
+                        .is_set(m.to().shifted_by(-1))))
         {
             self.ply_info.zobrist ^= constants::enpassant_zobrist(m.to().file());
             self.ply_info.ep_square = Some(m.to().file().ep_square().relative(self.to_move));
