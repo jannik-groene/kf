@@ -250,7 +250,12 @@ fn search_step<const IS_PV_NODE: bool>(
     {
         v
     } else {
+        let pawn_hash = sh.pos.pawn_hash();
         static_eval
+            + sh.history
+                .correction
+                .get(sh.pos.color(), pawn_hash)
+                / 64
     };
 
     //Razoring
@@ -485,6 +490,17 @@ fn search_step<const IS_PV_NODE: bool>(
     }
 
     let zh = sh.pos().zobrist_hash();
+
+    if !(in_check
+        || bestmove.is_some_and(|m| m.is_capture())
+        || (bound == Bound::Upper && score > static_eval)
+        || (bound == Bound::Lower && score < static_eval))
+    {
+        let pawn_hash = sh.pos.pawn_hash();
+        let diff = score - static_eval;
+        let bonus = (diff * depth).clamp(-2047, 2047);
+        sh.history.correction.register(sh.pos.color(), pawn_hash, bonus);
+    }
 
     //Write to TT
     sh.shared.tt.set(

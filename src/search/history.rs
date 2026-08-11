@@ -1,10 +1,15 @@
 use crate::chess::{Color, Move, Piece};
 
+fn history_gravity(hist: &mut i16, bonus: i32, max: i32) {
+    *hist += (bonus - (*hist as i32 * bonus.abs()) / max) as i16;
+}
+
 pub struct History {
     pub killer: KillerHistory,
     pub quiet: QuietHistory,
     pub continuation: ContinuationHistory,
     pub capture: CaptureHistory,
+    pub correction: CorrectionHistory,
 }
 
 impl History {
@@ -14,6 +19,7 @@ impl History {
             quiet: QuietHistory::new(),
             continuation: ContinuationHistory::new(),
             capture: CaptureHistory::new(),
+            correction: CorrectionHistory::new(),
         }
     }
 }
@@ -99,10 +105,11 @@ impl QuietHistory {
 
     pub fn register(&mut self, c: Color, m: Move, bonus: i32) {
         let bonus = bonus.clamp(-Self::MAX_BONUS, Self::MAX_BONUS);
-        self.scores[c as usize][m.from() as usize][m.to() as usize] += (bonus
-            - (self.scores[c as usize][m.from() as usize][m.to() as usize] as i32 * bonus.abs())
-                / Self::MAX_BONUS)
-            as i16;
+        history_gravity(
+            &mut self.scores[c as usize][m.from() as usize][m.to() as usize],
+            bonus,
+            Self::MAX_BONUS,
+        );
     }
 
     pub fn get_score(&self, c: Color, m: Move) -> i32 {
@@ -128,12 +135,12 @@ impl ContinuationHistory {
 
     pub fn register(&mut self, c: Color, p1: Piece, m1: Move, p2: Piece, m2: Move, bonus: i32) {
         let bonus = bonus.clamp(-Self::MAX_BONUS, Self::MAX_BONUS);
-        self.scores[c as usize][p1 as usize][m1.to() as usize][p2 as usize][m2.to() as usize] +=
-            (bonus
-                - (self.scores[c as usize][p1 as usize][m1.to() as usize][p2 as usize]
-                    [m2.to() as usize] as i32
-                    * bonus.abs())
-                    / Self::MAX_BONUS) as i16;
+        history_gravity(
+            &mut self.scores[c as usize][p1 as usize][m1.to() as usize][p2 as usize]
+                [m2.to() as usize],
+            bonus,
+            Self::MAX_BONUS,
+        );
     }
 
     pub fn get_score(&self, c: Color, p1: Piece, m1: Move, p2: Piece, m2: Move) -> i32 {
@@ -156,13 +163,38 @@ impl CaptureHistory {
 
     pub fn register(&mut self, piece: Piece, m: Move, capture: Piece, bonus: i32) {
         let bonus = bonus.clamp(-Self::MAX_BONUS, Self::MAX_BONUS);
-        self.scores[piece as usize][m.to() as usize][capture as usize] += (bonus
-            - (self.scores[piece as usize][m.to() as usize][capture as usize] as i32 * bonus.abs())
-                / Self::MAX_BONUS)
-            as i16;
+        history_gravity(
+            &mut self.scores[piece as usize][m.to() as usize][capture as usize],
+            bonus,
+            Self::MAX_BONUS,
+        );
     }
 
     pub fn get(&self, p: Piece, m: Move, c: Piece) -> i32 {
         self.scores[p as usize][m.to() as usize][c as usize] as i32
+    }
+}
+
+pub struct CorrectionHistory {
+    corr: Box<[[i16; Self::SIZE]; 2]>,
+}
+
+impl CorrectionHistory {
+    const SIZE: usize = 65536;
+    const MAX_BONUS: i32 = (1 << 13);
+
+    pub fn new() -> Self {
+        Self {
+            corr: Box::new([[0; Self::SIZE]; 2]),
+        }
+    }
+
+    pub fn register(&mut self, c: Color, hash: u64, bonus: i32) {
+        let bucket = hash as usize % Self::SIZE;
+        history_gravity(&mut self.corr[c as usize][bucket], bonus, Self::MAX_BONUS);
+    }
+
+    pub fn get(&mut self, c: Color, hash: u64) -> i32 {
+        self.corr[c as usize][hash as usize % Self::SIZE] as i32
     }
 }

@@ -1037,6 +1037,17 @@ impl Position {
         self.ply_info.zobrist
     }
 
+    pub fn pawn_hash(&self) -> u64 {
+        let mut pz = 0;
+        for p in self.board.get_bb(Color::White, Piece::Pawn) {
+            pz ^= constants::piece_zobrist(Piece::Pawn, Color::White, p);
+        }
+        for p in self.board.get_bb(Color::Black, Piece::Pawn) {
+            pz ^= constants::piece_zobrist(Piece::Pawn, Color::Black, p);
+        }
+        pz
+    }
+
     #[allow(dead_code)]
     pub fn hard_pins(&mut self) -> BitBoard {
         if self.ply_info.attacked_squares.is_empty() {
