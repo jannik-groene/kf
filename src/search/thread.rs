@@ -181,6 +181,28 @@ impl SearchHead {
         let p = self.pos().get_board().piece_at(m.from()).unwrap();
         self.history.capture.register(p, m, cap, bonus);
     }
+
+    pub fn update_correction_histories(&mut self, static_eval: i32, score: i32, depth: i32) {
+        let diff = score - static_eval;
+        let bonus = (diff * depth).clamp(-2047,2047);
+        let pawn_hash = self.pos.pawn_hash();
+        let npw_hash = self.pos.non_pawn_hash(Color::White);
+        let npb_hash = self.pos.non_pawn_hash(Color::Black);
+        let stm = self.pos.color();
+        self.history.correction.pawn.register(stm, pawn_hash, bonus);
+        self.history.correction.non_pawn[0].register(stm, npw_hash, bonus);
+        self.history.correction.non_pawn[1].register(stm, npb_hash, bonus);
+    }
+
+    pub fn get_eval_correction(&self) -> i32 {
+        let stm = self.pos.color();
+        let pawn_hash = self.pos.pawn_hash();
+        let npw_hash = self.pos.non_pawn_hash(Color::White);
+        let npb_hash = self.pos.non_pawn_hash(Color::Black);
+        self.history.correction.pawn.get(stm, pawn_hash)
+            + self.history.correction.non_pawn[0].get(stm, npw_hash)
+            + self.history.correction.non_pawn[1].get(stm, npb_hash)
+    }
 }
 
 impl SearchHead {

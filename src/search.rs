@@ -250,12 +250,7 @@ fn search_step<const IS_PV_NODE: bool>(
     {
         v
     } else {
-        let pawn_hash = sh.pos.pawn_hash();
-        static_eval
-            + sh.history
-                .correction
-                .get(sh.pos.color(), pawn_hash)
-                / 64
+        static_eval + sh.get_eval_correction() / 64
     };
 
     //Razoring
@@ -496,10 +491,7 @@ fn search_step<const IS_PV_NODE: bool>(
         || (bound == Bound::Upper && score > static_eval)
         || (bound == Bound::Lower && score < static_eval))
     {
-        let pawn_hash = sh.pos.pawn_hash();
-        let diff = score - static_eval;
-        let bonus = (diff * depth).clamp(-2047, 2047);
-        sh.history.correction.register(sh.pos.color(), pawn_hash, bonus);
+        sh.update_correction_histories(static_eval, score, depth);
     }
 
     //Write to TT

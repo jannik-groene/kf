@@ -1048,6 +1048,17 @@ impl Position {
         pz
     }
 
+    pub fn non_pawn_hash(&self, c: Color) -> u64 {
+        let mut pz = 0;
+        let pieces = [Piece::Knight, Piece::Bishop, Piece::Rook, Piece::Queen, Piece::King];
+        for p in pieces {
+            for sq in self.board.get_bb(c, p) {
+                pz ^= constants::piece_zobrist(p, c, sq);
+            }
+        }
+        pz
+    }
+
     #[allow(dead_code)]
     pub fn hard_pins(&mut self) -> BitBoard {
         if self.ply_info.attacked_squares.is_empty() {

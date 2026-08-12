@@ -9,7 +9,7 @@ pub struct History {
     pub quiet: QuietHistory,
     pub continuation: ContinuationHistory,
     pub capture: CaptureHistory,
-    pub correction: CorrectionHistory,
+    pub correction: CorrectionHistories,
 }
 
 impl History {
@@ -19,7 +19,21 @@ impl History {
             quiet: QuietHistory::new(),
             continuation: ContinuationHistory::new(),
             capture: CaptureHistory::new(),
-            correction: CorrectionHistory::new(),
+            correction: CorrectionHistories::new(),
+        }
+    }
+}
+
+pub struct CorrectionHistories {
+    pub pawn: CorrectionHistory,
+    pub non_pawn: [CorrectionHistory; 2],
+}
+
+impl CorrectionHistories {
+    pub fn new() -> Self {
+        Self {
+            pawn: CorrectionHistory::new(),
+            non_pawn: [CorrectionHistory::new(), CorrectionHistory::new()],
         }
     }
 }
@@ -194,7 +208,7 @@ impl CorrectionHistory {
         history_gravity(&mut self.corr[c as usize][bucket], bonus, Self::MAX_BONUS);
     }
 
-    pub fn get(&mut self, c: Color, hash: u64) -> i32 {
+    pub fn get(&self, c: Color, hash: u64) -> i32 {
         self.corr[c as usize][hash as usize % Self::SIZE] as i32
     }
 }
