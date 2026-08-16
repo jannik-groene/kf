@@ -335,8 +335,12 @@ fn search_step<const IS_PV_NODE: bool>(
         let sbeta = te - 2 * depth;
         let sdepth = (depth - 1) / 2;
         let sval = search_step::<false>(sh, sdepth, ply, sbeta - 1, sbeta, ttmove, cut_node);
+
         if sval < sbeta {
             singular_extension += 1;
+        // Multi-Cut
+        } else if sbeta >= beta && !is_decisive(sval) {
+            return sbeta;
         }
     };
 
