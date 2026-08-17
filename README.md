@@ -8,7 +8,7 @@ Download the project with
     $ git clone https://github.com/jannik-groene/kf.git
 ```
 
-Download the current net from TODO and place it in the top-level directory, next to this Readme. Then build with
+Download the current net [here](https://github.com/jannik-groene/kf_nets/blob/main/f3f2fd88.nnue) and place it in the top-level directory, next to this Readme. Then build with
 
 ```bash
     $ cargo build --release
