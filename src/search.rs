@@ -144,6 +144,8 @@ fn iterative_deepening<T: Reporter>(id: usize, search_head: &mut SearchHead, rep
 // ply: the current search ply
 // alpha: the alpha value of the current ab search
 // beta: the beta of the current ab search
+// exclude: move to exsclude from current search search_step
+//          for singular extensions
 // cut_node: whether we expect to see a beta cutoff
 fn search_step<const IS_PV_NODE: bool>(
     sh: &mut SearchHead,
@@ -279,14 +281,12 @@ fn search_step<const IS_PV_NODE: bool>(
     }
 
     //Try a null move to find a beta cutoff; verify by re-searching
-    if !IS_PV_NODE // This should check for cut node, but that somehow loses ELO. Added bonus in
-                   // cutoff estimate instead for now.
+    if !IS_PV_NODE
         && sh.next_null <= ply as i32
         && (has_minor_pieces(sh.pos()) || has_major_pieces(sh.pos()))
         && !in_check
         && !eval::is_decisive(alpha)
-        && !eval::is_decisive(beta) // This check seems redundant, since we must be in zw-search here
-                                    // anyway?
+        && !eval::is_decisive(beta)
         && (!ttmove.is_some_and(|m| m.is_capture())
             || ttbound != Some(Bound::Lower)
             || sh
@@ -423,8 +423,6 @@ fn search_step<const IS_PV_NODE: bool>(
             )
         //Apply lmr at sufficiently high depths
         } else if depth >= 2 && i > 0 {
-            //lmr reduction depth
-
             let mut val = -search_step::<false>(
                 sh,
                 (depth - reduction / 1024 - 1).max(1),
