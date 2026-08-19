@@ -355,7 +355,7 @@ fn search_step<const IS_PV_NODE: bool>(
     let mut bestmove = None;
 
     let mut move_picker = movepick::MovePicker::new(sh, ply as i32, ttmove, None);
-    let mut move_idx = 0;
+    let mut move_num = 0;
 
     while let Some(m) = move_picker.next(sh) {
         if Some(m) == exclude {
@@ -368,8 +368,7 @@ fn search_step<const IS_PV_NODE: bool>(
             0
         };
 
-        move_idx += 1;
-        let i = move_idx - 1;
+        move_num += 1;
 
         let is_capture = m.is_capture();
 
@@ -389,7 +388,7 @@ fn search_step<const IS_PV_NODE: bool>(
             && !sh.pos.gives_check(m)
         {
             //LMP
-            if i > 3 + (depth * depth) as usize {
+            if move_num > 4 + (depth * depth) as usize {
                 continue;
             }
 
@@ -402,7 +401,7 @@ fn search_step<const IS_PV_NODE: bool>(
             }
         }
 
-        let mut reduction = 200 * (depth.ilog2() * move_idx.ilog2()) as i32;
+        let mut reduction = 200 * (depth.ilog2() * move_num.ilog2()) as i32;
         reduction += 900 * i32::from(cut_node);
         reduction += 1500 * i32::from(!is_capture);
         reduction -= 1500 * i32::from(IS_PV_NODE);
@@ -411,7 +410,7 @@ fn search_step<const IS_PV_NODE: bool>(
 
         sh.do_move(m);
 
-        let mut movescore = if i == 0 && IS_PV_NODE {
+        let mut movescore = if move_num == 1 && IS_PV_NODE {
             -search_step::<true>(
                 sh,
                 depth + extension - 1,
@@ -422,7 +421,7 @@ fn search_step<const IS_PV_NODE: bool>(
                 false,
             )
         //Apply lmr at sufficiently high depths
-        } else if depth >= 2 && i > 0 {
+        } else if depth >= 2 && move_num > 1 {
             let mut val = -search_step::<false>(
                 sh,
                 (depth - reduction / 1024 - 1).max(1),
@@ -464,7 +463,7 @@ fn search_step<const IS_PV_NODE: bool>(
         };
 
         //Research if we failed high in a PV node
-        if IS_PV_NODE && i != 0 && movescore > alpha {
+        if IS_PV_NODE && move_num > 1 && movescore > alpha {
             movescore = -search_step::<true>(
                 sh,
                 depth + extension - 1,
@@ -508,7 +507,7 @@ fn search_step<const IS_PV_NODE: bool>(
         }
     }
 
-    if move_idx == 0 {
+    if move_num == 0 {
         if exclude.is_some() {
             return alpha;
         } else if in_check {
