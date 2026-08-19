@@ -338,6 +338,11 @@ fn search_step<const IS_PV_NODE: bool>(
 
         if sval < sbeta {
             singular_extension += 1;
+
+            let double_margin = 50;
+            if !IS_PV_NODE && sval + double_margin < sbeta {
+                singular_extension += 1;
+            }
         // Multi-Cut
         } else if sbeta >= beta && !is_decisive(sval) {
             return sbeta;
