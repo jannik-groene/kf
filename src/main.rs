@@ -1,4 +1,3 @@
-#![feature(portable_simd)]
 mod chess;
 mod constants;
 mod engine;
